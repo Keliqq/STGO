@@ -32,16 +32,16 @@ export const QUALITY_ROUNDING: 'round' | 'floor' = 'round'
 /**
  * Рост базовых ATK/DEF/HP героя с уровнем: база(L) = база₁ × (1 + k·(L−1)) + c·(L−1),
  * база₁ — статы класса из листа HEROES. Прироста по уровням нет ни в HEROES, ни в HERO LEVELS.
- * Подобрано МНК по относительной ошибке итогового стата на fixtures/heroes.txt (18 героев, 12 классов, уровни 23–33),
- * форма выбрана по ошибке leave-one-out (ATK 2,4%, DEF 2,4%, HP 10,8%). Вне уровней 23–33 не проверено.
+ * Подобрано МНК по относительной ошибке итогового стата на fixtures/heroes.txt (18 героев, 12 классов, уровни 23–33)
+ * с учётом удвоения духа в Portable Totem Pole (A27): RMS ATK 2,1%, DEF 2,1%, HP 9,0%.
  * У HP разброс по классам большой — гладкая формула его не описывает (см. A8); для импортированных героев
  * база берётся из эталона экспорта (stats.ts → referenceBase).
  */
 // ASSUMPTION: A8
 export const HERO_LEVEL_STAT_GROWTH = {
-  atk: { k: 0.238, c: 7.37 },
-  def: { k: 0.289, c: 4.99 },
-  hp: { k: 0.133, c: 1.06 },
+  atk: { k: 0.232, c: 7.15 },
+  def: { k: 0.292, c: 4.95 },
+  hp: { k: 0.125, c: 1.2 },
 } as const
 
 /**
@@ -85,6 +85,14 @@ export const EQUIPMENT_SLOTS = 6
  */
 // ASSUMPTION: A6
 export const AFFINITY_SCOPE: 'stone' | 'enchant' | 'all' = 'enchant'
+
+/**
+ * Предметы, удваивающие навык духа, вставленного в них. Выведено сверкой (A27): у 7 героев из фикстуры
+ * с Portable Totem Pole игра показывает ровно двойной вклад навыка духа в этом слоте
+ * (+5/+10% ATK у 5 героев — колонка 18 экспорта; +1/+2% EVA у Джорена и Рейнелла; +10% CritDmg у Джорди).
+ */
+// ASSUMPTION: A27
+export const SPIRIT_SKILL_DOUBLING_ITEMS = ['Portable Totem Pole'] as const
 
 /**
  * Какие статы предмета усиливают навыки «+N% stats with <тип>» и «+N% bonus from all items with <тип>»

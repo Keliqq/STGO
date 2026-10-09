@@ -369,6 +369,11 @@ export const HeroInstanceSchema = z.object({
         crit: nonNeg, critDmg: nonNeg, eva: nonNeg,
         element: nonNeg,
       }),
+      /**
+       * Итоговые модификаторы, посчитанные игрой (колонки 13/18/19 экспорта TitansDB, см. SCHEMA):
+       * шанс пережить смертельный удар и Σ ATK%/DEF% в процентах. Служат для сверки модели навыков (A27).
+       */
+      pct: z.object({ survive: nonNeg, atk: nonNeg, def: nonNeg }).optional(),
     })
     .nullable(),
 })

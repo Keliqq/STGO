@@ -40,6 +40,11 @@ export interface TitansDbHero {
   /** Статы из экспорта. crit/eva — доли. */
   stats: { hp: number; atk: number; def: number; threat: number; crit: number; critDmg: number; eva: number; element: number }
   heroElement: string | null
+  /**
+   * Итоговые модификаторы, которые посчитала игра (колонки 13/18/19, см. SCHEMA):
+   * шанс пережить смертельный удар, Σ ATK%, Σ DEF% — в процентах.
+   */
+  pct: { survive: number; atk: number; def: number }
 }
 
 export interface TitansDbParseError {
@@ -48,7 +53,7 @@ export interface TitansDbParseError {
 }
 
 /** Колонки до блока через `|` (TAB-разделённые). */
-const COL = { name: 0, group: 1, hp: 4, atk: 5, def: 6, threat: 7, crit: 8, critDmg: 9, eva: 10, element: 11, heroElement: 12 } as const
+const COL = { name: 0, group: 1, hp: 4, atk: 5, def: 6, threat: 7, crit: 8, critDmg: 9, eva: 10, element: 11, heroElement: 12, survive: 13, atkPct: 18, defPct: 19 } as const
 /** Смещения внутри блока через `|`. */
 const BLOCK = { titanSoul: 0, className: 2, slotTypes: 3, items: 9, qualities: 15, enchants: 21, spirits: 27, skills: 33, level: 37, stoneElements: 41 } as const
 const BLOCK_MIN_PARTS = 30
@@ -93,6 +98,12 @@ function parseLine(line: string, lineNo: number): TitansDbHero {
   const skills = [0, 1, 2, 3].map((i) => at(BLOCK.skills + i)).filter((s) => s !== '').map(nameWithDescription)
   const artifactRaw = blockIdx > 0 ? cols[blockIdx - 1].trim() : ''
   const pct = (v: string | undefined, what: string): number => Math.round(parseNumber(v, what) * 1e4) / 1e6
+  const pctCol = (v: string | undefined): number => {
+    const t = (v ?? '').trim()
+    if (t === '') return 0
+    const n = Number(t)
+    return Number.isFinite(n) ? Math.round(n * 1e4) / 1e4 : 0
+  }
 
   return {
     line: lineNo,
@@ -115,6 +126,7 @@ function parseLine(line: string, lineNo: number): TitansDbHero {
       element: parseNumber(cols[COL.element], 'стихия'),
     },
     heroElement: (cols[COL.heroElement] ?? '').trim() || null,
+    pct: { survive: pctCol(cols[COL.survive]), atk: pctCol(cols[COL.atkPct]), def: pctCol(cols[COL.defPct]) },
   }
 }
 
@@ -338,7 +350,7 @@ export function matchTitansDb(parsed: TitansDbHero[], data: GameData, options: M
       slots,
       skills,
       seeds: { atk: 0, def: 0, hp: 0 },
-      reference: { level: h.level, slots: structuredClone(slots), skills: [...skills], stats: { ...h.stats } },
+      reference: { level: h.level, slots: structuredClone(slots), skills: [...skills], stats: { ...h.stats }, pct: { ...h.pct } },
     })
   }
   return { heroes, issues }

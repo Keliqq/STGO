@@ -19,6 +19,7 @@ import {
   QUALITY_ROUNDING,
   SPIRIT_AFFINITY_MULTIPLIER,
   SPIRIT_PLUS_RULE,
+  SPIRIT_SKILL_DOUBLING_ITEMS,
   TYPED_ITEM_BONUS_STATS,
 } from './constants.ts'
 
@@ -224,6 +225,8 @@ export function activeSkills(hero: HeroInstance, data: GameData, element: number
       const sk = usePlus && plus ? plus : base
       // Навыки одинаковых духов складываются: без этого ошибка ATK по фикстуре 9% вместо 2% (A5).
       if (sk) out.push(sk)
+      // ASSUMPTION: A27 — Portable Totem Pole удваивает навык вставленного в него духа.
+      if (sk && item && (SPIRIT_SKILL_DOUBLING_ITEMS as readonly string[]).includes(item.name)) out.push(sk)
     }
     if (item?.artifactSkill) {
       const sk = skills.get(item.artifactSkill)
