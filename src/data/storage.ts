@@ -40,4 +40,5 @@ export const KEYS = {
   gameData: 'gameData',
   breakpoints: 'breakpoints',
   settings: 'settings',
+  heroes: 'heroes',
 } as const

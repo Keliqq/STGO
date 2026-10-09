@@ -32,6 +32,9 @@ function RootComponent() {
           <Link to="/" activeProps={{ className: 'underline' }} activeOptions={{ exact: true }}>
             Главная
           </Link>
+          <Link to="/heroes" activeProps={{ className: 'underline' }}>
+            Герои
+          </Link>
           <Link to="/data" activeProps={{ className: 'underline' }}>
             Данные
           </Link>

@@ -270,6 +270,20 @@ export function buildGameData(raw: RawSheets, options: BuildOptions = {}): GameD
   }
   const enchantNames = new Set(enchants.map((e) => e.name))
 
+  // Одно имя навыка артефакта у нескольких предметов и несколько строк SKILLS с этим именем (Midas' Tragedy:
+  // Amulet of Midas T10 и Ring of Midas T15; строки +25% и +50%): i-й по тиру предмет → i-я строка (A15).
+  const artifactSkillByItem = new Map<string, string>()
+  const byArtifact = new Map<string, { name: string; tier: number }[]>()
+  for (const r of bp.rows) {
+    const an = imageMap.artifacts[r.name]
+    if (an) byArtifact.set(an, [...(byArtifact.get(an) ?? []), { name: r.name, tier: r.tier }])
+  }
+  for (const [an, its] of byArtifact) {
+    const rows = skills.filter((sk) => sk.name === an)
+    if (rows.length < 2 || its.length < 2) continue
+    its.sort((x, y) => x.tier - y.tier).forEach((it, i) => artifactSkillByItem.set(it.name, rows[Math.min(i, rows.length - 1)].id))
+  }
+
   // ── Предметы (всё из BLUEPRINTS, кроме самих камней/духов — они в enchants)
   const items: Item[] = []
   for (const r of bp.rows) {
@@ -277,7 +291,7 @@ export function buildGameData(raw: RawSheets, options: BuildOptions = {}): GameD
     if (r.spiritAffinity && !findSkill(r.spiritAffinity)) warn(`BLUEPRINTS: «${r.name}» — Spirit Affinity «${r.spiritAffinity}» нет в SKILLS`)
     if (r.builtInElement && !enchantNames.has(r.builtInElement)) warn(`BLUEPRINTS: «${r.name}» — Built-In Element «${r.builtInElement}» нет в ENCHANTMENTS`)
     const artifactName = imageMap.artifacts[r.name]
-    const artifactSkill = artifactName ? (findSkill(artifactName)?.id ?? null) : null
+    const artifactSkill = artifactName ? (artifactSkillByItem.get(r.name) ?? findSkill(artifactName)?.id ?? null) : null
     if (artifactName && !artifactSkill) warn(`Артефакт «${r.name}»: навык «${artifactName}» не найден в SKILLS`)
     if (!artifactName && /artifact chest/i.test(r.unlock ?? '')) warn(`Артефакт «${r.name}»: неизвестен навык (нет в карте playshoptitans)`)
     const ok = validated(

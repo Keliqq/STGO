@@ -125,3 +125,12 @@ describe('buildGameData на фикстурах', () => {
     expect(() => buildGameData(raw)).toThrow(/items: собрано/)
   })
 })
+
+describe('артефакты с общим именем навыка', () => {
+  it('Midas Tragedy: Amulet of Midas (T10) → +25%, Ring of Midas (T15) → +50% (A15)', () => {
+    const d = fixtureGameData()
+    const skillOf = (n: string) => d.skills.find((s) => s.id === d.items.find((i) => i.name === n)?.artifactSkill)?.text
+    expect(skillOf('Amulet of Midas')).toMatch(/\+25%/)
+    expect(skillOf('Ring of Midas')).toMatch(/\+50%/)
+  })
+})

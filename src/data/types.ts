@@ -97,7 +97,7 @@ export const SkillSchema = z.object({
   type: SkillTypeSchema,
   tier: int.positive().nullable(),
   rarity: z.enum(['Common', 'Rare', 'Epic']).nullable(),
-  /** Безымянная колонка 4 (A12) — предположительно цена улучшения. */
+  /** Безымянная колонка 4 (A12) — величина стихии героя, с которой открывается эта ступень. */
   upgradeCost: int.nullable(),
   text: z.string(),
   effects: z.array(SkillEffectSchema),
@@ -324,6 +324,55 @@ export const GameDataSchema = z.object({
   warnings: z.array(z.string()),
 })
 export type GameData = z.infer<typeof GameDataSchema>
+
+// ───────────────────────────── Герои пользователя ─────────────────────────────
+
+/** Слот экипировки героя. Имена — ключи GameData (Item.name, Enchant.name). */
+export const HeroSlotSchema = z.object({
+  item: z.string().nullable(),
+  quality: QualitySchema,
+  /** Камень стихии (Enchant.name, kind='element'). */
+  element: z.string().nullable(),
+  /** Дух (Enchant.name, kind='spirit'). */
+  spirit: z.string().nullable(),
+})
+export type HeroSlot = z.infer<typeof HeroSlotSchema>
+
+export const HERO_INSTANCE_VERSION = 1
+
+/** Герой пользователя: хранится в IndexedDB, экспортируется в JSON. */
+export const HeroInstanceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  /** HeroClass.name — базовый класс или промоушен. */
+  className: z.string().min(1),
+  level: int.min(1).max(99),
+  titanSoul: z.boolean(),
+  slots: z.array(HeroSlotSchema).length(6),
+  /** Навыки конкретной ступени (Skill.id). */
+  skills: z.array(z.string()),
+  /** Семена силы (плоская прибавка к базе). */
+  seeds: z.object({ atk: int.nonnegative(), def: int.nonnegative(), hp: int.nonnegative() }),
+  /**
+   * Эталон из экспорта TitansDB: снаряжение и показанные игрой статы на момент экспорта.
+   * Нужен для сверки расчёта и для калибровки базы героя (A8): пока уровень не изменился,
+   * база берётся из эталона, а не из усреднённой модели роста.
+   */
+  reference: z
+    .object({
+      level: int.min(1),
+      slots: z.array(HeroSlotSchema).length(6),
+      skills: z.array(z.string()),
+      stats: z.object({
+        hp: nonNeg, atk: nonNeg, def: nonNeg, threat: nonNeg,
+        /** Доли: 0.05 = 5%. */
+        crit: nonNeg, critDmg: nonNeg, eva: nonNeg,
+        element: nonNeg,
+      }),
+    })
+    .nullable(),
+})
+export type HeroInstance = z.infer<typeof HeroInstanceSchema>
 
 /** Сырые листы: имя → строки → ячейки. */
 export type RawSheets = Record<string, string[][]>
