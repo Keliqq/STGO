@@ -6,13 +6,18 @@
     "#/*": "./src/*"
   },
   "scripts": {
+    "predev": "node scripts/build-snapshot.ts --if-missing --offline",
     "dev": "vite dev --port 3000",
     "generate-routes": "tsr generate",
-    "build": "vite build",
+    "build": "node scripts/build-image-map.ts --if-stale 7 && node scripts/build-snapshot.ts && vite build",
+    "build-snapshot": "node scripts/build-snapshot.ts",
+    "build-image-map": "node scripts/build-image-map.ts",
     "preview": "vite preview",
+    "pretest": "node scripts/build-snapshot.ts --if-missing --offline",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
+    "pretypecheck": "node scripts/build-snapshot.ts --if-missing --offline",
     "typecheck": "tsc --noEmit",
     "dump-sheets": "node scripts/dump-sheets.ts",
     "inspect-sheet": "node scripts/inspect-sheet.ts"

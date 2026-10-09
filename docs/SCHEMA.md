@@ -151,7 +151,7 @@ HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier
 
 Строки +5…: **каждая колонка — список допустимых типов предметов для слота** (по одному типу на строку, `---` = больше нет). Последняя колонка — уровни открытия слотов навыков. Карточка заканчивается пустой строкой. Отсюда же берутся базовые статы класса: HP/ATK/DEF/EVA/Crit/CritDmg/Threat и стихия героя.
 
-46 классов (23 базовых + 23 промоушена). Связь «базовый → промоушен» — из подписи `(X Class Promotion)`.
+42 класса (21 базовый + 21 промоушен; в сессии 1 здесь ошибочно было 46). Связь «базовый → промоушен» — из подписи `(X Class Promotion)`.
 
 ### Какие типы носит каждый класс (слоты 1–6)
 
@@ -299,3 +299,19 @@ HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier
 ## SLOTS
 
 44 строки × 25 колонок. **Это не слоты экипировки**, а покупаемые слоты аккаунта: HERO SLOTS (41: № → `Lv. N`/`Loop 1, Lv. N` → Gold → Gems), CRAFTING, QUEST, TRADE, PET SLOTS — 5 блоков по горизонтали. Для оптимизатора нужен максимум «сколько героев можно иметь», не более. Слоты экипировки героев (6 штук) описаны в HEROES.
+
+---
+
+## Внешние id (не из таблицы) — `src/data/imageMap.json`
+
+Собирает `scripts/build-image-map.ts`. Колонки с внутренним id предмета в BLUEPRINTS **нет**. Источник — страницы `playshoptitans.com/blueprints/<категория>/<код типа>` (Next.js, данные в `__NEXT_DATA__`): `items[].uid`, `items[].skill` (`i_<ключ духа>` / `a_<артефакт>`), словарь `texts` (`<uid>_name`, `skill_i_<ключ>_name`, `skill_a_<uid>_name`, `item_type_<код>`). Обход — BFS по ссылкам категорий, 48 страниц. Иконки классов и навыков — по дереву репозитория STCentral-Hub/stcentral-hub.github.io (GitHub API).
+
+| Вид | URL | Пример id |
+|---|---|---|
+| item | `https://playshoptitans.com/assets/items/<uid>.png` | `shortsword` (Squire Sword) |
+| spirit | `…/assets/enchantments/spirits/icon_global_enchant_spirit_<ключ>.png` | `turtle` (Ram Spirit) |
+| element | `…/assets/enchantments/elementAffinities/icon_global_element_<стихия>.png` | `fire`, `gold`, `all` |
+| type | `…/assets/ui/types/icon_global_item_<код>.png` | `armorheavy` (Heavy Armor), `scrolls` (Spell) |
+| skill, class | `https://stcentral-hub.github.io/fankit/…` | `/fankit/Skills/Hero/icon_global_skill_p_cleave.png` |
+
+Покрытие на 2026-10-09: предметы 1549/1549, духи 40/40, типы 40/40, классы 42/42, артефакты 13, навыки 463/621.

@@ -32,13 +32,12 @@ function applyThemeMode(mode: ThemeMode) {
 }
 
 export default function ThemeToggle() {
-  const [mode, setMode] = useState<ThemeMode>('auto')
+  // Ленивая инициализация вместо setState в эффекте (react-hooks/set-state-in-effect)
+  const [mode, setMode] = useState<ThemeMode>(getInitialMode)
 
   useEffect(() => {
-    const initialMode = getInitialMode()
-    setMode(initialMode)
-    applyThemeMode(initialMode)
-  }, [])
+    applyThemeMode(mode)
+  }, [mode])
 
   useEffect(() => {
     if (mode !== 'auto') {
