@@ -173,6 +173,20 @@ export const THREAT_ATTACK_MULTIPLIER_DIVISOR = 100
  */
 export const OPTIMIZER_TOP_K = 10
 /**
+ * Адаптивный K в отсеве: если quickScore K-го и (K+5)-го кандидатов различаются не более чем на
+ * tol × |score|, «полка» плоская и лучший мог уехать ниже — расширяем K на 5 и проверяем дальше.
+ */
+// ASSUMPTION: A38 — порог плоскости полки подобран на 120 случаях (optimizer.prune.test.ts), данных нет.
+export const OPTIMIZER_K_ADAPT_STEP = 5
+// ASSUMPTION: A38
+export const OPTIMIZER_K_ADAPT_TOL = 0.05
+/**
+ * Локальный поиск после спуска: для каждого слота прогнать симуляцией ещё N следующих по рангу
+ * quickScore кандидатов (ловит предметы, которые quickScore недооценил: EVA, связки, спец-механики).
+ */
+// ASSUMPTION: A38
+export const OPTIMIZER_LOCAL_NEIGHBORS = 3
+/**
  * Бюджет симуляций на запуск оптимизатора: не более N вызовов simulateTeam.
  * 2000 прогонов ≈ 20 мс → 500 ≈ 10 с (бенчмарк сессии 5).
  */

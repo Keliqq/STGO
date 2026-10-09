@@ -1,7 +1,7 @@
 /**
  * Тесты оптимизатора: ограничения слотов/артефактов, пул owned, детерминизм,
- * и проверка решения сессии 5 — «отсев top-K не выбрасывает лучший по симуляции набор»
- * на 20 случаях (доля промахов фиксируется в PROGRESS.md).
+ * и проверка отсева — «отсев (top-K + разнообразные + адаптивный K) не выбрасывает лучший
+ * по симуляции вариант слота» на 20 случаях (доля промахов фиксируется в PROGRESS.md).
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -12,7 +12,7 @@ import { fixtureGameData } from '../test/fixtures.ts'
 import { fighterFromHero, mulberry32, simulateTeam } from './combat.ts'
 import { OPTIMIZER_TOP_K } from './constants.ts'
 import { QUALITY_ORDER } from './quality.ts'
-import { applyHeroConfig, runOptimizer, type ItemPool, type OptimizerInput, type SlotConfig } from './optimizer.ts'
+import { applyHeroConfig, runOptimizer, selectSlotCandidates, type ItemPool, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
 import { quickScore } from './score.ts'
 
 const data = fixtureGameData()
@@ -51,6 +51,15 @@ const baseInput = (hero: HeroInstance, over: Partial<OptimizerInput> = {}): Opti
 const itemByName = (name: string) => data.items.find((i) => i.name === name)!
 const enchantByName = (name: string) => data.enchants.find((e) => e.name === name)!
 const clsOf = (h: HeroInstance) => data.heroClasses.find((c) => c.name === h.className)!
+
+const elValue = new Map(data.enchants.filter((e) => e.kind === 'element').map((e) => [e.name, e.elementValue ?? 0]))
+const slotFeats = (heroEl: string) => (sc: SlotConfig): SlotFeatures => {
+  const it = itemByName(sc.item!)
+  const st = it.stats[sc.quality]
+  const el = sc.element ? (elValue.get(sc.element) ?? 0) : it.builtInElement ? (elValue.get(it.builtInElement) ?? 0) : 0
+  const affinity = it.elementAffinity === 'All' || it.elementAffinity.some((e) => heroEl === 'Any' || e === heroEl)
+  return { atk: st.atk, def: st.def, hp: st.hp, eva: st.eva, crit: st.crit, element: el, artifact: !!it.artifactSkill, affinity }
+}
 
 describe('оптимизатор: ограничения', () => {
   it('типы по слотам, тир, качество, один артефакт, стихия камня', () => {
@@ -164,8 +173,8 @@ describe('оптимизатор: детерминизм и режимы', () =>
   })
 })
 
-describe('отсев top-K против симуляции (решение сессии 5)', () => {
-  it('на 20 случаях лучший по симуляции вариант слота не отсекается (доля промахов в логе)', () => {
+describe('отсев против симуляции (top-K + разнообразие + адаптивный K)', () => {
+  it('на 20 случаях лучший по симуляции вариант слота не отсекается (промахов < 5%)', () => {
     const rng = mulberry32(20261009)
     const K = OPTIMIZER_TOP_K
     let total = 0
@@ -195,7 +204,7 @@ describe('отсев top-K против симуляции (решение се�
           const f = fighterFromHero(applyHeroConfig(hero, hero.slots.map((s, j) => (j === si ? sc : { item: s.item, quality: s.quality, element: s.element, spirit: s.spirit }))), data)
           return { sc, quick: quickScore([f], q) / q.monsterHp }
         })
-        const top = new Set([...scored].sort((a, b) => b.quick - a.quick).slice(0, K).map((x) => x.sc.item))
+        const top = new Set(selectSlotCandidates(scored.map((x) => ({ sc: x.sc, score: x.quick })), K, slotFeats(cls.element)).map((x) => x.item))
         let bestItem: string | null = null
         let bestWr = -1
         for (const { sc } of scored) {
@@ -211,8 +220,8 @@ describe('отсев top-K против симуляции (решение се�
       }
     }
     const rate = total > 0 ? misses / total : 0
-    console.log(`Отсев top-${K}: промахов ${misses}/${total} (${(rate * 100).toFixed(1)}%) — лучший по симуляции вариант слота не попал в топ-K`)
+    console.log(`Отсев top-${K}+разнообразие: промахов ${misses}/${total} (${(rate * 100).toFixed(1)}%) — лучший по симуляции вариант слота не попал в отсев`)
     expect(total).toBeGreaterThan(0)
-    expect(rate).toBeLessThanOrEqual(0.35)
+    expect(rate).toBeLessThan(0.05)
   })
 })

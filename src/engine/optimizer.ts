@@ -1,10 +1,11 @@
 /**
  * Оптимизатор экипировки, камней и духов. Чистые функции, без DOM/React (запускается в Web Worker).
  *
- * Алгоритм (решения по итогам сессии 5):
- *   1. Отсев по quickScore: топ-K вариантов на слот (K с запасом, по рангу — абсолютные значения
- *      quickScore неточны, ранг надёжен: Спирмен 0,92). Проверка «лучший по симуляции не отсекается»
- *      — optimizer.test.ts, доля промахов зафиксирована в PROGRESS.md.
+ * Алгоритм (решения сессий 5 и 7):
+ *   1. Отсев по quickScore: топ-K вариантов на слот + обязательные «разнообразные» кандидаты
+ *      (лучший по каждому стату/артефакт/связь стихии) + адаптивное расширение K на плоской полке
+ *      quickScore (A38). Проверка «лучший по симуляции не отсекается» — optimizer.test.ts /
+ *      optimizer.prune.test.ts, доля промахов зафиксирована в PROGRESS.md.
  *   2. Координатный спуск по слотам (сначала по ролям: танк — DEF/угроза до порога, ДД — урон+выживаемость,
  *      затем совместная доводка) — по quickScore.
  *   3. Финальный выбор — ВСЕГДА симуляцией: beam кандидатов + симуляция-доводка по слотам.
@@ -24,6 +25,9 @@ import {
   GOLD_ELEMENT_COUNTS_FOR_ANY_HERO,
   OPTIMIZER_BEAM,
   OPTIMIZER_CRN_SEED,
+  OPTIMIZER_K_ADAPT_STEP,
+  OPTIMIZER_K_ADAPT_TOL,
+  OPTIMIZER_LOCAL_NEIGHBORS,
   OPTIMIZER_SIM_BUDGET,
   OPTIMIZER_SIM_RUNS,
   OPTIMIZER_TOP_K,
@@ -201,6 +205,64 @@ function spiritChoices(data: GameData, pool: ItemPool, cons: OptimizerConstraint
   return out
 }
 
+// ─────────────────────────── отсев вариантов слота ───────────────────────────
+
+/** Признаки предмета для «разнообразных» кандидатов отсева (лучший по каждому измерению). */
+export interface SlotFeatures {
+  atk: number
+  def: number
+  hp: number
+  eva: number
+  crit: number
+  /** Величина стихии (встроенный камень или вставленный). */
+  element: number
+  artifact: boolean
+  /** Есть связь стихии/духа с героем (elementAffinity). */
+  affinity: boolean
+}
+
+/**
+ * Отсев вариантов слота: top-K по quickScore + обязательные «разнообразные» кандидаты
+ * (лучший по каждому стату ATK/DEF/HP/EVA/CRIT/стихии, лучший артефакт, лучший со связью)
+ * + адаптивное расширение K на плоской полке quickScore (A38).
+ * Возвращает подмножество scored в порядке убывания quickScore.
+ */
+export function selectSlotCandidates(
+  scored: { sc: SlotConfig; score: number }[],
+  topK: number,
+  feats: (sc: SlotConfig) => SlotFeatures,
+): SlotConfig[] {
+  const sorted = [...scored].sort((a, b) => b.score - a.score || (a.sc.item! < b.sc.item! ? -1 : 1))
+  const n = sorted.length
+  let k = Math.min(topK, n)
+  while (k + OPTIMIZER_K_ADAPT_STEP <= n) {
+    const a = sorted[k - 1].score
+    const b = sorted[k - 1 + OPTIMIZER_K_ADAPT_STEP].score
+    if (a - b > OPTIMIZER_K_ADAPT_TOL * Math.max(1, Math.abs(a))) break
+    k += OPTIMIZER_K_ADAPT_STEP
+  }
+  const sel = new Set<number>()
+  for (let i = 0; i < k; i++) sel.add(i)
+  const f = sorted.map((x) => feats(x.sc))
+  const dims: ((x: SlotFeatures) => number)[] = [
+    (x) => x.atk, (x) => x.def, (x) => x.hp, (x) => x.eva, (x) => x.crit, (x) => x.element,
+    (x) => (x.artifact ? 1 : 0), (x) => (x.affinity ? 1 : 0),
+  ]
+  for (const dim of dims) {
+    let bestI = -1
+    let bestV = 0
+    for (let i = 0; i < n; i++) {
+      const v = dim(f[i])
+      if (v > bestV) {
+        bestV = v
+        bestI = i
+      }
+    }
+    if (bestI >= 0) sel.add(bestI)
+  }
+  return sorted.filter((_, i) => sel.has(i)).map((x) => x.sc)
+}
+
 // ─────────────────────────── оптимизатор ───────────────────────────
 
 interface HeroCtx {
@@ -243,6 +305,15 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   if (input.champion && !champion) warnings.push(`Чемпион «${input.champion.name}» не найден в данных — без чемпиона.`)
   const champFighter = champion && input.champion ? fighterFromChampion(champion, input.champion.rank, data) : null
   const artifacts = new Set(data.items.filter((i) => i.artifactSkill).map((i) => i.name))
+  const itemByName = new Map(data.items.map((i) => [i.name, i]))
+  const elValue = new Map(data.enchants.filter((e) => e.kind === 'element').map((e) => [e.name, e.elementValue ?? 0]))
+  const slotFeats = (ctx: HeroCtx) => (sc: SlotConfig): SlotFeatures => {
+    const it = itemByName.get(sc.item!)!
+    const st = it.stats[sc.quality]
+    const el = sc.element ? (elValue.get(sc.element) ?? 0) : it.builtInElement ? (elValue.get(it.builtInElement) ?? 0) : 0
+    const affinity = it.elementAffinity === 'All' || it.elementAffinity.some((e) => ctx.cls.element === 'Any' || e === ctx.cls.element)
+    return { atk: st.atk, def: st.def, hp: st.hp, eva: st.eva, crit: st.crit, element: el, artifact: !!it.artifactSkill, affinity }
+  }
 
   const ctxs: HeroCtx[] = heroes.map((hero) => {
     const cls = data.heroClasses.find((c) => c.name === hero.className)
@@ -315,7 +386,7 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   }
   const betterEval = (a: CandEval, b: CandEval): boolean => a.obj > b.obj || (a.obj === b.obj && a.tie > b.tie)
 
-  // ── 1. Отсев: топ-K вариантов на слот (item → камень → дух, по quickScore в контексте текущего набора) ──
+  // ── 1. Отсев: top-K + «разнообразные» + адаптивный K на слот (item → камень → дух, по quickScore в контексте текущего набора) ──
   const pruneSlot = (hi: number, si: number, cfgs: HeroConfig[]): SlotConfig[] => {
     const ctx = ctxs[hi]
     const base = cfgs[hi][si]
@@ -329,21 +400,23 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
       const sc: SlotConfig = { item: ch.item.name, quality: ch.quality, element: null, spirit: null }
       stage1.push({ sc, score: tryCfg(sc) })
     }
-    stage1.sort((a, b) => b.score - a.score || (a.sc.item! < b.sc.item! ? -1 : 1))
+    const kept = selectSlotCandidates(stage1, topK, slotFeats(ctx))
+    const score1 = new Map(stage1.map((x) => [slotKey(x.sc), x.score]))
     const stage2: { sc: SlotConfig; score: number }[] = []
-    for (const c of stage1.slice(0, topK * 2)) {
-      let best = c
+    for (const sc0 of kept) {
+      let best = { sc: sc0, score: score1.get(slotKey(sc0))! }
       for (const st of ctx.stones) {
-        const sc = { ...c.sc, element: st }
+        const sc = { ...sc0, element: st }
         const s = tryCfg(sc)
         if (s > best.score) best = { sc, score: s }
       }
       stage2.push(best)
     }
-    stage2.sort((a, b) => b.score - a.score || (a.sc.item! < b.sc.item! ? -1 : 1))
+    const kept2 = selectSlotCandidates(stage2, topK, slotFeats(ctx))
+    const score2 = new Map(stage2.map((x) => [slotKey(x.sc), x.score]))
     const out: SlotConfig[] = []
-    for (const c of stage2.slice(0, topK)) {
-      let best = c
+    for (const sc0 of kept2) {
+      let best = { sc: sc0, score: score2.get(slotKey(sc0))! }
       for (const sp of ctx.spirits) {
         const sc = { ...best.sc, spirit: sp }
         const s = tryCfg(sc)
@@ -425,6 +498,38 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
 
   // ── 3. Финальный выбор симуляцией (CRN: один seed на всех кандидатов) ──
   let bestEv = evaluate(best)
+  const changedCount = best.reduce((n, cfg, hi) => n + cfg.filter((sc, si) => slotKey(sc) !== slotKey(baseline[hi][si])).length, 0)
+  const explCost = changedCount * quests.length
+
+  // ── 3a. Локальный поиск: после спуска для каждого слота прогнать симуляцией N следующих по рангу
+  // quickScore кандидатов — ловит предметы, которые quickScore недооценил (A38). ──
+  local: for (let round = 0; round < 2; round++) {
+    let improved = false
+    for (let hi = 0; hi < ctxs.length; hi++) {
+      for (let si = 0; si < ctxs[hi].items.length; si++) {
+        const opts = options[hi][si]
+        const cur = opts.findIndex((o) => slotKey(o) === slotKey(best[hi][si]))
+        for (let j = 1; j <= OPTIMIZER_LOCAL_NEIGHBORS; j++) {
+          const opt = opts[cur + j]
+          if (!opt) break
+          if (!allowed(best, hi, si, opt)) continue
+          if (cancel()) return finish(best, [], 'Отменено при локальном поиске', simsUsed, bestEv)
+          if (simsUsed + quests.length > budget - explCost) break local
+          const trial = cloneTeam(best)
+          trial[hi][si] = opt
+          const ev = evaluate(trial)
+          if (betterEval(ev, bestEv)) {
+            bestEv = ev
+            best = trial
+            improved = true
+          }
+          progress(simsUsed)
+        }
+      }
+    }
+    if (!improved) break
+  }
+
   const cands = [...beam.values()].sort((a, b) => b.score - a.score || (configKey(a.cfg) < configKey(b.cfg) ? -1 : 1)).slice(0, OPTIMIZER_BEAM)
   for (const c of cands) {
     if (cancel()) return finish(best, [], 'Отменено при сравнении кандидатов', simsUsed, bestEv)
@@ -437,8 +542,6 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   }
 
   // Симуляционная доводка по слотам: пока хватает бюджета — менять по одному слоту, выбор симуляцией.
-  const changedCount = best.reduce((n, cfg, hi) => n + cfg.filter((sc, si) => slotKey(sc) !== slotKey(baseline[hi][si])).length, 0)
-  const explCost = changedCount * quests.length
   outer: for (let round = 0; round < 4; round++) {
     let improved = false
     for (let hi = 0; hi < ctxs.length; hi++) {
