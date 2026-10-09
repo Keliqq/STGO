@@ -41,4 +41,7 @@ export const KEYS = {
   breakpoints: 'breakpoints',
   settings: 'settings',
   heroes: 'heroes',
+  inventory: 'inventory',
+  realityChecks: 'realityChecks',
+  optimizeCache: 'optimizeCache',
 } as const

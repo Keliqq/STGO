@@ -246,3 +246,7 @@ Monk (`+100% stats with Ring`), Sorcerer (`+50% stats with Spell`): если п�
 ## A36 — Особые боевые механики навыков · ⚠️
 
 Клаузы, которые парсер относит в `ignored`, симулятор разбирает текстом (`combat.ts → parseSpecials`): «N% chance to survive one fatal blow» — один раз за бой, выжить с 1 HP; «Heal(s) [party by] N HP each turn» — лечение в конце раунда; «Guarantees a Critical Hit after dodging» (Dancer) — следующий удар крит; «+N% more critical damage per consecutive critical hits. Stacks M» (Conquistador) — стаки сбрасываются не-критом; «Protect an ally from a Lethal attack once per battle» (Lord) — союзник выживает с 1 HP, сам лорд себя не защищает; «Bonuses are doubled against bosses» (Ashley) — удвоение стат-эффектов навыка в бою с боссом; «Evasion/Critical Hit Chance is set to N%» — переопределения артефактов. Всё это — догадки по формулировкам, игра пока не сверялась.
+
+## A37 — Ролевая эвристика оптимизатора · ⚠️
+
+«Танк» в отряде — герой с наибольшим DEF базового набора; он оптимизируется первым. При близких quickScore (±1%) танку предпочитается DEF (не выше порога 75% квеста — дальше снижение урона не растёт) и угрозу, ДД — ATK и HP. Порядок: сначала каждый герой по ролям (остальные — в текущей экипировке), затем совместная доводка по всем слотам. Точная игровая формулировка ролей неизвестна — эвристика влияет только на порядок и тай-брейки, финальный выбор делает симуляция. Реализация: `optimizer.ts → betterQuick`.

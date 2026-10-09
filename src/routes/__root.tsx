@@ -35,6 +35,9 @@ function RootComponent() {
           <Link to="/heroes" activeProps={{ className: 'underline' }}>
             Герои
           </Link>
+          <Link to="/optimize" activeProps={{ className: 'underline' }}>
+            Подбор
+          </Link>
           <Link to="/data" activeProps={{ className: 'underline' }}>
             Данные
           </Link>

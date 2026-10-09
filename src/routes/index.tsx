@@ -25,7 +25,11 @@ function Home() {
       ) : (
         <p className="text-sm">Загружаю данные…</p>
       )}
-      <p className="mt-6 text-sm text-neutral-500">Оптимизатор появится в следующих версиях.</p>
+      <p className="mt-6 text-sm text-neutral-500">
+        <Link to="/optimize" className="underline">
+          Перейти к подбору экипировки
+        </Link>
+      </p>
     </main>
   )
 }

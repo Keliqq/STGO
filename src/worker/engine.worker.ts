@@ -3,8 +3,9 @@
  * simulate() гоняет Монте-Карло в воркере, шлёт прогресс и слушает отмену.
  */
 import * as Comlink from 'comlink'
-import type { Quest } from '../data/types.ts'
+import type { GameData, Quest } from '../data/types.ts'
 import { simulateTeam, type Fighter, type SimMetrics } from '../engine/combat.ts'
+import { runOptimizer, type OptimizerInput, type OptimizerResult } from '../engine/optimizer.ts'
 
 let cancelled = false
 
@@ -22,6 +23,21 @@ const api = {
     cancelled = false
     return simulateTeam(fighters, quest, {
       ...opts,
+      onProgress: onProgress ? (done, total) => void onProgress(done, total) : undefined,
+      shouldCancel: () => cancelled,
+    })
+  },
+  /**
+   * Оптимизатор экипировки (отсев → координатный спуск → финальная симуляция).
+   * Прогресс — использованные симуляции из бюджета; отмена — cancel() (частичный результат).
+   */
+  optimize(
+    data: GameData,
+    input: OptimizerInput,
+    onProgress?: (done: number, total: number) => void,
+  ): OptimizerResult {
+    cancelled = false
+    return runOptimizer(data, input, {
       onProgress: onProgress ? (done, total) => void onProgress(done, total) : undefined,
       shouldCancel: () => cancelled,
     })
