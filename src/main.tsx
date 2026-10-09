@@ -28,6 +28,13 @@ declare module '@tanstack/react-router' {
 
 startDataSync()
 
+// PWA: офлайн-доступ к статике после первого визита (см. public/sw.js)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('./sw.js').catch(() => {})
+  })
+}
+
 const rootElement = document.getElementById('app')!
 
 if (!rootElement.innerHTML) {

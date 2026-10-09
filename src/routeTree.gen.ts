@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as DataRouteImport } from './routes/data'
 import { Route as HeroesRouteImport } from './routes/heroes'
+import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as OptimizeRouteImport } from './routes/optimize'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
 import { Route as DemoFormAddressRouteImport } from './routes/demo/form.address'
@@ -36,6 +37,11 @@ const DataRoute = DataRouteImport.update({
 const HeroesRoute = HeroesRouteImport.update({
   id: '/heroes',
   path: '/heroes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryRoute = InventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OptimizeRoute = OptimizeRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/data': typeof DataRoute
   '/heroes': typeof HeroesRoute
+  '/inventory': typeof InventoryRoute
   '/optimize': typeof OptimizeRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/form/address': typeof DemoFormAddressRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/data': typeof DataRoute
   '/heroes': typeof HeroesRoute
+  '/inventory': typeof InventoryRoute
   '/optimize': typeof OptimizeRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/form/address': typeof DemoFormAddressRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/data': typeof DataRoute
   '/heroes': typeof HeroesRoute
+  '/inventory': typeof InventoryRoute
   '/optimize': typeof OptimizeRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/form/address': typeof DemoFormAddressRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/data'
     | '/heroes'
+    | '/inventory'
     | '/optimize'
     | '/demo/tanstack-query'
     | '/demo/form/address'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/data'
     | '/heroes'
+    | '/inventory'
     | '/optimize'
     | '/demo/tanstack-query'
     | '/demo/form/address'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/data'
     | '/heroes'
+    | '/inventory'
     | '/optimize'
     | '/demo/tanstack-query'
     | '/demo/form/address'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   DataRoute: typeof DataRoute
   HeroesRoute: typeof HeroesRoute
+  InventoryRoute: typeof InventoryRoute
   OptimizeRoute: typeof OptimizeRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
   DemoFormAddressRoute: typeof DemoFormAddressRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/heroes'
       fullPath: '/heroes'
       preLoaderRoute: typeof HeroesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory': {
+      id: '/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof InventoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/optimize': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   DataRoute: DataRoute,
   HeroesRoute: HeroesRoute,
+  InventoryRoute: InventoryRoute,
   OptimizeRoute: OptimizeRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   DemoFormAddressRoute: DemoFormAddressRoute,

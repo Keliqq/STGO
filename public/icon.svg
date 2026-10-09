@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#065f46"/>
+  <path d="M64 18 L100 34 V64 C100 90 84 104 64 110 C44 104 28 90 28 64 V34 Z" fill="#34d399"/>
+  <path d="M64 34 L84 43 V64 C84 81 75 91 64 96 V34 Z" fill="#065f46" opacity="0.35"/>
+  <text x="64" y="80" font-family="Arial, sans-serif" font-size="52" font-weight="bold" fill="#065f46" text-anchor="middle">ST</text>
+</svg>

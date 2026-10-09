@@ -2,7 +2,7 @@
  * URL картинок. Изображения принадлежат Kabam и грузятся напрямую с их сайта (и с fankit stcentral-hub);
  * в репозиторий не копируются. Id берутся из src/data/imageMap.json (scripts/build-image-map.ts).
  */
-import imageMapJson from './imageMap.json'
+import imageMapJson from './imageMap.json' with { type: 'json' }
 import type { ImageMap } from './imageMapTypes.ts'
 import type { Element } from './types.ts'
 

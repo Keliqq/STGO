@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { elementIconId, spiritIconId } from '#/data/images.ts'
+import { elementIconId, skillIconId, spiritIconId } from '#/data/images.ts'
 import { loadHeroes } from '#/data/heroStore.ts'
-import { EMPTY_INVENTORY, loadInventory, mergeInventory, parseInventoryCsv, saveInventory, type Inventory } from '#/data/inventory.ts'
+import { EMPTY_INVENTORY, loadInventory, type Inventory } from '#/data/inventory.ts'
 import { addRealityCheck, agreement, checkMatches, loadRealityChecks, removeRealityCheck, type RealityCheck } from '#/data/realityChecks.ts'
 import { questsWithCaps } from '#/data/sync.ts'
-import { QUALITIES, type GameData, type HeroInstance, type Quality, type Quest } from '#/data/types.ts'
-import { questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
+import { QUALITIES, type HeroInstance, type Quality, type Quest } from '#/data/types.ts'
+import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
+import { CUBE_LABELS, type SkillAdviceResult } from '#/engine/skills.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
+import { InventoryEditor } from '#/ui/InventoryEditor.tsx'
 
 export const Route = createFileRoute('/optimize')({ component: OptimizePage })
 
@@ -27,68 +29,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const inputCls = 'rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-600 dark:bg-neutral-800'
 const btnCls = 'rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50'
-
-function InventoryEditor({ data, inventory, onChange }: { data: GameData; inventory: Inventory; onChange: (inv: Inventory) => void }) {
-  const [text, setText] = useState('')
-  const [report, setReport] = useState<string | null>(null)
-
-  async function applyText(t: string): Promise<void> {
-    if (!t.trim()) return
-    const r = parseInventoryCsv(t, data)
-    const next = mergeInventory(inventory, r.inventory)
-    await saveInventory(next)
-    onChange(next)
-    const parts = [`добавлено: предметов ${r.inventory.items.length}, камней ${r.inventory.stones.length}, духов ${r.inventory.spirits.length}`]
-    if (r.unknown.length) parts.push(`не найдено в таблице: ${r.unknown.join(', ')}`)
-    if (r.errors.length) parts.push(...r.errors)
-    setReport(parts.join('; '))
-    setText('')
-  }
-
-  return (
-    <div className="text-sm">
-      <p className="mb-2 text-neutral-600 dark:text-neutral-300">
-        Сейчас в инвентаре: {inventory.items.length} предметов, {inventory.stones.length} камней, {inventory.spirits.length} духов.
-        Формат строк: <code>type,name,quality</code> (type = item / stone / spirit).
-      </p>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={5}
-        placeholder={`item,${'Название меча'},Epic\nstone,Tide Element\nspirit,Bear Spirit`}
-        className={`${inputCls} mb-2 w-full font-mono`}
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className={btnCls} onClick={() => void applyText(text)}>
-          Добавить из текста/CSV
-        </button>
-        <input
-          type="file"
-          accept=".csv,text/csv"
-          className="text-sm"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (!f) return
-            void f.text().then(applyText)
-          }}
-        />
-        <button
-          type="button"
-          className="text-sm underline"
-          onClick={() => {
-            void saveInventory(EMPTY_INVENTORY).then(() => {
-              onChange(EMPTY_INVENTORY)
-              setReport('Инвентарь очищен.')
-            })
-          }}
-        >
-          Очистить
-        </button>
-      </div>
-      {report ? <p className="mt-2 rounded bg-neutral-100 p-2 dark:bg-neutral-800">{report}</p> : null}
-    </div>
-  )
-}
 
 function OptimizePage() {
   const data = useGameData()
@@ -128,6 +68,7 @@ function OptimizePage() {
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [result, setResult] = useState<{ res: OptimizerResult; fromCache: boolean } | null>(null)
+  const [advice, setAdvice] = useState<SkillAdviceResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const quests = useMemo(() => (data ? questsWithCaps(data).quests : []), [data])
@@ -183,11 +124,18 @@ function OptimizePage() {
     }
     setError(null)
     setResult(null)
+    setAdvice(null)
     setRunning(true)
     setProgress({ done: 0, total: 1 })
     try {
       const { result: res, fromCache } = await engineRef.current.optimize(data, input, (done, total) => setProgress({ done, total }))
       setResult({ res, fromCache })
+      try {
+        const cfgHeroes = input.heroes.map((h, i) => applyHeroConfig(h, res.configs[i]))
+        setAdvice(await engineRef.current.skillAdvice(data, cfgHeroes, input.champion ?? null, input.quests))
+      } catch {
+        setAdvice(null)
+      }
     } catch (e) {
       setError(String(e))
     } finally {
@@ -417,6 +365,12 @@ function OptimizePage() {
               {result.fromCache ? ' · из кэша' : ''}
               {result.res.cancelled ? ' · отменено, результат частичный' : ''}
             </p>
+            {result.res.tieBreakUsed ? (
+              <p className="mb-2 rounded bg-sky-100 p-2 text-sm text-sky-900 dark:bg-sky-950 dark:text-sky-200">
+                У нескольких вариантов одинаковый win rate ({pct(result.res.objective)}) — выбор сделан по тай-брейку:
+                меньше средних раундов → больше минимальный % HP выжившего → выше урон за раунд.
+              </p>
+            ) : null}
             {result.res.warnings.map((w) => (
               <p key={w} className="mb-2 rounded bg-amber-100 p-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 {w}
@@ -491,6 +445,46 @@ function OptimizePage() {
               </div>
             ))}
           </Section>
+
+          {advice && advice.advice.length > 0 ? (
+            <Section title="Навыки: вклад и перекидка">
+              <p className="mb-2 text-sm text-neutral-500">
+                Вклад = win rate с навыком минус win rate без него (на подобранном наборе). Слабые навыки
+                (<i>перекинуть</i>) советуем перекинуть минимальным подходящим кубиком; Роланд — только когда
+                навык уже выше тира идеального кубика.
+              </p>
+              {selectedTeam.map((h, hi) => {
+                const rows = advice.advice.filter((a) => a.heroIndex === hi)
+                if (rows.length === 0) return null
+                return (
+                  <div key={h.id} className="mb-3">
+                    <h3 className="mb-1 font-semibold">{h.name}</h3>
+                    <ul className="space-y-1 text-sm">
+                      {rows.map((a) => (
+                        <li key={a.skillIndex} className="flex flex-wrap items-center gap-2">
+                          <GameIcon kind="skill" id={skillIconId(a.skillName)} label={a.skillName} size={26} />
+                          <span>
+                            {a.skillName} <span className="text-neutral-500">(слот {a.skillIndex + 1})</span>
+                          </span>
+                          <span className={a.contribution > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-500'}>
+                            {(a.contribution * 100).toFixed(1)} п.п.
+                          </span>
+                          {a.action === 'reroll' ? (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                              перекинуть: {a.cube ? CUBE_LABELS[a.cube] : ''}
+                            </span>
+                          ) : (
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">оставить</span>
+                          )}
+                          <span className="w-full text-xs text-neutral-500">{a.reasons.join('; ')}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </Section>
+          ) : null}
 
           <Section title="Проверка на реальности">
             {mode !== 'quest' || !activeQuest ? (

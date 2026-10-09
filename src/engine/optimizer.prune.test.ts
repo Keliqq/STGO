@@ -1,7 +1,13 @@
 /**
- * Цена промаха отсева на 120 случаях (те же seed и выборка, что в optimizer.test.ts):
- * для каждого случая — 15 вариантов слота, win rate каждого по симуляции; «найденный» — лучший
- * из множества, отобранного отсева. Пишем медиану/max потери win rate и разбор промахов * (слоты, типы предметов, признаки: вторичный стат, щит/тотем, связь стихии, артефакт).
+ * Цена промаха отсева.
+ *
+ * 1) 120 случаев как раньше (20 герой+квест × 6 слотов, 15 вариантов слота, симуляция 300 прогонов,
+ *    общий seed): здесь же — распределение win rate (решение по итогам сессии 7: подозрение, что
+ *    цель теряет чувствительность, когда win rate везде 0 % или 100 %).
+ * 2) Откалиброванный набор: ≥30 случаев, где базовый win rate в диапазоне 20–80 % (подбираем
+ *    monsterHp так, чтобы исход завис от слота). На нём — повторный замер промахов; «лучший»
+ *    определяется лексикографически (win rate → раунды → мин. % HP выжившего → урон/раунд),
+ *    как в optimizer.ts.
  * Базовый чистый top-K — только лог (историческая калибровка, см. PROGRESS.md сессия 6);
  * рабочий отсев selectSlotCandidates — промахи < 5 % и потеря win rate при промахе ≤ 1 п.п.
  */
@@ -11,7 +17,7 @@ import { describe, expect, it } from 'vitest'
 import { importTitansDb } from '../data/titansdb.ts'
 import type { Item, Quality, Quest } from '../data/types.ts'
 import { fixtureGameData } from '../test/fixtures.ts'
-import { fighterFromHero, mulberry32, simulateTeam } from './combat.ts'
+import { fighterFromHero, mulberry32, simulateTeam, type SimMetrics } from './combat.ts'
 import { OPTIMIZER_TOP_K } from './constants.ts'
 import { applyHeroConfig, selectSlotCandidates, type SlotConfig, type SlotFeatures } from './optimizer.ts'
 import { quickScore } from './score.ts'
@@ -66,10 +72,11 @@ interface CaseResult {
   feat: { secondary: boolean; shield: boolean; totem: boolean; artifact: boolean; affinity: boolean; builtIn: boolean }
 }
 
-function runCases(select: (scored: { sc: SlotConfig; score: number }[], heroEl: string) => Set<string>): { results: CaseResult[]; total: number } {
+function runCases(select: (scored: { sc: SlotConfig; score: number }[], heroEl: string) => Set<string>): { results: CaseResult[]; total: number; wrs: number[] } {
   const rng = mulberry32(20261009)
   const K = OPTIMIZER_TOP_K
   const results: CaseResult[] = []
+  const wrs: number[] = []
   let total = 0
   for (let caseI = 0; caseI < 20; caseI++) {
     const hero = heroes[Math.floor(rng() * heroes.length)]
@@ -102,6 +109,7 @@ function runCases(select: (scored: { sc: SlotConfig; score: number }[], heroEl: 
       for (const { sc } of scored) {
         const f = fighterFromHero(applyHeroConfig(hero, hero.slots.map((s, j) => (j === si ? sc : { item: s.item, quality: s.quality, element: s.element, spirit: s.spirit }))), data)
         const wr = simulateTeam([f], q, { runs: 300, seed: 42 }).winRate
+        wrs.push(wr)
         if (wr > bestWrAll) {
           bestWrAll = wr
           bestItemAll = sc.item!
@@ -132,7 +140,7 @@ function runCases(select: (scored: { sc: SlotConfig; score: number }[], heroEl: 
       })
     }
   }
-  return { results, total }
+  return { results, total, wrs }
 }
 
 function report(label: string, r: ReturnType<typeof runCases>): void {
@@ -153,16 +161,108 @@ function report(label: string, r: ReturnType<typeof runCases>): void {
   console.log(`[${label}] признаки отсеянного лучшего: ${Object.entries(featCount).map(([k, n]) => `${k}:${n}`).join(' ') || '—'}`)
 }
 
+/** Гистограмма win rate: 0 %, (0–20), [20–80], (80–100), 100 %. */
+function wrHistogram(wrs: number[]): string {
+  const b = [0, 0, 0, 0, 0]
+  for (const w of wrs) {
+    if (w <= 0) b[0]++
+    else if (w < 0.2) b[1]++
+    else if (w <= 0.8) b[2]++
+    else if (w < 1) b[3]++
+    else b[4]++
+  }
+  const n = wrs.length
+  return `0%: ${b[0]} (${((b[0] / n) * 100).toFixed(0)}%) · 0–20%: ${b[1]} · 20–80%: ${b[2]} (${((b[2] / n) * 100).toFixed(0)}%) · 80–100%: ${b[3]} · 100%: ${b[4]} (${((b[4] / n) * 100).toFixed(0)}%)`
+}
+
 const topKOnly = (scored: { sc: SlotConfig; score: number }[]): Set<string> =>
   new Set([...scored].sort((a, b) => b.score - a.score).slice(0, OPTIMIZER_TOP_K).map((x) => x.sc.item!))
 
 const withDiversity = (scored: { sc: SlotConfig; score: number }[], heroEl: string): Set<string> =>
   new Set(selectSlotCandidates(scored, OPTIMIZER_TOP_K, slotFeats(heroEl)).map((x) => x.item!))
 
+// ─────────────── откалиброванный набор: базовый win rate 20–80 % ───────────────
+
+interface TunedCase {
+  hero: (typeof heroes)[number]
+  si: number
+  q: Quest
+  variants: { sc: SlotConfig; m: SimMetrics }[]
+}
+
+/** Лексикографический «лучший»: win rate ↑ → раунды ↓ → мин. % HP выжившего ↑ → урон/раунд ↑. */
+function cmpMetrics(a: SimMetrics, b: SimMetrics): number {
+  if (a.winRate !== b.winRate) return b.winRate - a.winRate
+  if (a.avgRounds !== b.avgRounds) return a.avgRounds - b.avgRounds
+  if (a.avgMinSurvivorHpPct !== b.avgMinSurvivorHpPct) return b.avgMinSurvivorHpPct - a.avgMinSurvivorHpPct
+  return b.avgDamagePerRound - a.avgDamagePerRound
+}
+
+/** Случайный герой+квест, monsterHp подобран так, чтобы базовый win rate попал в 20–80 %. */
+function tunedCases(minCases: number): TunedCase[] {
+  const rng = mulberry32(20261010)
+  const K = OPTIMIZER_TOP_K
+  const out: TunedCase[] = []
+  for (let attempt = 0; attempt < 400 && out.length < minCases; attempt++) {
+    const hero = heroes[Math.floor(rng() * heroes.length)]
+    const cls = clsOf(hero)
+    let q = quest({
+      variant: rng() < 0.5 ? 'boss' : 'normal',
+      monsterHp: Math.round(30000 + rng() * 200000),
+      monsterDmg: Math.round(500 + rng() * 1500),
+    })
+    const baseF = fighterFromHero(hero, data)
+    let wr = simulateTeam([baseF], q, { runs: 300, seed: 42 }).winRate
+    for (let it = 0; it < 12 && (wr < 0.2 || wr > 0.8); it++) {
+      q = quest({ ...q, monsterHp: Math.max(1000, Math.round(q.monsterHp * (wr < 0.2 ? 0.7 : 1.4))) })
+      wr = simulateTeam([baseF], q, { runs: 300, seed: 42 }).winRate
+    }
+    if (wr < 0.2 || wr > 0.8) continue
+    const si = Math.floor(rng() * 6)
+    const types = cls.slots[si]
+    const pool = data.items.filter((i) => i.isEquipment && types.includes(i.type) && i.tier <= 15)
+    if (pool.length <= K) continue
+    const sample: SlotConfig[] = []
+    const used = new Set<number>()
+    while (sample.length < 15 && used.size < pool.length) {
+      const k = Math.floor(rng() * pool.length)
+      if (used.has(k)) continue
+      used.add(k)
+      sample.push({ item: pool[k].name, quality: 'Flawless' as Quality, element: null, spirit: null })
+    }
+    const variants = sample.map((sc) => {
+      const f = fighterFromHero(applyHeroConfig(hero, hero.slots.map((s, j) => (j === si ? sc : { item: s.item, quality: s.quality, element: s.element, spirit: s.spirit }))), data)
+      return { sc, m: simulateTeam([f], q, { runs: 300, seed: 42 }) }
+    })
+    out.push({ hero, si, q, variants })
+  }
+  return out
+}
+
+function measureTuned(cases: TunedCase[], select: (scored: { sc: SlotConfig; score: number }[], heroEl: string) => Set<string>): { notIn: number; losses: number[] } {
+  let notIn = 0
+  const losses: number[] = []
+  for (const c of cases) {
+    const cls = clsOf(c.hero)
+    const scored = c.variants.map(({ sc, m }) => {
+      const f = fighterFromHero(applyHeroConfig(c.hero, c.hero.slots.map((s, j) => (j === c.si ? sc : { item: s.item, quality: s.quality, element: s.element, spirit: s.spirit }))), data)
+      return { sc, score: quickScore([f], c.q) / c.q.monsterHp, m }
+    })
+    const selected = select(scored, cls.element)
+    const best = [...scored].sort((a, b) => cmpMetrics(a.m, b.m))[0]
+    if (!selected.has(best.sc.item!)) notIn++
+    let bestWrSel = -1
+    for (const v of scored) if (selected.has(v.sc.item!) && v.m.winRate > bestWrSel) bestWrSel = v.m.winRate
+    losses.push(best.m.winRate - Math.max(0, bestWrSel))
+  }
+  return { notIn, losses }
+}
+
 describe('цена промаха отсева', () => {
   it('базовый чистый top-K: распределение потерь и разбор промахов (калибровка сессии 6→7)', () => {
     const r = runCases((scored) => topKOnly(scored))
     report('top-K', r)
+    console.log(`[распределение win rate на 120 случаях] ${wrHistogram(r.wrs)}`)
     expect(r.total).toBeGreaterThan(0)
   })
 
@@ -174,5 +274,19 @@ describe('цена промаха отсева', () => {
     const losses = r.results.filter((x) => x.missed).map((x) => x.loss)
     expect(median(losses)).toBeLessThanOrEqual(0.01)
     expect(Math.max(0, ...losses)).toBeLessThanOrEqual(0.01)
+  })
+
+  it('набор с win rate 20–80 % (≥30 случаев): повторный замер промахов', () => {
+    const cases = tunedCases(30)
+    expect(cases.length).toBeGreaterThanOrEqual(30)
+    const baseWrs = cases.map((c) => simulateTeam([fighterFromHero(c.hero, data)], c.q, { runs: 300, seed: 42 }).winRate)
+    console.log(`\n[tuned 20–80%] случаев: ${cases.length}; базовый win rate: мин ${(Math.min(...baseWrs) * 100).toFixed(0)}%, макс ${(Math.max(...baseWrs) * 100).toFixed(0)}%`)
+    console.log(`[tuned 20–80%] win rate всех вариантов: ${wrHistogram(cases.flatMap((c) => c.variants.map((v) => v.m.winRate)))}`)
+    const a = measureTuned(cases, (s) => topKOnly(s))
+    const b = measureTuned(cases, withDiversity)
+    console.log(`[tuned top-K] лучший не в множестве: ${a.notIn}/${cases.length} (${((a.notIn / cases.length) * 100).toFixed(1)}%); потеря WR: медиана ${pct(median(a.losses))}, max ${pct(Math.max(0, ...a.losses))}`)
+    console.log(`[tuned top-K+разнообразие] лучший не в множестве: ${b.notIn}/${cases.length} (${((b.notIn / cases.length) * 100).toFixed(1)}%); потеря WR: медиана ${pct(median(b.losses))}, max ${pct(Math.max(0, ...b.losses))}`)
+    expect(b.notIn / cases.length).toBeLessThan(0.05)
+    expect(Math.max(0, ...b.losses)).toBeLessThanOrEqual(0.01)
   })
 })

@@ -8,8 +8,9 @@ import * as Comlink from 'comlink'
 import EngineWorker from './engine.worker?worker'
 import type { EngineApi } from './engine.worker.ts'
 import type { Fighter, SimMetrics } from '../engine/combat.ts'
-import type { OptimizerInput, OptimizerResult } from '../engine/optimizer.ts'
-import type { GameData, Quest } from '../data/types.ts'
+import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
+import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
+import type { GameData, HeroInstance, Quest } from '../data/types.ts'
 import { idbStore, KEYS, type KeyValueStore } from '../data/storage.ts'
 
 export interface Engine {
@@ -19,6 +20,14 @@ export interface Engine {
     opts?: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean },
     onProgress?: (done: number, total: number) => void,
   ): Promise<SimMetrics>
+  /** Вклад навыков в win rate и советы по перекидке (выполняется в воркере). */
+  skillAdvice(
+    data: GameData,
+    heroes: HeroInstance[],
+    champion: { name: string; rank: number } | null,
+    quests: QuestWeight[],
+    options?: SkillAdviceOptions,
+  ): Promise<SkillAdviceResult>
   /**
    * Оптимизатор. Сначала кэш IndexedDB по хешу входа; промах — расчёт в воркере, затем запись в кэш.
    * Отменённые результаты не кэшируются.
@@ -63,6 +72,8 @@ export function createEngine(store: KeyValueStore = idbStore): Engine {
   return {
     simulate: (fighters, quest, opts, onProgress) =>
       remote.simulate(fighters, quest, opts ?? {}, onProgress ? Comlink.proxy(onProgress) : undefined),
+    skillAdvice: (data, heroes, champion, quests, options) =>
+      remote.skillAdvice(data, heroes, champion, quests, options),
     optimize: async (data, input, onProgress) => {
       const hash = optimizerInputHash(data, input)
       const cache = await cacheRead(store)

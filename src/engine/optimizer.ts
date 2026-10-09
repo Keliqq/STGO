@@ -123,6 +123,11 @@ export interface OptimizerResult {
   warnings: string[]
   simsUsed: number
   cancelled: boolean
+  /**
+   * True — среди проверенных кандидатов есть другие наборы с тем же win rate (цель),
+   * и финальный выбор сделан по тай-брейку (меньше раундов → больше мин. % HP выжившего → урон/раунд).
+   */
+  tieBreakUsed: boolean
 }
 
 export interface OptimizerHooks {
@@ -278,7 +283,8 @@ interface HeroCtx {
 interface CandEval {
   per: SimMetrics[]
   obj: number
-  tie: number
+  /** Лексикографический тай-брейк после цели: средние раунды → мин. % HP выжившего → урон/раунд. */
+  tie: number[]
   wr: number
 }
 
@@ -366,12 +372,15 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   // Симуляционный слой (используется и для финального выбора, и для finish при ранней отмене).
   let simsUsed = 0
   const simCache = new Map<string, CandEval>()
-  const objectiveOf = (per: SimMetrics[]): { obj: number; tie: number; wr: number } => {
-    if (input.mode === 'quest') return { obj: per[0].winRate, tie: -per[0].avgRounds, wr: per[0].winRate }
-    const mean = per.reduce((a, m, i) => a + m.winRate * quests[i].weight, 0) / wSum
-    const rounds = per.reduce((a, m, i) => a + m.avgRounds * quests[i].weight, 0) / wSum
+  // Лексикографический тай-брейк (решение по итогам сессии 7): win rate → средние раунды (меньше) →
+  // мин. % HP выжившего (больше) → урон/раунд (больше). В universal метрики усредняются по весам локаций.
+  const objectiveOf = (per: SimMetrics[]): { obj: number; tie: number[]; wr: number } => {
+    const wmean = (get: (m: SimMetrics) => number): number => per.reduce((a, m, i) => a + get(m) * quests[i].weight, 0) / wSum
+    const tieRest = [-wmean((m) => m.avgRounds), wmean((m) => m.avgMinSurvivorHpPct), wmean((m) => m.avgDamagePerRound)]
+    if (input.mode === 'quest') return { obj: per[0].winRate, tie: tieRest, wr: per[0].winRate }
+    const mean = wmean((m) => m.winRate)
     const worst = Math.min(...per.map((m) => m.winRate))
-    return input.robust ? { obj: worst, tie: mean, wr: mean } : { obj: mean, tie: -rounds, wr: mean }
+    return input.robust ? { obj: worst, tie: [mean, ...tieRest], wr: mean } : { obj: mean, tie: tieRest, wr: mean }
   }
   const evaluate = (cfg: HeroConfig[]): CandEval => {
     const k = configKey(cfg)
@@ -384,7 +393,11 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
     simsUsed++
     return ev
   }
-  const betterEval = (a: CandEval, b: CandEval): boolean => a.obj > b.obj || (a.obj === b.obj && a.tie > b.tie)
+  const cmpTie = (a: number[], b: number[]): number => {
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]
+    return 0
+  }
+  const betterEval = (a: CandEval, b: CandEval): boolean => a.obj > b.obj || (a.obj === b.obj && cmpTie(a.tie, b.tie) > 0)
 
   // ── 1. Отсев: top-K + «разнообразные» + адаптивный K на слот (item → камень → дух, по quickScore в контексте текущего набора) ──
   const pruneSlot = (hi: number, si: number, cfgs: HeroConfig[]): SlotConfig[] => {
@@ -610,6 +623,17 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
     let worst: QuestOutcome | null = null
     if (input.mode === 'universal') worst = perQuest.reduce((a, b) => (b.winRate < a.winRate ? b : a), perQuest[0])
     if (cancelNote) warnings.push(cancelNote)
+    // Были ли среди проверенных кандидатов другие наборы с той же целью (выбор сделал тай-брейк)?
+    let tieBreakUsed = false
+    if (ev) {
+      const bestKey = configKey(cfg)
+      for (const [k, e] of simCache) {
+        if (k !== bestKey && Math.abs(e.obj - ev.obj) < 1e-12) {
+          tieBreakUsed = true
+          break
+        }
+      }
+    }
     return {
       configs: cfg,
       objective: o.obj,
@@ -620,6 +644,7 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
       warnings,
       simsUsed: sims,
       cancelled: cancelNote != null,
+      tieBreakUsed,
     }
   }
 }

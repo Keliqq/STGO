@@ -1,0 +1,13 @@
+{
+  "name": "Shop Titans: подбор экипировки",
+  "short_name": "ST Optimizer",
+  "description": "Офлайн-планировщик экипировки, камней и духов для героев Shop Titans",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#065f46",
+  "icons": [
+    { "src": "./icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" }
+  ]
+}

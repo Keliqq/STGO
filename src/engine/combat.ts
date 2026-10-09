@@ -274,6 +274,11 @@ export interface SimMetrics {
   avgRounds: number
   survival: HeroSurvival[]
   avgDamagePerRound: number
+  /**
+   * Средний по прогонам минимальный % HP среди выживших бойцов в конце боя (0 — если не выжил никто).
+   * Третий тай-брейк оптимизатора (win rate → раунды → этот показатель → урон/раунд).
+   */
+  avgMinSurvivorHpPct: number
 }
 
 interface Mods {
@@ -463,6 +468,8 @@ interface RunResult {
   rounds: number
   alive: boolean[]
   dmgDealt: number
+  /** Минимальный % HP среди выживших в конце боя (0 — не выжил никто). */
+  minSurvivorHpFrac: number
 }
 
 function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
@@ -494,6 +501,12 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
     for (const ref of p.selfCond[i]) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, ref.perGroup ? p.groupCounts[ref.perGroup] : 1)
     for (const ref of p.partyCond) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, ref.perGroup ? p.groupCounts[ref.perGroup] : 1)
     return m
+  }
+
+  const minSurvivorHpFrac = (): number => {
+    let m = Infinity
+    for (let i = 0; i < n; i++) if (alive[i]) m = Math.min(m, hp[i] / p.maxHp[i])
+    return m === Infinity ? 0 : m
   }
 
   const tryHit = (i: number, baseDmg: number): void => {
@@ -541,7 +554,7 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
     const aliveIdx: number[] = []
     let threatSum = 0
     for (let i = 0; i < n; i++) if (alive[i]) { aliveIdx.push(i); threatSum += Math.max(0, p.fighters[i].threat) }
-    if (aliveIdx.length === 0) return { win: false, rounds: round - 1, alive, dmgDealt }
+    if (aliveIdx.length === 0) return { win: false, rounds: round - 1, alive, dmgDealt, minSurvivorHpFrac: 0 }
     if (aliveIdx.length > 1 && rng() < p.aoeChance) {
       for (const i of aliveIdx) tryHit(i, quest.monsterAoe)
     } else {
@@ -553,7 +566,7 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
       }
       tryHit(target, quest.monsterDmg)
     }
-    if (aliveIdx.every((i) => !alive[i])) return { win: false, rounds: round, alive, dmgDealt }
+    if (aliveIdx.every((i) => !alive[i])) return { win: false, rounds: round, alive, dmgDealt, minSurvivorHpFrac: 0 }
 
     // — фаза отряда —
     for (const i of p.order) {
@@ -582,7 +595,7 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
       if (!p.barrierBroken && !ignoreBarrier) dmg *= BARRIER_UNBROKEN_DMG_FACTOR
       monsterHp -= dmg
       dmgDealt += dmg
-      if (monsterHp <= 0) return { win: true, rounds: round, alive, dmgDealt }
+      if (monsterHp <= 0) return { win: true, rounds: round, alive, dmgDealt, minSurvivorHpFrac: minSurvivorHpFrac() }
     }
 
     // — конец раунда: лечение и перезарядка мана-щита —
@@ -597,7 +610,7 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
       }
     }
   }
-  return { win: false, rounds: p.maxRounds, alive, dmgDealt }
+  return { win: false, rounds: p.maxRounds, alive, dmgDealt, minSurvivorHpFrac: minSurvivorHpFrac() }
 }
 
 /** N прогонов Монте-Карло. Детерминированно: один и тот же seed → один и тот же результат. */
@@ -609,6 +622,7 @@ export function simulateTeam(fighters: Fighter[], quest: Quest, opts: SimOptions
   let wins = 0
   let roundsSum = 0
   let dmgSum = 0
+  let minSurvSum = 0
   const aliveCount = new Array<number>(fighters.length).fill(0)
   for (let r = 0; r < total; r++) {
     if (r > 0 && opts.shouldCancel?.()) break
@@ -617,6 +631,7 @@ export function simulateTeam(fighters: Fighter[], quest: Quest, opts: SimOptions
     if (res.win) wins++
     roundsSum += res.rounds
     dmgSum += res.dmgDealt
+    minSurvSum += res.minSurvivorHpFrac
     res.alive.forEach((a, i) => {
       if (a) aliveCount[i]++
     })
@@ -628,5 +643,6 @@ export function simulateTeam(fighters: Fighter[], quest: Quest, opts: SimOptions
     avgRounds: done > 0 ? roundsSum / done : 0,
     survival: fighters.map((f, i) => ({ name: f.name, rate: done > 0 ? aliveCount[i] / done : 0 })),
     avgDamagePerRound: roundsSum > 0 ? dmgSum / roundsSum : 0,
+    avgMinSurvivorHpPct: done > 0 ? minSurvSum / done : 0,
   }
 }

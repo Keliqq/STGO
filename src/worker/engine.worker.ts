@@ -3,9 +3,10 @@
  * simulate() гоняет Монте-Карло в воркере, шлёт прогресс и слушает отмену.
  */
 import * as Comlink from 'comlink'
-import type { GameData, Quest } from '../data/types.ts'
+import type { GameData, HeroInstance, Quest } from '../data/types.ts'
 import { simulateTeam, type Fighter, type SimMetrics } from '../engine/combat.ts'
-import { runOptimizer, type OptimizerInput, type OptimizerResult } from '../engine/optimizer.ts'
+import { runOptimizer, type OptimizerInput, type OptimizerResult, type QuestWeight } from '../engine/optimizer.ts'
+import { rerollAdvice, type SkillAdviceOptions, type SkillAdviceResult } from '../engine/skills.ts'
 
 let cancelled = false
 
@@ -41,6 +42,16 @@ const api = {
       onProgress: onProgress ? (done, total) => void onProgress(done, total) : undefined,
       shouldCancel: () => cancelled,
     })
+  },
+  /** Вклад навыков в win rate и советы по перекидке (кубики). */
+  skillAdvice(
+    data: GameData,
+    heroes: HeroInstance[],
+    champion: { name: string; rank: number } | null,
+    quests: QuestWeight[],
+    options?: SkillAdviceOptions,
+  ): SkillAdviceResult {
+    return rerollAdvice(data, heroes, champion, quests, options ?? {})
   },
   cancel(): void {
     cancelled = true
