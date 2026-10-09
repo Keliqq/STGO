@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CORS probe</title>
+<pre id="out"></pre>
+<script>
+const ID = '1WLa7X8h3O0-aGKxeAlCL7bnN8-FhGd3t7pz2RCzSg8c';
+const out = document.getElementById('out');
+const log = (s) => { out.textContent += s + '\n'; };
+window.results = {};
+async function probe(name, url) {
+  try {
+    const r = await fetch(url);
+    const t = await r.text();
+    window.results[name] = { ok: r.ok, status: r.status, type: r.type, ctype: r.headers.get('content-type'), len: t.length, head: t.slice(0, 200) };
+  } catch (e) {
+    window.results[name] = { error: String(e) };
+  }
+  log(name + ': ' + JSON.stringify(window.results[name]));
+}
+function jsonp(name, url) {
+  return new Promise((res) => {
+    const cb = '__cb' + Math.random().toString(36).slice(2);
+    window[cb] = (d) => { window.results[name] = { ok: true, status: d.status, rows: d.table && d.table.rows.length }; log(name + ': ' + JSON.stringify(window.results[name])); res(); };
+    const s = document.createElement('script');
+    s.src = url + '&tqx=out:json;responseHandler:' + cb;
+    s.onerror = () => { window.results[name] = { error: 'script error' }; log(name + ' error'); res(); };
+    document.head.appendChild(s);
+  });
+}
+(async () => {
+  await probe('gviz_csv', `https://docs.google.com/spreadsheets/d/${ID}/gviz/tq?tqx=out:csv&sheet=QUESTS`);
+  await probe('gviz_csv_headers0', `https://docs.google.com/spreadsheets/d/${ID}/gviz/tq?tqx=out:csv&headers=0&sheet=QUESTS`);
+  await probe('export_csv', `https://docs.google.com/spreadsheets/d/${ID}/export?format=csv&gid=0`);
+  await jsonp('gviz_jsonp', `https://docs.google.com/spreadsheets/d/${ID}/gviz/tq?sheet=QUESTS`);
+  window.done = true; log('DONE');
+})();
+</script>

@@ -1,0 +1,622 @@
+Name,Type,Tier,Rarity,,Skill Effect(s),Classes,Requires Class Promotion
+Aura of Courage,Leader,1,---,---,"+10% bonus Attack for the party, +10% bonus Defense for the party",Argon,---
+Aura of Resolve,Leader,2,---,---,"+20% bonus Attack for the party, +20% bonus Defense for the party",Argon,---
+Aura of Heroism,Leader,3,---,---,"+30% bonus Attack for the party, +30% bonus Defense for the party",Argon,---
+Aura of the Paladin,Leader,4,---,---,"+40% bonus Attack for the party, +40% bonus Defense for the party",Argon,---
+Cure Wounds,Leader,1,---,---,"Heals party by 3 HP each turn, +10% more HP & Mana Shield for the party, +10% faster resting time for the party",Lilu,---
+Divine Power,Leader,2,---,---,"Heals party by 5 HP each turn, +15% more HP & Mana Shield for the party, +20% faster resting time for the party",Lilu,---
+Revitalization,Leader,3,---,---,"Heals party by 10 HP each turn, +20% more HP & Mana Shield for the party, +35% faster resting time for the party",Lilu,---
+Sacred Circle,Leader,4,---,---,"Heals party by 20 HP each turn, +25% more HP & Mana Shield for the party, +50% faster resting time for the party",Lilu,---
+Eye for Loot,Leader,1,---,---,"+25% more components found in quests, +10% bonus Attack for the party",Sia,---
+Trained Eye,Leader,2,---,---,"+50% more components found in quests, +15% bonus Attack for the party",Sia,---
+Eye for Style,Leader,3,---,---,"+75% more components found in quests, +20% bonus Attack for the party",Sia,---
+Eye of the Beholder,Leader,4,---,---,"+100% more components found in quests, +25% bonus Attack for the party",Sia,---
+Ambush,Leader,1,---,---,"+10% faster quest time, +5% Critical Hit Chance for the party, +5% Evasion for the party",Yami,---
+Coordinated Ambush,Leader,2,---,---,"+20% faster quest time, +10% Critical Hit Chance for the party, +10% Evasion for the party",Yami,---
+Ethereal Ambush,Leader,3,---,---,"+35% faster quest time, +15% Critical Hit Chance for the party, +15% Evasion for the party",Yami,---
+Perfect Ambush,Leader,4,---,---,"+50% faster quest time, +20% Critical Hit Chance for the party, +20% Evasion for the party",Yami,---
+Rudo Blitz,Leader,1,---,---,"+30% Critical Hit Chance for 2 rounds, -25% Break Chance for the party",Rudo,---
+Headstrong Assault,Leader,2,---,---,"+40% Critical Hit Chance for 3 rounds, -25% Break Chance for the party",Rudo,---
+Berserker Rampage,Leader,3,---,---,"+40% Critical Hit Chance for 6 rounds, +50% party Element bonus VS Elemental Barriers, -50% Break Chance for the party",Rudo,---
+Total Mayhem,Leader,4,---,---,"+50% Critical Hit Chance for 6 rounds, +50% party Element bonus VS Elemental Barriers, -50% Break Chance for the party",Rudo,---
+Pirate's Due,Leader,1,---,---,"30% chance to steal from monsters, +10% Defense for the party, +5% Evasion for the party",Polonia,---
+Davy Jones' Muggin',Leader,2,---,---,"35% chance to steal valuable items from monsters, +15% Defense for the party, +5% Evasion for the party",Polonia,---
+High Sea Robbery,Leader,3,---,---,"40% chance to steal very valuable items from monsters, +20% Defense for the party, +10% Evasion for the party",Polonia,---
+Captain's Share,Leader,4,---,---,"50% chance to steal super valuable items from monsters, +25% Defense for the party, +10% Evasion for the party",Polonia,---
+Alchemist Tonic,Leader,1,---,---,"+5% bonus Attack to the party for each Spellcaster, +7% HP to the party for each Fighter, +4% Critical Hit Chance & Evasion for each Rogue",Donovan,---
+Essence of Change,Leader,2,---,---,"+10% Attack to the party for each Spellcaster, +8% HP to the party for each Fighter, +5% Critical Hit Chance & Evasion for each Rogue",Donovan,---
+Master of Transmutation,Leader,3,---,---,"+15% Attack to the party for each Spellcaster, +9% HP to the party for each Fighter, +7% Critical Hit Chance & Evasion for each Rogue",Donovan,---
+Philosopher's Stone,Leader,4,---,---,"+20% Attack to the party for each Spellcaster, +12% HP to the party for each Fighter, +10% Critical Hit Chance & Evasion for each Rogue",Donovan,---
+Empowering Drain,Leader,1,---,---,"Each turn, drain 8% HP from all allies, healing herself for the total amount, Hemma's Attack increases by the total amount of HP drained plus 30% for each drain, +20% HP for the party",Hemma,---
+Ghastly Strike,Leader,2,---,---,"Each turn, drain 8% HP from all allies, healing herself for the total amount, Hemma's Attack increases by the total amount of HP drained plus 50% for each drain, +30% HP for the party",Hemma,---
+Necromantic Spear,Leader,3,---,---,"Each turn, drain 8% HP from all allies, healing herself for the total amount, Hemma's Attack increases by the amount of HP drained plus 75%, +40% HP for the party",Hemma,---
+Consume Essence,Leader,5,---,---,"Each turn, drain 8% HP from all allies, healing herself for the total amount, Hemma's Attack increases by the amount of HP drained plus 100% for each drain, +50% HP for the party",Hemma,---
+Iaijutsu Tactics,Leader,1,---,---,"+10% bonus Attack and Defense for the party, +5% faster quest time, Bonuses are doubled against bosses",Ashley,---
+Ashley's Gambit,Leader,2,---,---,"+15% bonus Attack and Defense for the party, +10% faster quest time, Bonuses are doubled against bosses",Ashley,---
+Fell The Greatest Foe,Leader,3,---,---,"+20% bonus Attack and Defense for the party, +15% faster quest time, Bonuses are doubled against bosses",Ashley,---
+Bushido Force,Leader,4,---,---,"+25% bonus Attack and Defense for the party, +20% faster quest time, Bonuses are doubled against bosses",Ashley,---
+Double Trouble,Leader,1,---,---,"+10% Attack, +5% HP and +20% Critical Damage for the party, Above bonuses are doubled during Flash Quests, Grants an extra Flash Quest attempt",Bjorn,---
+Flash Strike Team,Leader,2,---,---,"+15% Attack, +10% HP and +30% Critical Damage for the party, Above bonuses are doubled during Flash Quests, Grants an extra Flash Quest attempt",Bjorn,---
+Born to be Wild,Leader,3,---,---,"+20% Attack, +15% HP and +40% Critical Damage for the party, Above bonuses are doubled during Flash Quests, Grants an extra Flash Quest attempt",Bjorn,---
+The Tusked Two,Leader,4,---,---,"+30% Attack, +20% HP and +50% Critical Damage for the party, Above bonuses are doubled during Flash Quests, Grants an extra Flash Quest attempt",Bjorn,---
+The Last Airbender,Leader,1,---,---,"+20% bonus Attack for the party, +20% bonus Defense for the party, Earn a few elements as bonus loot",Aang,---
+Elemental Mastery,Leader,2,---,---,"+30% bonus Attack for the party, +30% bonus Defense for the party, Earn some elements as bonus loot",Aang,---
+Avatar State,Leader,3,---,---,"+40% bonus Attack for the party, +40% bonus Defense for the party, Earn some elements as bonus loot",Aang,---
+Avatar's Wrath,Leader,4,---,---,"+50% bonus Attack for the party, +50% bonus Defense for the party, Earn lots of elements as bonus loot",Aang,---
+Hunter Gatherer,Leader,1,---,---,"+10% bonus Attack and HP for the party, +50% more components found in quests, +50% XP earned by the party",Sokka,---
+Field Recon,Leader,2,---,---,"+15% bonus Attack and HP for the party, +50% more components found in quests, +50% XP earned by the party",Sokka,---
+Team Avatar Tactics,Leader,3,---,---,"+20% bonus Attack and HP for the party, +75% more components found in quests, +75% XP earned by the party",Sokka,---
+The Perfect Plan,Leader,4,---,---,"+30% bonus Attack and HP for the party, +75% more components found in quests, +100% XP earned by the party",Sokka,---
+Awakening of Leather,Leader,1,---,---,"Highly random attack bonus for the party, up to +50%, Finds a few Leather items as bonus loot",Tamas,---
+Power of Leather,Leader,2,---,---,"Highly random attack bonus for the party, up to +100%, Finds some Leather items as bonus loot",Tamas,---
+League of Leather,Leader,3,---,---,"Highly random attack bonus for the party, up to +150%, Finds some Leather items as bonus loot",Tamas,---
+Ultimate Leatherworker,Leader,4,---,---,"Highly random attack bonus for the party, up to +200%, Finds lots of Leather items as bonus loot",Tamas,---
+Reinhold's Randonee,Leader,1,---,---,"+10% bonus to party ATK, DEF and HP, Finds lots of unusual items as bonus loot if Reinhold survives",Reinhold,---
+Kingly Sortie,Leader,2,---,---,"+15% bonus to party ATK, DEF and HP, Finds lots of unusual items as bonus loot if Reinhold survives",Reinhold,---
+Wealth Begets Wealth,Leader,3,---,---,"+20% bonus to party ATK, DEF and HP, Finds lots of unusual items as bonus loot if Reinhold survives",Reinhold,---
+Wealth of the World,Leader,4,---,---,"+30% bonus to party ATK, DEF and HP, Finds lots of unusual items as bonus loot if Reinhold survives",Reinhold,---
+Seer's Sight,Leader,1,---,---,"+10% Attack, +5% Evasion and +3% Critical Chance for the party, Earn a few enchantments as bonus loot if Malady survives",Malady,---
+Sightless Eye,Leader,2,---,---,"+15% Attack, +10% Evasion and +5% Critical Chance for the party, Earn some enchantments as bonus loot if Malady survives",Malady,---
+Fate's Hand,Leader,3,---,---,"+20% Attack, +10% Evasion and +8% Critical Chance for the party, Earn some enchantments as bonus loot if Malady survives",Malady,---
+The Truth Beyond,Leader,4,---,---,"+30% Attack, +15% Evasion and +10% Critical Chance for the party, Earn lots of enchantments as bonus loot if Malady survives",Malady,---
+Cleave,Hero,1,Common,---,"+30% Attack, +10 Health","All Fighters, Spellblade, Spellknight",---
+Searing Cleave,Hero,2,Common,15,"+45% Attack, +15 Health","All Fighters, Spellblade, Spellknight",---
+Scorching Cyclone,Hero,3,Common,35,"+60% Attack, +25 Health","All Fighters, Spellblade, Spellknight",---
+Infernal Tempest,Hero,4,Common,150,"+80% Attack, +75 Health","All Promoted Fighters, Spellknight",Yes
+Perforate,Hero,1,Common,---,+35% Attack,"All Fighters, All Rogues, Spellblade, Spellknight",---
+Impale,Hero,2,Common,10,+50% Attack,"All Fighters, All Rogues, Spellblade, Spellknight",---
+Sonic Thrust,Hero,3,Common,40,"+50% Attack, +50% Critical Hit Damage","All Fighters, All Rogues, Spellblade, Spellknight",---
+Supersonic Thrust,Hero,4,Common,150,"+75% Attack, +100% Critical Hit Damage","All Promoted Fighters, All Promoted Rogues, Spellknight",Yes
+Smite,Hero,1,Common,---,"+30% Attack, +10% Defense","All Fighters, All Spellcasters",---
+Righteous Smite,Hero,2,Common,20,"+45% Attack, +15% Defense","All Fighters, All Spellcasters",---
+Deliverance,Hero,3,Common,35,"+50% Attack, +25% Defense","All Fighters, All Spellcasters",---
+Wrath of the Goddess,Hero,4,Common,150,"+75% Attack, +50% Defense","All Promoted Fighters, All Promoted Spellcasters",Yes
+On Guard,Hero,1,Common,---,+40% Defense,"All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Frost Stance,Hero,2,Common,15,"+50% Defense, 25% chance to survive one fatal blow","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Indomitable Glacier,Hero,3,Common,45,"+60% Defense, 50% chance to survive one fatal blow","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Primal Glacier,Hero,4,Common,150,"+90% Defense, 100% chance to survive one fatal blow","All Promoted Fighters, Spellknight, Praetorian",Yes
+Backstab,Hero,1,Common,---,"+30% Attack, +3% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+Darkstalker,Hero,2,Common,15,"+40% Attack, +6% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+Widowmaker,Hero,3,Common,50,"+60% Attack, +10% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+Lifetaker,Hero,4,Common,150,"+80% Attack, +15% Critical Hit Chance","All Promoted Rogues, Spellknight",Yes
+Magic Darts,Hero,1,Common,---,+40% Attack,"All Spellcasters, All Rogues",---
+Magic Missile,Hero,2,Common,20,+60% Attack,"All Spellcasters, All Rogues",---
+Kinetic Lance,Hero,3,Common,50,+80% Attack,"All Spellcasters, All Rogues",---
+Void Lance,Hero,4,Common,150,+110% Attack,"All Promoted Spellcasters, All Promoted Rogues",Yes
+Parry,Hero,1,Common,---,+30% Defense,"All Rogues, Spellblade, Spellknight",---
+Parry & Riposte,Hero,2,Common,20,"+15% Attack, +40% Defense","All Rogues, Spellblade, Spellknight",---
+Blade Barrier,Hero,3,Common,50,"+25% Attack, +50% Defense","All Rogues, Spellblade, Spellknight",---
+Impenetrable Defense,Hero,4,Common,150,"+50% Attack, +75% Defense","All Promoted Rogues, Spellknight",Yes
+Arcane Blast,Hero,1,Common,---,+50% Attack,All Spellcasters,---
+Fire Blast,Hero,2,Common,20,+70% Attack,All Spellcasters,---
+Eldritch Blast,Hero,3,Common,35,+100% Attack,All Spellcasters,---
+Great Old One's Blast,Hero,4,Common,150,+130% Attack,All Promoted Spellcasters,Yes
+Hex,Hero,1,Common,---,"+60% Attack, +20% Critical Hit Damage","Sorcerer, Warlock, Dark Knight, Death Knight",---
+Ruinous Hex,Hero,2,Common,20,"+80% Attack, +25% Critical Hit Damage","Sorcerer, Warlock, Dark Knight, Death Knight",---
+Forbidden Hex,Hero,3,Common,40,"+100% Attack, +30% Critical Hit Damage","Sorcerer, Warlock, Dark Knight, Death Knight",---
+Cruel Hex,Hero,4,Common,150,"+125% Attack, +50% Critical Hit Damage","Warlock, Death Knight",Yes
+Life Drain,Hero,1,Common,---,"+50% Attack, +10 Health","Sorcerer, Warlock, Dark Knight, Death Knight",---
+Essence Drain,Hero,2,Common,20,"+75% Attack, +15 Health","Sorcerer, Warlock, Dark Knight, Death Knight",---
+Soul Drain,Hero,3,Common,40,"+100% Attack, +25 Health","Sorcerer, Warlock, Dark Knight, Death Knight",---
+Soul Rend,Hero,4,Common,150,"+125% Attack, +80 Health","Warlock, Death Knight",Yes
+Mage Armor,Hero,1,Common,---,"+30% Attack, +15% Defense",All Spellcasters,---
+Magic Shell,Hero,2,Common,15,"+40% Attack, +20% Defense",All Spellcasters,---
+Greater Magic Shell,Hero,3,Common,45,"+50% Attack, +30% Defense",All Spellcasters,---
+Supreme Magic Shell,Hero,4,Common,150,"+80% Attack, +40% Defense",All Promoted Spellcasters,Yes
+Power Attack,Hero,1,Rare,---,"+50% Attack, +5% Critical Hit Chance","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Icebreaker,Hero,2,Rare,30,"+75% Attack, +7% Critical Hit Chance","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Iceberg Smash,Hero,3,Rare,65,"+100% Attack, +10% Critical Hit Chance","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Titan Smash,Hero,4,Rare,160,"+125% Attack, +12% Critical Hit Chance","All Promoted Fighters, Spellknight, Praetorian",Yes
+Sunder,Hero,1,Rare,---,"+50% Attack, +25% Critical Hit Damage","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Shatter,Hero,2,Rare,25,"+60% Attack, +50% Critical Hit Damage","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Groundbreaker,Hero,3,Rare,80,"+70% Attack, +75% Critical Hit Damage","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Earthquake,Hero,4,Rare,160,"+100% Attack, +100% Critical Hit Damage","All Promoted Fighters, Spellknight, Praetorian",Yes
+Caltrops,Hero,1,Rare,---,"+50% Attack, +5% Evasion","All Fighters, All Rogues, Spellblade, Spellknight",---
+Spiked Trap,Hero,2,Rare,35,"+70% Attack, +7% Evasion","All Fighters, All Rogues, Spellblade, Spellknight",---
+Shrapnel Grenade,Hero,3,Rare,60,"+90% Attack, +8% Evasion","All Fighters, All Rogues, Spellblade, Spellknight",---
+Dynamite,Hero,4,Rare,160,"+110% Attack, +10% Evasion","All Promoted Fighters, All Promoted Rogues, Spellknight",Yes
+Throw Daggers,Hero,1,Rare,---,"+45% Attack, +5% Evasion","All Fighters, All Rogues, Spellblade, Spellknight",---
+Throw Shuriken,Hero,2,Rare,30,"+60% Attack, +7% Evasion","All Fighters, All Rogues, Spellblade, Spellknight",---
+Shuriken Storm,Hero,3,Rare,60,"+80% Attack, +10% Evasion","All Fighters, All Rogues, Spellblade, Spellknight",---
+Dual Shuriken Storm,Hero,4,Rare,160,"+90% Attack, +12% Evasion","All Promoted Fighters, All Promoted Rogues, Spellknight",Yes
+Flame Brand,Hero,1,Rare,---,"+60% Attack, +10% Defense","All Fighters, All Spellcasters",---
+Sacred Fire,Hero,2,Rare,30,"+80% Attack, +20% Defense","All Fighters, All Spellcasters",---
+Baptism by Fire,Hero,3,Rare,55,"+100% Attack, +30% Defense","All Fighters, All Spellcasters",---
+Scorching Purge,Hero,4,Rare,160,"+125% Attack, +50% Defense","All Promoted Fighters, All Promoted Spellcasters",Yes
+Shining Blade,Hero,1,Rare,---,"+45% Attack, +15% Defense","All Fighters, All Spellcasters",---
+Blessed Blade,Hero,2,Rare,30,"+70% Attack, +20% Defense","All Fighters, All Spellcasters",---
+Holy Warrior,Hero,3,Rare,60,"+90% Attack, +30% Defense","All Fighters, All Spellcasters",---
+Chosen One,Hero,4,Rare,160,"+120% Attack, +60% Defense","All Promoted Fighters, All Promoted Spellcasters",Yes
+Thick Skin,Hero,1,Rare,---,+60% Defense,"All Fighters, Spellblade, Spellknight",---
+Stone Skin,Hero,2,Rare,30,+80% Defense,"All Fighters, Spellblade, Spellknight",---
+Adamantine Skin,Hero,3,Rare,70,"+100% Defense, +10% Health, +10% Mana Shield","All Fighters, Spellblade, Spellknight",---
+Titan Skin,Hero,4,Rare,160,"+120% Defense, +30% Health, +30% Mana Shield","All Promoted Fighters, Spellknight",Yes
+Finesse,Hero,1,Rare,---,"+50% Attack, +5% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+Expertise,Hero,2,Rare,35,"+75% Attack, +7% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+Dueling Grace,Hero,3,Rare,60,"+100% Attack, +10% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+Heavenly Grace,Hero,4,Rare,160,"+120% Attack, +13% Critical Hit Chance","All Promoted Rogues, Spellknight",Yes
+Hinder,Hero,1,Rare,---,"+45% Attack, +4% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+Impede,Hero,2,Rare,30,"+60% Attack, +7% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+TKO Blow,Hero,3,Rare,70,"+75% Attack, +10% Critical Hit Chance","All Rogues, Spellblade, Spellknight",---
+One-Hit Wonder,Hero,4,Rare,160,"+100% Attack, +15% Critical Hit Chance","All Promoted Rogues, Spellknight",Yes
+Curse,Hero,1,Rare,---,"+60% Attack, +3% Evasion","All Rogues, All Spellcasters",---
+Ancient Curse,Hero,2,Rare,30,"+80% Attack, +5% Evasion","All Rogues, All Spellcasters",---
+Eternal Curse,Hero,3,Rare,80,"+120% Attack, +5% Evasion","All Rogues, All Spellcasters",---
+Bloodline Curse,Hero,4,Rare,160,"+140% Attack, +7% Evasion","All Promoted Rogues, All Promoted Spellcasters",Yes
+Antimagic Net,Hero,1,Rare,---,"+50% Attack, +5% Evasion","All Rogues, All Spellcasters",---
+Magebane Web,Hero,2,Rare,25,"+75% Attack, +7% Evasion","All Rogues, All Spellcasters",---
+Ethereal Prison,Hero,3,Rare,60,"+100% Attack, +10% Evasion","All Rogues, All Spellcasters",---
+Eternal Banishment,Hero,4,Rare,160,"+120% Attack, +12% Evasion","All Promoted Rogues, All Promoted Spellcasters",Yes
+Glancing Blows,Hero,1,Rare,---,"+45% Defense, +5% Evasion","All Rogues, Spellblade, Spellknight",---
+Scoundrel's Luck,Hero,2,Rare,30,"+60% Defense, +7% Evasion","All Rogues, Spellblade, Spellknight",---
+Fate's Favored,Hero,3,Rare,60,"+75% Defense, +10% Evasion","All Rogues, Spellblade, Spellknight",---
+Plot Armor,Hero,4,Rare,160,"+90% Defense, +13% Evasion","All Promoted Rogues, Spellknight",Yes
+Electric Arc,Hero,1,Rare,---,+80% Attack,All Spellcasters,---
+Lightning Bolt,Hero,2,Rare,35,+110% Attack,All Spellcasters,---
+Chain Lightning,Hero,3,Rare,75,+140% Attack,All Spellcasters,---
+Zeus' Lightning,Hero,4,Rare,160,+170% Attack,All Promoted Spellcasters,Yes
+Fireball,Hero,1,Rare,---,+75% Attack,All Spellcasters,---
+Magma Orb,Hero,2,Rare,30,+100% Attack,All Spellcasters,---
+Nuclear Blast,Hero,3,Rare,70,+130% Attack,All Spellcasters,---
+Meteor Swarm,Hero,4,Rare,160,"+160% Attack, +200 Attack",All Promoted Spellcasters,Yes
+Shadow Embrace,Hero,1,Rare,---,"+80% Attack, +5% Evasion","Sorcerer, Warlock",---
+Overwhelming Darkness,Hero,2,Rare,30,"+100% Attack, +10% Evasion","Sorcerer, Warlock",---
+Abyssal Grasp,Hero,3,Rare,70,"+120% Attack, +10% Evasion","Sorcerer, Warlock",---
+Xolimnul's Reach,Hero,4,Rare,160,"+140% Attack, +12% Evasion",Warlock,Yes
+Dragon Breath,Hero,1,Rare,---,+100% Attack,"Sorcerer, Warlock",---
+Wyrm Breath,Hero,2,Rare,30,+130% Attack,"Sorcerer, Warlock",---
+Breath of Bahamut,Hero,3,Rare,65,+150% Attack,"Sorcerer, Warlock",---
+Wrath of Bahamut,Hero,4,Rare,160,+175% Attack,Warlock,Yes
+Disintegrate,Hero,1,Rare,---,"+80% Attack, +25% Critical Hit Damage","Sorcerer, Warlock",---
+Annihilation,Hero,2,Rare,30,"+100% Attack, +30% Critical Hit Damage","Sorcerer, Warlock",---
+Oblivion,Hero,3,Rare,55,"+125% Attack, +40% Critical Hit Damage","Sorcerer, Warlock",---
+Void Zero,Hero,4,Rare,160,"+150% Attack, +60% Critical Hit Damage",Warlock,Yes
+Summon Demon,Hero,1,Rare,---,"+65% Attack, +20 Health","Sorcerer, Warlock",---
+Summon Demon Army,Hero,2,Rare,40,"+90% Attack, +30 Health","Sorcerer, Warlock",---
+Summon Demon Lord,Hero,3,Rare,60,"+130% Attack, +40 Health","Sorcerer, Warlock",---
+Summon Forgotten One,Hero,4,Rare,160,"+150% Attack, +60 Health",Warlock,Yes
+Wall of Force,Hero,1,Rare,---,"+60% Attack, +30% Defense",All Spellcasters,---
+Wall of Mirrors,Hero,2,Rare,25,"+70% Attack, +35% Defense",All Spellcasters,---
+Mage Fortress,Hero,3,Rare,45,"+80% Attack, +40% Defense",All Spellcasters,---
+Mage Dimension,Hero,4,Rare,160,"+90% Attack, +60% Defense",All Promoted Spellcasters,Yes
+Battering Blows,Hero,1,Epic,---,"+70% Attack, +10% Health, +10% Mana Shield","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Relentless Assault,Hero,2,Epic,80,"+100% Attack, +20% Health, +20% Mana Shield","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Meteor Onslaught,Hero,3,Epic,100,"+120% Attack, +25% Health, +25% Mana Shield","All Fighters, Spellblade, Spellknight, Velite, Praetorian",---
+Non-Stop Onslaught,Hero,4,Epic,170,"+140% Attack, +35% Health, +35% Mana Shield","All Promoted Fighters, Spellknight, Praetorian",Yes
+Whirlwind Attack,Hero,1,Epic,---,"+80% Attack, +5% Critical Hit Chance","All Fighters, All Rogues, Spellblade, Spellknight, Velite, Praetorian",---
+Tempest Slash,Hero,2,Epic,85,"+100% Attack, +5% Critical Hit Chance","All Fighters, All Rogues, Spellblade, Spellknight, Velite, Praetorian",---
+Omnislash,Hero,3,Epic,100,"+120% Attack, +10% Critical Hit Chance","All Fighters, All Rogues, Spellblade, Spellknight, Velite, Praetorian",---
+Ultra Petaslash,Hero,4,Epic,170,"+140% Attack, +12% Critical Hit Chance","All Promoted Fighters, All Promoted Rogues, Spellknight, Praetorian",Yes
+Perfect Form,Hero,1,Epic,---,"+75% Attack, +25% Defense","All Fighters, All Spellcasters",---
+Ascended Form,Hero,2,Epic,90,"+100% Attack, +30% Defense","All Fighters, All Spellcasters",---
+Divine Form,Hero,3,Epic,100,"+125% Attack, +35% Defense","All Fighters, All Spellcasters",---
+Daeva Form,Hero,4,Epic,170,"+150% Attack, +50% Defense","All Promoted Fighters, All Promoted Spellcasters",Yes
+Extra Plating,Hero,1,Epic,---,+80% Defense,"All Fighters, Spellblade, Spellknight",---
+Layered Armor,Hero,2,Epic,85,"+100% Defense, +10% Health, +10% Mana Shield","All Fighters, Spellblade, Spellknight",---
+Reinforced,Hero,3,Epic,100,"+125% Defense, +25% Health, +25% Mana Shield","All Fighters, Spellblade, Spellknight",---
+Bulletproof,Hero,4,Epic,170,"+150% Defense, +40% Health, +40% Mana Shield","All Promoted Fighters, Spellknight",Yes
+Assassinate,Hero,1,Epic,---,"+60% Attack, +50% Critical Hit Damage","All Rogues, Spellblade, Spellknight",---
+Eliminate,Hero,2,Epic,85,"+80% Attack, +60% Critical Hit Damage","All Rogues, Spellblade, Spellknight",---
+Snuff Life,Hero,3,Epic,105,"+100% Attack, +80% Critical Hit Damage","All Rogues, Spellblade, Spellknight",---
+Merciless Execution,Hero,4,Epic,170,"+120% Attack, +100% Critical Hit Damage","All Promoted Rogues, Spellknight",Yes
+Dance of Blades,Hero,1,Epic,---,"+60% Attack, +8% Evasion","All Rogues, All Spellcasters",---
+Dance of Death,Hero,2,Epic,75,"+100% Attack, +10% Evasion","All Rogues, All Spellcasters",---
+Lethal Finale,Hero,3,Epic,95,"+125% Attack, +10% Evasion","All Rogues, All Spellcasters",---
+Lethal Finale (Part Two),Hero,4,Epic,170,"+150% Attack, +12% Evasion","All Promoted Rogues, All Promoted Spellcasters",Yes
+Cloak & Dagger,Hero,1,Epic,---,"+60% Defense, +3% Evasion","All Rogues, Spellblade, Spellknight",---
+Ace in the Sleeve,Hero,2,Epic,70,"+80% Defense, +5% Evasion","All Rogues, Spellblade, Spellknight",---
+Secret Weapon,Hero,3,Epic,100,"+100% Defense, +10% Evasion","All Rogues, Spellblade, Spellknight",---
+Deus Ex Machina,Hero,4,Epic,170,"+120% Defense, +12% Evasion","All Promoted Rogues, Spellknight",Yes
+Destructive Strikes,Hero,1,Epic,---,"+80% Attack, +100% Critical Hit Damage",Grandmaster,---
+Fatal Blows,Hero,2,Epic,90,"+100% Attack, +150% Critical Hit Damage",Grandmaster,---
+Ruination of Foes,Hero,3,Epic,100,"+125% Attack, +200% Critical Hit Damage",Grandmaster,---
+Ten Thousand Fists,Hero,4,Epic,170,"+150% Attack, +300% Critical Hit Damage",Grandmaster,Yes
+Double Cast,Hero,1,Epic,---,+100% Attack,All Spellcasters,---
+Triple Cast,Hero,2,Epic,80,+140% Attack,All Spellcasters,---
+Tetra Cast,Hero,3,Epic,100,+180% Attack,All Spellcasters,---
+Penta Cast,Hero,4,Epic,170,+220% Attack,All Promoted Spellcasters,Yes
+Petrify,Hero,1,Epic,---,"+100% Attack, +20% Defense","Sorcerer, Warlock",---
+Calcify,Hero,2,Epic,65,"+130% Attack, +30% Defense","Sorcerer, Warlock",---
+Entomb,Hero,3,Epic,110,"+160% Attack, +40% Defense","Sorcerer, Warlock",---
+Desolation of Salt,Hero,4,Epic,170,"+190% Attack, +50% Defense",Warlock,Yes
+Poison Cloud,Hero,1,Epic,---,+125% Attack,"Sorcerer, Warlock",---
+Toxic Cloud,Hero,2,Epic,70,+160% Attack,"Sorcerer, Warlock",---
+Cloudkill,Hero,3,Epic,110,+200% Attack,"Sorcerer, Warlock",---
+Soulflay Cloud,Hero,4,Epic,170,+240% Attack,Warlock,Yes
+Magic Shield,Hero,1,Epic,---,"+70% Attack, +30% Defense",All Spellcasters,---
+Soul Shield,Hero,2,Epic,65,"+80% Attack, +40% Defense",All Spellcasters,---
+Void Shield,Hero,3,Epic,100,"+100% Attack, +50% Defense",All Spellcasters,---
+Nihil Shield,Hero,4,Epic,170,"+120% Attack, +65% Defense",All Promoted Spellcasters,Yes
+Maintenance,Hero,1,Common,---,"+10% bonus from all items, -20% Break Chance",All Classes,---
+Extra Polish,Hero,2,Common,15,"+10% bonus from all items, -30% Break Chance",All Classes,---
+Mirror Sheen,Hero,3,Common,45,"+20% bonus from all items, -30% Break Chance",All Classes,---
+DIY Guy,Hero,4,Common,150,"+30% bonus from all items, -40% Break Chance",All Promoted Classes,Yes
+Extended Warranty,Hero,1,Epic,---,"+20% bonus from all items, -40% Break Chance",All Classes,---
+Safekept Receipt,Hero,2,Epic,60,"+25% bonus from all items, -45% Break Chance",All Classes,---
+Lifetime Warranty,Hero,3,Epic,120,"+30% bonus from all items, -50% Break Chance",All Classes,---
+Premium Brand,Hero,4,Epic,170,"+40% bonus from all items, -60% Break Chance",All Promoted Classes,Yes
+Fast Learner,Hero,1,Common,---,+25% XP,All Classes,---
+Head of the Class,Hero,2,Common,15,+35% XP,All Classes,---
+Savant,Hero,3,Common,35,"+50% XP, +10% bonus from all items",All Classes,---
+Scholar,Hero,4,Common,150,"+100% XP, +25% bonus from all items",All Promoted Classes,Yes
+Super Genius,Hero,1,Epic,---,"+50% XP, +10% bonus from all items",All Classes,---
+Ultra Genius,Hero,2,Epic,55,"+75% XP, +15% bonus from all items",All Classes,---
+Big Smart,Hero,3,Epic,85,"+100% XP, +20% bonus from all items",All Classes,---
+The Smarterest,Hero,4,Epic,170,"+300% XP, +30% bonus from all items",All Promoted Classes,Yes
+Fast Healer,Hero,1,Rare,---,"+10% Health, +10% Mana Shield, -15% Resting Time",All Classes,---
+Troll-skinned,Hero,2,Rare,40,"+15% Health, +15% Mana Shield, -20% Resting Time",All Classes,---
+Regenerator,Hero,3,Rare,75,"+20% Health, +20% Mana Shield, -25% Resting Time",All Classes,---
+From the Ashes,Hero,4,Rare,160,"+40% Health, +40% Mana Shield, -30% Resting Time",All Promoted Classes,Yes
+Survivor,Hero,1,Epic,---,"+20% Health, +20% Mana Shield, -25% Resting Time",All Classes,---
+Never Broken,Hero,2,Epic,60,"+30% Health, +30% Mana Shield, -30% Resting Time",All Classes,---
+Stalwart,Hero,3,Epic,105,"+40% Health, +40% Mana Shield, -35% Resting Time",All Classes,---
+Everlasting,Hero,4,Epic,170,"+50% Health, +50% Mana Shield, -40% Resting Time",All Promoted Classes,Yes
+Toughness,Hero,1,Rare,---,"+20% Health, +20% Mana Shield, -5% Resting Time",All Classes,---
+Resilience,Hero,2,Rare,40,"+30% Health, +30% Mana Shield, -10% Resting Time",All Classes,---
+Hero's Mettle,Hero,3,Rare,80,"+40% Health, +40% Mana Shield, -15% Resting Time",All Classes,---
+Titan's Mettle,Hero,4,Rare,160,"+50% Health, +50% Mana Shield, -20% Resting Time",All Promoted Classes,Yes
+Sturdy,Hero,1,Common,---,"+25% Health, +25% Mana Shield",All Classes,---
+Tough-as-Nails,Hero,2,Common,20,"+30% Health, +30% Mana Shield",All Classes,---
+Unbreakable,Hero,3,Common,50,"+40% Health, +40% Mana Shield",All Classes,---
+Greater than Granite,Hero,4,Common,150,"+60% Health, +60% Mana Shield",All Promoted Classes,Yes
+Impervious,Hero,1,Epic,---,"+40% Health, +40% Mana Shield, +30 Health",All Classes,---
+Invulnerable,Hero,2,Epic,70,"+50% Health, +50% Mana Shield, +50 Health",All Classes,---
+Immortal,Hero,3,Epic,100,"+60% Health, +60% Mana Shield, +75 Health",All Classes,---
+Beyond Immortal,Hero,4,Epic,170,"+80% Health, +80% Mana Shield, +150 Health",All Promoted Classes,Yes
+Juggernaut,Hero,1,Rare,---,"+40% Defense, +15% Health, +15% Mana Shield",All Classes,---
+Behemoth,Hero,2,Rare,40,"+50% Defense, +20% Health, +20% Mana Shield",All Classes,---
+Titan,Hero,3,Rare,65,"+60% Defense, +25% Health, +25% Mana Shield",All Classes,---
+Elder Titan,Hero,4,Rare,160,"+75% Defense, +40% Health, +40% Mana Shield",All Promoted Classes,Yes
+Acrobatics,Hero,1,Common,---,+10% Evasion,All Classes,---
+Slippery,Hero,2,Common,20,+15% Evasion,All Classes,---
+Otherworldly Grace,Hero,3,Common,45,+20% Evasion,All Classes,---
+Ethereal Form,Hero,4,Common,150,+25% Evasion,All Promoted Classes,Yes
+Blurred Movement,Hero,1,Epic,---,+20% Evasion,All Classes,---
+Inhuman Speed,Hero,2,Epic,80,+25% Evasion,All Classes,---
+Sonic Speed,Hero,3,Epic,110,+30% Evasion,All Classes,---
+Ludicrous Speed,Hero,4,Epic,170,+33% Evasion,All Promoted Classes,Yes
+Extra Conditioning,Hero,1,Rare,---,"+30% Defense, +10% Evasion",All Classes,---
+Heroic Workout,Hero,2,Rare,40,"+40% Defense, +12% Evasion",All Classes,---
+Herculean Effort,Hero,3,Rare,80,"+50% Defense, +15% Evasion",All Classes,---
+Atlas' Fitness,Hero,4,Rare,160,"+60% Defense, +20% Evasion",All Promoted Classes,Yes
+Deception,Hero,1,Rare,---,"+10% Evasion, +5% Critical Hit Chance",All Classes,---
+Perfect Feint,Hero,2,Rare,50,"+12% Evasion, +10% Critical Hit Chance",All Classes,---
+Smoke Bomb,Hero,3,Rare,85,"+15% Evasion, +15% Critical Hit Chance",All Classes,---
+Shadow Jaunt,Hero,4,Rare,160,"+18% Evasion, +18% Critical Hit Chance",All Promoted Classes,Yes
+Eagle Eyes,Hero,1,Common,---,+10% Critical Hit Chance,All Classes,---
+Lock On,Hero,2,Common,20,+15% Critical Hit Chance,All Classes,---
+Mind's Eye,Hero,3,Common,50,+20% Critical Hit Chance,All Classes,---
+Future Sight,Hero,4,Common,150,+25% Critical Hit Chance,All Promoted Classes,Yes
+All Natural,Hero,1,Rare,---,+20% Critical Hit Chance,All Classes,---
+Live by the Die,Hero,2,Rare,35,+25% Critical Hit Chance,All Classes,---
+Final Gambit,Hero,3,Rare,75,+30% Critical Hit Chance,All Classes,---
+Gambler's Edge,Hero,4,Rare,160,"+30% Critical Hit Chance, +100% Critical Hit Damage",All Promoted Classes,Yes
+Deadly Criticals,Hero,1,Rare,---,+100% Critical Hit Damage,All Classes,---
+Coup de Grace,Hero,2,Rare,35,+150% Critical Hit Damage,All Classes,---
+Executioner,Hero,3,Rare,70,+200% Critical Hit Damage,All Classes,---
+Finishing Touch,Hero,4,Rare,160,+250% Critical Hit Damage,All Promoted Classes,Yes
+Death Dealer,Hero,1,Epic,---,+200% Critical Hit Damage,All Classes,---
+All In,Hero,2,Epic,75,+250% Critical Hit Damage,All Classes,---
+Ultimate Gamble,Hero,3,Epic,105,+300% Critical Hit Damage,All Classes,---
+All or Nothing,Hero,4,Epic,170,+350% Critical Hit Damage,All Promoted Classes,Yes
+Telling Blows,Hero,1,Rare,---,"+10% Critical Hit Chance, +50% Critical Hit Damage",All Classes,---
+Lights Out,Hero,2,Rare,40,"+12% Critical Hit Chance, +75% Critical Hit Damage",All Classes,---
+True Strike,Hero,3,Rare,70,"+15% Critical Hit Chance, +100% Critical Hit Damage",All Classes,---
+Signature Move,Hero,4,Rare,160,"+18% Critical Hit Chance, +150% Critical Hit Damage",All Promoted Classes,Yes
+Sword Master,Hero,1,Common,---,+50% Attack with Sword,"Soldier, Mercenary, Barbarian, Chieftain, Musketeer, Conquistador, Ninja, Sensei, Samurai, Daimyo, Spellblade, Spellknight, Lord, Dark Knight, Death Knight, Chronomancer, Fateweaver",---
+Sword Lord,Hero,2,Common,20,+100% Attack with Sword,"Soldier, Mercenary, Barbarian, Chieftain, Musketeer, Conquistador, Ninja, Sensei, Samurai, Daimyo, Spellblade, Spellknight, Lord, Dark Knight, Death Knight, Chronomancer, Fateweaver",---
+Sword Titan,Hero,3,Common,60,+150% Attack with Sword,"Soldier, Mercenary, Barbarian, Chieftain, Musketeer, Conquistador, Ninja, Sensei, Samurai, Daimyo, Spellblade, Spellknight, Lord, Dark Knight, Death Knight, Chronomancer, Fateweaver",---
+Supreme Sword Titan,Hero,4,Common,150,+200% Attack with Sword,"Mercenary, Chieftain, Conquistador, Sensei, Daimyo, Spellknight, Lord, Death Knight, Fateweaver",Yes
+Axe Master,Hero,1,Common,---,+50% Attack with Axe,"Barbarian, Chieftain, Knight, Lord, Wanderer, Pathfinder, Spellblade, Spellknight, Berserker, Jarl, Dark Knight, Death Knight",---
+Axe Lord,Hero,2,Common,20,+100% Attack with Axe,"Barbarian, Chieftain, Knight, Lord, Wanderer, Pathfinder, Spellblade, Spellknight, Berserker, Jarl, Dark Knight, Death Knight",---
+Axe Titan,Hero,3,Common,60,+150% Attack with Axe,"Barbarian, Chieftain, Knight, Lord, Wanderer, Pathfinder, Spellblade, Spellknight, Berserker, Jarl, Dark Knight, Death Knight",---
+Supreme Axe Titan,Hero,4,Common,150,+200% Attack with Axe,"Chieftain, Lord, Pathfinder, Spellknight, Jarl, Death Knight",Yes
+Dagger Master,Hero,1,Common,---,+50% Attack with Dagger,"Soldier, Mercenary, Thief, Trickster, Wanderer, Pathfinder, Sorcerer, Warlock, Ninja, Sensei, Dancer, Acrobat",---
+Dagger Lord,Hero,2,Common,15,+100% Attack with Dagger,"Soldier, Mercenary, Thief, Trickster, Wanderer, Pathfinder, Sorcerer, Warlock, Ninja, Sensei, Dancer, Acrobat",---
+Dagger Titan,Hero,3,Common,55,+150% Attack with Dagger,"Soldier, Mercenary, Thief, Trickster, Wanderer, Pathfinder, Sorcerer, Warlock, Ninja, Sensei, Dancer, Acrobat",---
+Supreme Dagger Titan,Hero,4,Common,150,+200% Attack with Dagger,"Mercenary, Trickster, Pathfinder, Warlock, Sensei, Acrobat",Yes
+Mace Master,Hero,1,Common,---,+50% Attack with Mace,"Soldier, Mercenary, Barbarian, Chieftain, Cleric, Bishop, Berserker, Jarl, Geomancer, Astramancer, Lord, Dark Knight, Death Knight",---
+Mace Lord,Hero,2,Common,20,+100% Attack with Mace,"Soldier, Mercenary, Barbarian, Chieftain, Cleric, Bishop, Berserker, Jarl, Geomancer, Astramancer, Lord, Dark Knight, Death Knight",---
+Mace Titan,Hero,3,Common,60,+150% Attack with Mace,"Soldier, Mercenary, Barbarian, Chieftain, Cleric, Bishop, Berserker, Jarl, Geomancer, Astramancer, Lord, Dark Knight, Death Knight",---
+Supreme Mace Titan,Hero,4,Common,150,+200% Attack with Mace,"Mercenary, Chieftain, Bishop, Jarl, Astramancer, Lord, Death Knight",Yes
+Spear Master,Hero,1,Common,---,+50% Attack with Spear,"Barbarian, Chieftain, Knight, Lord, Cleric, Bishop, Samurai, Daimyo, Mercenary",---
+Spear Lord,Hero,2,Common,20,+100% Attack with Spear,"Barbarian, Chieftain, Knight, Lord, Cleric, Bishop, Samurai, Daimyo, Mercenary",---
+Spear Titan,Hero,3,Common,60,+150% Attack with Spear,"Barbarian, Chieftain, Knight, Lord, Cleric, Bishop, Samurai, Daimyo, Mercenary",---
+Supreme Spear Titan,Hero,4,Common,150,+200% Attack with Spear,"Chieftain, Lord, Bishop, Daimyo, Mercenary",Yes
+Bow Master,Hero,1,Common,---,+50% Attack with Bow,"Ranger, Warden, Thief, Trickster, Druid, Arch Druid, Ninja, Sensei, Samurai, Daimyo, Dancer, Acrobat, Spellblade, Spellknight",---
+Bow Lord,Hero,2,Common,20,+100% Attack with Bow,"Ranger, Warden, Thief, Trickster, Druid, Arch Druid, Ninja, Sensei, Samurai, Daimyo, Dancer, Acrobat, Spellblade, Spellknight",---
+Bow Titan,Hero,3,Common,60,+150% Attack with Bow,"Ranger, Warden, Thief, Trickster, Druid, Arch Druid, Ninja, Sensei, Samurai, Daimyo, Dancer, Acrobat, Spellblade, Spellknight",---
+Supreme Bow Titan,Hero,4,Common,150,+200% Attack with Bow,"Warden, Trickster, Arch Druid, Sensei, Daimyo, Acrobat, Spellknight",Yes
+Staff Master,Hero,1,Common,---,+50% Attack with Staff,"Mage, Archmage, Druid, Arch Druid, Sorcerer, Warlock, Spellblade, Spellknight, Geomancer, Astramancer, Chronomancer, Fateweaver",---
+Staff Lord,Hero,2,Common,20,+100% Attack with Staff,"Mage, Archmage, Druid, Arch Druid, Sorcerer, Warlock, Spellblade, Spellknight, Geomancer, Astramancer, Chronomancer, Fateweaver",---
+Staff Titan,Hero,3,Common,60,+150% Attack with Staff,"Mage, Archmage, Druid, Arch Druid, Sorcerer, Warlock, Spellblade, Spellknight, Geomancer, Astramancer, Chronomancer, Fateweaver",---
+Supreme Staff Titan,Hero,4,Common,150,+200% Attack with Staff,"Archmage, Arch Druid, Warlock, Spellknight, Astramancer, Fateweaver",Yes
+Crossbow Master,Hero,1,Common,---,+50% Attack with Crossbow,"Ranger, Warden, Thief, Trickster, Musketeer, Conquistador, Mage, Archmage, Dancer, Acrobat, Dark Knight, Death Knight",---
+Crossbow Lord,Hero,2,Common,20,+100% Attack with Crossbow,"Ranger, Warden, Thief, Trickster, Musketeer, Conquistador, Mage, Archmage, Dancer, Acrobat, Dark Knight, Death Knight",---
+Crossbow Titan,Hero,3,Common,60,+150% Attack with Crossbow,"Ranger, Warden, Thief, Trickster, Musketeer, Conquistador, Mage, Archmage, Dancer, Acrobat, Dark Knight, Death Knight",---
+Supreme Crossbow Titan,Hero,4,Common,150,+200% Attack with Crossbow,"Warden, Trickster, Conquistador, Archmage, Acrobat, Death Knight",Yes
+Gun Master,Hero,1,Common,---,+50% Attack with Gun,"Ranger, Warden, Musketeer, Conquistador, Wanderer, Pathfinder, Berserker, Jarl",---
+Gun Lord,Hero,2,Common,20,+100% Attack with Gun,"Ranger, Warden, Musketeer, Conquistador, Wanderer, Pathfinder, Berserker, Jarl",---
+Gun Titan,Hero,3,Common,60,+150% Attack with Gun,"Ranger, Warden, Musketeer, Conquistador, Wanderer, Pathfinder, Berserker, Jarl",---
+Supreme Gun Titan,Hero,4,Common,150,+200% Attack with Gun,"Warden, Conquistador, Pathfinder, Jarl",Yes
+Wand Master,Hero,1,Common,---,+50% Attack with Wand,"Mage, Archmage, Cleric, Bishop, Druid, Arch Druid, Sorcerer, Warlock, Geomancer, Astramancer, Dancer, Acrobat, Chronomancer, Fateweaver",---
+Wand Lord,Hero,2,Common,20,+100% Attack with Wand,"Mage, Archmage, Cleric, Bishop, Druid, Arch Druid, Sorcerer, Warlock, Geomancer, Astramancer, Dancer, Acrobat, Chronomancer, Fateweaver",---
+Wand Titan,Hero,3,Common,60,+150% Attack with Wand,"Mage, Archmage, Cleric, Bishop, Druid, Arch Druid, Sorcerer, Warlock, Geomancer, Astramancer, Dancer, Acrobat, Chronomancer, Fateweaver",---
+Supreme Wand Titan,Hero,4,Common,150,+200% Attack with Wand,"Archmage, Bishop, Arch Druid, Warlock, Astramancer, Acrobat, Fateweaver",Yes
+Instrument Master,Hero,1,Common,---,+50% Attack with Instrument,"Berserker, Jarl, Trickster, Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Spellblade, Spellknight, Chronomancer, Fateweaver",---
+Instrument Maestro,Hero,2,Common,20,+100% Attack with Instrument,"Berserker, Jarl, Trickster, Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Spellblade, Spellknight, Chronomancer, Fateweaver",---
+Instrument Star,Hero,3,Common,60,+150% Attack with Instrument,"Berserker, Jarl, Trickster, Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Spellblade, Spellknight, Chronomancer, Fateweaver",---
+Instrument Superstar,Hero,4,Common,150,+200% Attack with Instrument,"Jarl, Trickster, Acrobat, Archmage, Arch Druid, Spellknight, Fateweaver",Yes
+Shield Master,Hero,1,Common,---,+100% Defense with Shield,"Soldier, Mercenary, Knight, Lord, Cleric, Bishop, Spellblade, Spellknight, Berserker, Jarl, Chieftain, Dark Knight, Death Knight, Velite, Praetorian",---
+Shield Lord,Hero,2,Common,20,+150% Defense with Shield,"Soldier, Mercenary, Knight, Lord, Cleric, Bishop, Spellblade, Spellknight, Berserker, Jarl, Chieftain, Dark Knight, Death Knight, Velite, Praetorian",---
+Shield Titan,Hero,3,Common,50,+200% Defense with Shield,"Soldier, Mercenary, Knight, Lord, Cleric, Bishop, Spellblade, Spellknight, Berserker, Jarl, Chieftain, Dark Knight, Death Knight, Velite, Praetorian",---
+Supreme Shield Titan,Hero,4,Common,150,+250% Defense with Shield,"Mercenary, Lord, Bishop, Spellknight, Jarl, Chieftain, Death Knight, Praetorian",Yes
+Catalyst Master,Hero,1,Common,---,+100% Attack with Catalyst,"Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Sorcerer, Warlock, Dark Knight, Death Knight, Geomancer, Astramancer, Chronomancer, Fateweaver",---
+Catalyst Lord,Hero,2,Common,20,+150% Attack with Catalyst,"Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Sorcerer, Warlock, Dark Knight, Death Knight, Geomancer, Astramancer, Chronomancer, Fateweaver",---
+Catalyst Titan,Hero,3,Common,50,+200% Attack with Catalyst,"Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Sorcerer, Warlock, Dark Knight, Death Knight, Geomancer, Astramancer, Chronomancer, Fateweaver",---
+Supreme Catalyst Titan,Hero,4,Common,150,+250% Attack with Catalyst,"Acrobat, Archmage, Arch Druid, Warlock, Death Knight, Astramancer, Fateweaver",Yes
+Scythe Master,Hero,1,Common,---,+100% Attack with Scythe,"Soldier, Mercenary, Barbarian, Chieftain, Berserker, Jarl, Dark Knight, Death Knight, Ninja, Sensei, Cleric, Bishop, Sorcerer, Warlock",---
+Scythe Lord,Hero,2,Common,20,+150% Attack with Scythe,"Soldier, Mercenary, Barbarian, Chieftain, Berserker, Jarl, Dark Knight, Death Knight, Ninja, Sensei, Cleric, Bishop, Sorcerer, Warlock",---
+Scythe Titan,Hero,3,Common,50,+200% Attack with Scythe,"Soldier, Mercenary, Barbarian, Chieftain, Berserker, Jarl, Dark Knight, Death Knight, Ninja, Sensei, Cleric, Bishop, Sorcerer, Warlock",---
+Supreme Scythe Titan,Hero,4,Common,150,+250% Attack with Scythe,"Mercenary, Chieftain, Jarl, Death Knight, Sensei, Bishop, Warlock",Yes
+Warlord,Hero,1,Epic,---,"+200% Attack with Sword, Axe, Dagger, Mace, Spear, Scythe","Soldier, Mercenary, Barbarian, Chieftain, Knight, Lord, Thief, Trickster, Musketeer, Conquistador, Wanderer, Pathfinder, Sorcerer, Warlock, Spellblade, Spellknight, Ninja, Sensei, Dancer, Acrobat, Samurai, Daimyo, Berserker, Jarl, Cleric, Bishop, Geomancer, Astramancer, Dark Knight, Death Knight, Chronomancer, Fateweaver",---
+War Master,Hero,2,Epic,70,"+10% Health, +10% Mana Shield, +200% Attack with Sword, Axe, Dagger, Mace, Spear, Scythe","Soldier, Mercenary, Barbarian, Chieftain, Knight, Lord, Thief, Trickster, Musketeer, Conquistador, Wanderer, Pathfinder, Sorcerer, Warlock, Spellblade, Spellknight, Ninja, Sensei, Dancer, Acrobat, Samurai, Daimyo, Berserker, Jarl, Cleric, Bishop, Geomancer, Astramancer, Dark Knight, Death Knight, Chronomancer, Fateweaver",---
+God of War,Hero,3,Epic,105,"+20% Health, +20% Mana Shield, +200% Attack with Sword, Axe, Dagger, Mace, Spear, Scythe","Soldier, Mercenary, Barbarian, Chieftain, Knight, Lord, Thief, Trickster, Musketeer, Conquistador, Wanderer, Pathfinder, Sorcerer, Warlock, Spellblade, Spellknight, Ninja, Sensei, Dancer, Acrobat, Samurai, Daimyo, Berserker, Jarl, Cleric, Bishop, Geomancer, Astramancer, Dark Knight, Death Knight, Chronomancer, Fateweaver",---
+Elder God of War,Hero,4,Epic,170,"+20% Health, +20% Mana Shield, +250% Attack with Sword, Axe, Dagger, Mace, Spear, Scythe","Mercenary, Chieftain, Lord, Trickster, Conquistador, Pathfinder, Warlock, Spellknight, Sensei, Acrobat, Daimyo, Jarl, Bishop, Astramancer, Death Knight, Fateweaver",Yes
+Marksman,Hero,1,Epic,---,"+200% Attack with Bow, Crossbow, Gun","Samurai, Daimyo, Berserker, Jarl, Thief, Trickster, Musketeer, Conquistador, Ninja, Sensei, Wanderer, Pathfinder, Ranger, Warden, Spellblade, Spellknight, Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Dark Knight, Death Knight",---
+Master Sniper,Hero,2,Epic,70,"+5% Evasion, +200% Attack with Bow, Crossbow, Gun","Samurai, Daimyo, Berserker, Jarl, Thief, Trickster, Musketeer, Conquistador, Ninja, Sensei, Wanderer, Pathfinder, Ranger, Warden, Spellblade, Spellknight, Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Dark Knight, Death Knight",---
+Deadeye,Hero,3,Epic,105,"+8% Evasion, +200% Attack with Bow, Crossbow, Gun","Samurai, Daimyo, Berserker, Jarl, Thief, Trickster, Musketeer, Conquistador, Ninja, Sensei, Wanderer, Pathfinder, Ranger, Warden, Spellblade, Spellknight, Dancer, Acrobat, Mage, Archmage, Druid, Arch Druid, Dark Knight, Death Knight",---
+Deadeye Elite,Hero,4,Epic,170,"+8% Evasion, +250% Attack with Bow, Crossbow, Gun","Daimyo, Jarl, Trickster, Conquistador, Sensei, Pathfinder, Warden, Spellknight, Acrobat, Archmage, Arch Druid, Death Knight",Yes
+Adept,Hero,1,Epic,---,"+200% Attack with Staff, Wand, Instrument, Catalyst","All Spellcasters, Dancer, Acrobat, Trickster, Berserker, Jarl, Dark Knight, Death Knight",---
+Archmage,Hero,2,Epic,70,"+15% Attack, +200% Attack with Staff, Wand, Instrument, Catalyst","All Spellcasters, Dancer, Acrobat, Trickster, Berserker, Jarl, Dark Knight, Death Knight",---
+Elder Archmage,Hero,3,Epic,105,"+30% Attack, +200% Attack with Staff, Wand, Instrument, Catalyst","All Spellcasters, Dancer, Acrobat, Trickster, Berserker, Jarl, Dark Knight, Death Knight",---
+Ascended Archmage,Hero,4,Epic,170,"+30% Attack, +250% Attack with Staff, Wand, Instrument, Catalyst","All Promoted Spellcasters, Acrobat, Trickster, Jarl, Death Knight",Yes
+Martial Training,Innate,1,---,---,Learns skills faster than other classes,Soldier,---
+Martial Expert,Innate,2,---,10,"Learns skills faster than other classes, +10% Defense",Soldier,---
+Martial Master,Innate,3,---,40,"Learns skills faster than other classes, +25% Defense",Soldier,---
+Second-in-Command,Innate,1,---,---,+25% increased effect received from Champion skills,Mercenary,---
+Elite Mercenary,Innate,2,---,30,"+25% increased effect received from Champion skills, +20% Defense",Mercenary,---
+Supreme Sellsword,Innate,3,---,50,"+25% increased effect received from Champion skills, +35% Defense",Mercenary,---
+Sellsword Lord,Innate,4,---,150,"+25% increased effect received from Champion skills, +50% Defense",Mercenary,Yes
+Lion's Roar,Innate,1,---,---,+30 Threat,Barbarian,---
+Chieftain's Call,Innate,2,---,15,"+10% Health, +10% Mana Shield, +40 Threat",Barbarian,---
+Dragon's Roar,Innate,3,---,60,"+25% Health, +25% Mana Shield, +50 Threat",Barbarian,---
+Call of the Tribe,Innate,1,---,---,+30 Threat. +40% of total Threat is added as an attack multiplier,Chieftain,---
+Chieftain's Authority,Innate,2,---,30,+15% Health. +40 Threat. +40% of total Threat is added as an attack multiplier. +15% Mana Shield,Chieftain,---
+Battle Call,Innate,3,---,80,+30% Health. +60 Threat. +40% of total Threat is added as an attack multiplier. +30% Mana Shield,Chieftain,---
+Ancestor's Might,Innate,4,---,150,+40% Health. +75 Threat. +40% of total Threat is added as an attack multiplier. +40% Mana Shield,Chieftain,Yes
+Fortress,Innate,1,---,---,"+40% Defense with Heavy Armor, Helmet, Gauntlets, Heavy Footwear",Knight,---
+Citadel,Innate,2,---,20,"+40% Defense with Heavy Armor, Helmet, Gauntlets, Heavy Footwear, Shield",Knight,---
+Bastion,Innate,3,---,70,"+60% Defense with Heavy Armor, Helmet, Gauntlets, Heavy Footwear, Shield",Knight,---
+Bodyguard,Innate,1,---,---,"Protect an ally from a Lethal attack once per battle, +40% Defense with Heavy Armor, Helmet, Gauntlets, Heavy Footwear",Lord,---
+Lifesaver,Innate,2,---,20,"Protect an ally from a Lethal attack once per battle, +40% Defense with Heavy Armor, Helmet, Gauntlets, Heavy Footwear, Shield",Lord,---
+Knight Lord,Innate,3,---,70,"Protect an ally from a Lethal attack once per battle, +60% Defense with Heavy Armor, Helmet, Gauntlets, Heavy Footwear, Shield",Lord,---
+Selfless Hero,Innate,4,---,150,"Protect an ally from a Lethal attack once per battle, +75% Defense with Heavy Armor, Helmet, Gauntlets, Heavy Footwear, Shield",Lord,Yes
+Self-sufficient,Innate,1,---,---,-20% Resting Time,"Ranger, Warden",---
+Live Off the Land,Innate,2,---,25,"+5% Evasion, -25% Resting Time","Ranger, Warden",---
+Hunter-Hermit,Innate,3,---,80,"+10% Evasion, -30% Resting Time","Ranger, Warden",---
+Forest Spirit,Innate,4,---,150,"+13% Evasion, -35% Resting Time",Warden,Yes
+Iaido,Innate,1,---,---,The Samurai's first attack is always a critical hit that ignores Elemental Barriers,Samurai,---
+Lightning Iaido,Innate,2,---,30,"The Samurai's first attack is always a critical hit that ignores Elemental Barriers, +100% Critical Hit Damage",Samurai,---
+Iaido Master,Innate,3,---,90,"The Samurai's first attack is always a critical hit that ignores Elemental Barriers, +200% Critical Hit Damage",Samurai,---
+Daimyo Iaido,Innate,1,---,---,Guaranteed evasion and critical hit on the first round. This attack ignores Elemental Barriers,Daimyo,---
+Divine Iaido,Innate,2,---,30,"Guaranteed evasion and critical hit on the first round. This attack ignores Elemental Barriers, +100% Critical Hit Damage",Daimyo,---
+Perfect Form Iaido,Innate,3,---,90,"Guaranteed evasion and critical hit on the first round. This attack ignores Elemental Barriers, +200% Critical Hit Damage",Daimyo,---
+Iaido Grandmaster,Innate,4,---,160,"Guaranteed evasion and critical hit on the first round. This attack ignores Elemental Barriers, +300% Critical Hit Damage",Daimyo,Yes
+Berserk Rage,Innate,1,---,---,+20% Attack and +10% Evasion when HP falls below 75%. Effect is doubled when below 50% HP and tripled when below 25% HP,"Berserker, Jarl",---
+Anger Point,Innate,2,---,40,+30% Attack and +10% Evasion when HP falls below 75%. Effect is doubled when below 50% HP and tripled when below 25% HP,"Berserker, Jarl",---
+The Beast Within,Innate,3,---,90,+40% Attack and +10% Evasion when HP falls below 75%. Effect is doubled when below 50% HP and tripled when below 25% HP,"Berserker, Jarl",---
+The Beast Unleashed,Innate,4,---,170,+50% Attack and +10% Evasion when HP falls below 80%. Effect is doubled when below 55% HP and tripled when below 30% HP,Jarl,Yes
+Cull the Weak,Innate,1,---,---,"Upon striking, defeat any enemy below 10% HP. Gain a random Seed bonus to stat when surviving a quest","Dark Knight, Death Knight",---
+Bloodbath,Innate,2,---,50,"Upon striking, defeat any enemy below 10% HP. Gain a random Seed bonus to stat when surviving a quest, +10% Health, +10% Mana Shield","Dark Knight, Death Knight",---
+Soul Eater,Innate,3,---,100,"Upon striking, defeat any enemy below 10% HP. Gain a random Seed bonus to stat when surviving a quest, +10% Attack, +15% Health, +15% Mana Shield","Dark Knight, Death Knight",---
+Soul Feast,Innate,4,---,180,"Upon striking, defeat any enemy below 10% HP. Gain a random Seed bonus to stat when surviving a quest, +20% Attack, +20% Health, +20% Mana Shield",Death Knight,Yes
+Scoundrel,Innate,1,---,---,+25% Attack with Dagger,Thief,---
+Dashing Rogue,Innate,2,---,10,"+10 Health, +50% Attack with Dagger",Thief,---
+Master Thief,Innate,3,---,40,"+30 Health, +100% Attack with Dagger",Thief,---
+Trickster's Edge,Innate,1,---,---,"+3% to Polonia's steal chance. +2 max items stolen, +25% Attack with Dagger, Bow, Crossbow, Instrument",Trickster,---
+Killing Joke,Innate,2,---,50,"+3% to Polonia's steal chance. +2 max items stolen, +20 Health, +50% Attack with Dagger, Bow, Crossbow, Instrument",Trickster,---
+Final Trick,Innate,3,---,80,"+3% to Polonia's steal chance. +2 max items stolen, +60 Health, +100% Attack with Dagger, Bow, Crossbow, Instrument",Trickster,---
+Legendary Legerdemain,Innate,4,---,150,"+3% to Polonia's steal chance. +2 max items stolen, +100 Health, +150% Attack with Dagger, Bow, Crossbow, Instrument",Trickster,Yes
+Pressure Points,Innate,1,---,---,"+100% Critical Hit Damage, +50% stats with Ring",Monk,---
+Pain Points,Innate,2,---,15,"+150% Critical Hit Damage, +75% stats with Ring",Monk,---
+Forbidden Technique,Innate,3,---,60,"+200% Critical Hit Damage, +100% stats with Ring",Monk,---
+Grandmaster's Secret,Innate,1,---,---,"May learn a very powerful exclusive skill, +100% Critical Hit Damage, +50% stats with Ring",Grandmaster,---
+Broken Vows,Innate,2,---,15,"May learn a very powerful exclusive skill, +150% Critical Hit Damage, +75% stats with Ring",Grandmaster,---
+Last Resort,Innate,3,---,60,"May learn a very powerful exclusive skill, +200% Critical Hit Damage, +100% stats with Ring",Grandmaster,---
+The Sacrifice,Innate,4,---,150,"May learn a very powerful exclusive skill, +250% Critical Hit Damage, +125% stats with Ring",Grandmaster,Yes
+Bull's eye,Innate,1,---,---,+10% Critical Hit Chance,Musketeer,---
+Panache,Innate,2,---,20,+15% Critical Hit Chance,Musketeer,---
+Thrillseeker,Innate,3,---,70,"+20% Critical Hit Chance, +100% Critical Hit Damage",Musketeer,---
+Critical Combo,Innate,1,---,---,+10% Critical Hit Chance. +25% more critical damage per consecutive critical hits. Stacks 4 times,Conquistador,---
+Critical Chain,Innate,2,---,20,+15% Critical Hit Chance. +25% more critical damage per consecutive critical hits. Stacks 4 times,Conquistador,---
+Critical King,Innate,3,---,70,+20% Critical Hit Chance. +100% Critical Hit Damage. +25% more critical damage per consecutive critical hits. Stacks 4 times,Conquistador,---
+Critical Kaching,Innate,4,---,150,+22% Critical Hit Chance. +150% Critical Hit Damage. +25% more critical damage per consecutive critical hits. Stacks 4 times,Conquistador,Yes
+Evasive,Innate,1,---,---,+10% Evasion,Wanderer,---
+On the Move,Innate,2,---,25,+15% Evasion,Wanderer,---
+The Longest Road,Innate,3,---,80,+20% Evasion,Wanderer,---
+Pathfinder's Grace,Innate,1,---,---,"+3% to max Evasion, +10% Evasion",Pathfinder,---
+The Path Least Travelled,Innate,2,---,25,"+3% to max Evasion, +15% Evasion",Pathfinder,---
+Beyond Evasion,Innate,3,---,80,"+3% to max Evasion, +20% Evasion",Pathfinder,---
+Insubstantial,Innate,4,---,150,"+3% to max Evasion, +25% Evasion",Pathfinder,Yes
+Shadow Assassin,Innate,1,---,---,"+15% Evasion until damaged, +20% Critical Hit Chance until damaged",Ninja,---
+Darkness Menace,Innate,2,---,30,"+15% Evasion until damaged, +30% Critical Hit Chance until damaged",Ninja,---
+One With the Dark,Innate,3,---,90,"+20% Evasion until damaged, +40% Critical Hit Chance until damaged",Ninja,---
+True Assassin,Innate,1,---,---,+15% Evasion and +20% Critical Hit Chance until damaged. Regain bonuses after 2 rounds,Sensei,---
+Silencer,Innate,2,---,30,+15% Evasion and +30% Critical Hit Chance until damaged. Regain bonuses after 2 rounds,Sensei,---
+Shadowborn,Innate,3,---,90,+20% Evasion and +40% Critical Hit Chance until damaged. Regain bonuses after 2 rounds,Sensei,---
+It From the Dark,Innate,4,---,160,+25% Evasion and +50% Critical Hit Chance until damaged. Regain bonuses after 2 rounds,Sensei,Yes
+Elegant Riposte,Innate,1,---,---,Guarantees a Critical Hit after dodging an attack,"Dancer, Acrobat",---
+Stinging Riposte,Innate,2,---,40,"Guarantees a Critical Hit after dodging an attack, +50% Critical Hit Damage","Dancer, Acrobat",---
+Devastating Riposte,Innate,3,---,90,"Guarantees a Critical Hit after dodging an attack, +100% Critical Hit Damage","Dancer, Acrobat",---
+Crescendo Counter,Innate,4,---,170,"Guarantees a Critical Hit after dodging an attack, +150% Critical Hit Damage",Acrobat,Yes
+Shield Style,Innate,1,---,---,Equipped Shield's DEF is added to ATK,"Velite, Praetorian",---
+Agile Shield Style,Innate,2,---,50,"Equipped Shield's DEF is added to ATK, +50% bonus from all items with Shield","Velite, Praetorian",---
+Tower & Scorpio,Innate,3,---,100,"Equipped Shield's DEF is added to ATK, +50% Critical Hit Damage, +75% bonus from all items with Shield","Velite, Praetorian",---
+Unstoppable Advance,Innate,4,---,180,"Equipped Shield's DEF is added to ATK, +100% Critical Hit Damage, +100% bonus from all items with Shield",Praetorian,Yes
+Arcanist,Innate,1,---,---,"+20% Attack, +50% bonus from all items with Staff, Idol",Mage,---
+High Arcanist,Innate,2,---,10,"+30% Attack, +50% bonus from all items with Staff, Idol",Mage,---
+Thaumaturgist,Innate,3,---,40,"+50% Attack, +75% bonus from all items with Staff, Idol",Mage,---
+Archmagic,Innate,1,---,---,"+30% Attack, +50% bonus from all items with Staff, Idol",Archmage,---
+Arcane Lore,Innate,2,---,20,"+40% Attack, +50% bonus from all items with Staff, Idol",Archmage,---
+Arcane Secrets,Innate,3,---,60,"+60% Attack, +75% bonus from all items with Staff, Idol",Archmage,---
+Arcane Revelation,Innate,4,---,150,"+80% Attack, +100% bonus from all items with Staff, Idol",Archmage,Yes
+Divine Intervention,Innate,1,---,---,100% chance to survive one fatal blow,Cleric,---
+Chosen,Innate,2,---,15,"100% chance to survive one fatal blow, Heal 5 HP each turn",Cleric,---
+Crusader,Innate,3,---,60,"100% chance to survive one fatal blow, Heal 10 HP each turn",Cleric,---
+True Chosen,Innate,1,---,---,"100% chance to survive one fatal blow, Heal 5 HP each turn",Bishop,---
+Divine Favor,Innate,2,---,30,"100% chance to survive one fatal blow, Heal 10 HP each turn",Bishop,---
+Miracle,Innate,3,---,70,"100% chance to survive one fatal blow, Heal 20 HP each turn",Bishop,---
+Righteous Providence,Innate,4,---,150,"+20% Health, +20% Mana Shield, 100% chance to survive one fatal blow, Heal 20 HP each turn",Bishop,Yes
+Primal Magic,Innate,1,---,---,"+50% bonus from all items with Herbal Medicine, Meal","Druid, Arch Druid",---
+Ancestral Power,Innate,2,---,20,"+60% bonus from all items with Herbal Medicine, Meal","Druid, Arch Druid",---
+Might of the Land,Innate,3,---,70,"+80% bonus from all items with Herbal Medicine, Meal, Amulet","Druid, Arch Druid",---
+Gaia's Wrath,Innate,4,---,150,"+100% bonus from all items with Herbal Medicine, Meal, Amulet",Arch Druid,Yes
+Dark Pact,Innate,1,---,---,"Has a chance to learn powerful, exclusive skills","Sorcerer, Warlock",---
+Blood Pact,Innate,2,---,25,"Has a chance to learn powerful, exclusive skills, +25% stats with Spell","Sorcerer, Warlock",---
+Fell Pact,Innate,3,---,80,"Has a chance to learn powerful, exclusive skills, +50% stats with Spell","Sorcerer, Warlock",---
+Unspeakable Contract,Innate,4,---,150,"Has a chance to learn powerful, exclusive skills, +60% stats with Spell",Warlock,Yes
+Jack of All Trades,Innate,1,---,---,"Can use any element, but only counts as 50% against Elemental Barriers, +10% bonus from all items",Spellblade,---
+Ace of All Trades,Innate,2,---,30,"Can use any element, but only counts as 50% against Elemental Barriers, +15% bonus from all items",Spellblade,---
+Master of All Trades,Innate,3,---,90,"Can use any element, but only counts as 50% against Elemental Barriers, +20% bonus from all items",Spellblade,---
+Jack of All Trades,Innate,1,---,---,"Can use any element, but only counts as 50% against Elemental Barriers, +10% bonus from all items, +50% extra bonus from equipment with innate elements",Spellknight,---
+Ace of All Trades,Innate,2,---,30,"Can use any element, but only counts as 50% against Elemental Barriers, +15% bonus from all items, +50% extra bonus from equipment with innate elements",Spellknight,---
+Master of All Trades,Innate,3,---,90,"Can use any element, but only counts as 50% against Elemental Barriers, +20% bonus from all items, +50% extra bonus from equipment with innate elements",Spellknight,---
+Omniproficient,Innate,4,---,160,"Can use any element, but only counts as 50% against Elemental Barriers, +30% bonus from all items, +50% extra bonus from equipment with innate elements",Spellknight,Yes
+Geomancy,Innate,1,---,---,+1% Attack per point in any Element,"Geomancer, Astramancer",---
+Terrain Attunement,Innate,2,---,40,"+20% Attack, +1% Attack per point in any Element","Geomancer, Astramancer",---
+Geo Purity,Innate,3,---,90,"+40% Attack, +1% Attack per point in any Element","Geomancer, Astramancer",---
+Wielder of Leylines,Innate,4,---,170,"+60% Attack, +1% Attack per point in any Element",Astramancer,Yes
+Twist of Fate,Innate,1,---,---,"If the party is defeated, allows an immediate second attempt at the quest",Chronomancer,---
+Cheat Death,Innate,2,---,50,"If the party is defeated, allows an immediate second attempt at the quest, +30% Attack",Chronomancer,---
+Nine Lives,Innate,3,---,100,"If the party is defeated, allows an immediate second attempt at the quest, +50% Attack, +5% Evasion",Chronomancer,---
+Reloaded Dice,Innate,1,---,---,"If the party is defeated, allows an immediate second attempt at the quest with a +15% power bonus",Fateweaver,---
+Dimension Shift,Innate,2,---,60,"If the party is defeated, allows an immediate second attempt at the quest with a +15% power bonus, +30% Attack",Fateweaver,---
+Ninety-Nine Lives,Innate,3,---,110,"If the party is defeated, allows an immediate second attempt at the quest with a +15% power bonus, +50% Attack, +5% Evasion",Fateweaver,---
+Chaos Control,Innate,4,---,180,"If the party is defeated, allows an immediate second attempt at the quest with a +15% power bonus, +80% Attack, +10% Evasion",Fateweaver,Yes
+Fresh Spirit,Enchantment,---,---,---,"10% reduced Energy cost to surcharge, -10% Resting Time",---,---
+Fresh Spirit+,Enchantment,---,---,---,"10% reduced Energy cost to surcharge, -10% Resting Time",---,---
+Ram Robustness,Enchantment,---,---,---,+5% Defense,---,---
+Ram Robustness+,Enchantment,---,---,---,+10% Defense,---,---
+Wolf Ferocity,Enchantment,---,---,---,+5% Attack,---,---
+Wolf Ferocity+,Enchantment,---,---,---,+10% Attack,---,---
+Ox Endurance,Enchantment,---,---,---,"+3% Health, +3% Mana Shield",---,---
+Ox Endurance+,Enchantment,---,---,---,"+5% Health, +5% Mana Shield",---,---
+Eagle Accuracy,Enchantment,---,---,---,+2% Critical Hit Chance,---,---
+Eagle Accuracy+,Enchantment,---,---,---,+3% Critical Hit Chance,---,---
+Viper Lethality,Enchantment,---,---,---,+15% Critical Hit Damage,---,---
+Viper Lethality+,Enchantment,---,---,---,+20% Critical Hit Damage,---,---
+Cat Grace,Enchantment,---,---,---,+2% Evasion,---,---
+Cat Grace+,Enchantment,---,---,---,+3% Evasion,---,---
+Bunny Hops,Enchantment,---,---,---,"+2% Health, +2% Mana Shield, +1% Evasion",---,---
+Bunny Hops+,Enchantment,---,---,---,"+3% Health, +3% Mana Shield, +2% Evasion",---,---
+Goose Wrath,Enchantment,---,---,---,"+3% Attack, +10 Threat",---,---
+Goose Wrath+,Enchantment,---,---,---,"+5% Attack, +15 Threat",---,---
+Xolotl Spirit,Enchantment,---,---,---,2% reduced Energy cost to surcharge,---,---
+Xolotl Spirit+,Enchantment,---,---,---,3% reduced Energy cost to surcharge,---,---
+Rhino Stubbornness,Enchantment,---,---,---,+5 Threat,---,---
+Rhino Stubbornness+,Enchantment,---,---,---,+10 Threat,---,---
+Owl Wisdom,Enchantment,---,---,---,+5% XP,---,---
+Owl Wisdom+,Enchantment,---,---,---,+15% XP,---,---
+Armadillo Tenacity,Enchantment,---,---,---,15% chance to survive one fatal blow,---,---
+Armadillo Tenacity+,Enchantment,---,---,---,25% chance to survive one fatal blow,---,---
+Lizard Regeneration,Enchantment,---,---,---,Heal 3 HP each turn,---,---
+Lizard Regeneration+,Enchantment,---,---,---,Heal 5 HP each turn,---,---
+Horse Endurance,Enchantment,---,---,---,-20% Break Chance,---,---
+Horse Endurance+,Enchantment,---,---,---,-30% Break Chance,---,---
+Hippo Lethargy,Enchantment,---,---,---,-1% Resting Time,---,---
+Hippo Lethargy+,Enchantment,---,---,---,-2% Resting Time,---,---
+Squirrel Speed,Enchantment,---,---,---,"+3% Attack, +2% Evasion",---,---
+Squirrel Speed+,Enchantment,---,---,---,"+5% Attack, +2% Evasion",---,---
+Walrus Nonchalance,Enchantment,---,---,---,"+5% Health, +5% Mana Shield, -30% Break Chance",---,---
+Walrus Nonchalance+,Enchantment,---,---,---,"+8% Health, +8% Mana Shield, -35% Break Chance",---,---
+Lion Pride,Enchantment,---,---,---,"+5% Attack, +1% Evasion",---,---
+Lion Pride+,Enchantment,---,---,---,"+7% Attack, +2% Evasion",---,---
+Tiger Power,Enchantment,---,---,---,"+5% Defense, +1% Evasion",---,---
+Tiger Power+,Enchantment,---,---,---,"+7% Defense, +2% Evasion",---,---
+Bear Vitality,Enchantment,---,---,---,"+5% Attack, +15 Health",---,---
+Bear Vitality+,Enchantment,---,---,---,"+7% Attack, +20 Health",---,---
+Mammoth Presence,Enchantment,---,---,---,"+10% Defense, +10 Threat",---,---
+Mammoth Presence+,Enchantment,---,---,---,"+13% Defense, +15 Threat",---,---
+Dinosaur Senses,Enchantment,---,---,---,+25% Attack on the first round,---,---
+Dinosaur Senses+,Enchantment,---,---,---,+35% Attack on the first round,---,---
+Shark Bloodlust,Enchantment,---,---,---,+20% Attack when enemy's HP is below 50%,---,---
+Shark Bloodlust+,Enchantment,---,---,---,+30% Attack when enemy's HP is below 50%,---,---
+Mundra's Spite,Enchantment,---,---,---,"+20% Attack against bosses, +20% Defense against bosses",---,---
+Mundra's Spite+,Enchantment,---,---,---,"+20% Attack against bosses, +20% Defense against bosses",---,---
+Quetzalcoatl Spirit,Enchantment,---,---,---,8% reduced Energy cost to surcharge,---,---
+Quetzalcoatl Spirit+,Enchantment,---,---,---,10% reduced Energy cost to surcharge,---,---
+Phoenix Immortality,Enchantment,---,---,---,"+4% Health, +4% Mana Shield, Heal 3 HP each turn",---,---
+Phoenix Immortality+,Enchantment,---,---,---,"+5% Health, +5% Mana Shield, Heal 5 HP each turn",---,---
+Hydra Onslaught,Enchantment,---,---,---,"+100 Defense, +25 Health",---,---
+Hydra Onslaught+,Enchantment,---,---,---,"+125 Defense, +35 Health",---,---
+Tarrasque Terror,Enchantment,---,---,---,"+20% Defense, -50% Break Chance",---,---
+Tarrasque Terror+,Enchantment,---,---,---,"+25% Defense, -65% Break Chance",---,---
+Carbuncle Whimsy,Enchantment,---,---,---,"+2% Evasion, +2% Critical Hit Chance",---,---
+Carbuncle Whimsy+,Enchantment,---,---,---,"+3% Evasion, +3% Critical Hit Chance",---,---
+Chimera Malignity,Enchantment,---,---,---,"+10% Attack, +10% Critical Hit Damage",---,---
+Chimera Malignity+,Enchantment,---,---,---,"+15% Attack, +15% Critical Hit Damage",---,---
+Kraken Cruelty,Enchantment,---,---,---,"+10% Attack, +100 Attack",---,---
+Kraken Cruelty+,Enchantment,---,---,---,"+15% Attack, +125 Attack",---,---
+Christmas Spirit,Enchantment,---,---,---,"+4% Health, +4% Mana Shield, +20 Health",---,---
+Christmas Spirit+,Enchantment,---,---,---,"+10% Health, +10% Mana Shield, +40 Health",---,---
+Krampus Wile,Enchantment,---,---,---,"+2% Critical Hit Chance, +15 Threat",---,---
+Krampus Wile+,Enchantment,---,---,---,"+3% Critical Hit Chance, +20 Threat",---,---
+Kirin Serenity,Enchantment,---,---,---,+10% XP,---,---
+Kirin Serenity+,Enchantment,---,---,---,+20% XP,---,---
+Spirit Spirit,Enchantment,---,---,---,"+2% Evasion, 25% chance to survive one fatal blow",---,---
+Spirit Spirit+,Enchantment,---,---,---,"+3% Evasion, 50% chance to survive one fatal blow",---,---
+Behemoth Violence,Enchantment,---,---,---,"+13% Attack, +5% Defense",---,---
+Behemoth Violence+,Enchantment,---,---,---,"+18% Attack, +8% Defense",---,---
+Ouroboros Eternity,Enchantment,---,---,---,"+10% Defense, Heal 4 HP each turn",---,---
+Ouroboros Eternity+,Enchantment,---,---,---,"+15% Defense, Heal 6 HP each turn",---,---
+Bahamut Sovereignty,Enchantment,---,---,---,"+3% Health, +3% Mana Shield, +50 Health",---,---
+Bahamut Sovereignty+,Enchantment,---,---,---,"+5% Health, +5% Mana Shield, +70 Health",---,---
+Leviathan Assurance,Enchantment,---,---,---,"+8% Attack, +3% Critical Hit Chance",---,---
+Leviathan Assurance+,Enchantment,---,---,---,"+10% Attack, +4% Critical Hit Chance",---,---
+Griffin Freedom,Enchantment,---,---,---,"+8% Defense, +3% Evasion",---,---
+Griffin Freedom+,Enchantment,---,---,---,"+10% Defense, +4% Evasion",---,---
+Titan Solemnity,Enchantment,---,---,---,"+15% Health, +15% Mana Shield",---,---
+Titan Solemnity+,Enchantment,---,---,---,"+20% Health, +20% Mana Shield",---,---
+Ancestor Tradition,Enchantment,---,---,---,10% reduced Energy cost to surcharge,---,---
+Ancestor Tradition+,Enchantment,---,---,---,12% reduced Energy cost to surcharge,---,---
+Tomb-Born Malevolence,Enchantment,---,---,---,"20% bonus to enchanted item's stats, Skill effect is doubled within the Tower and Tomb of Titans quests",---,---
+Tomb-Born Malevolence+,Enchantment,---,---,---,"50% bonus to enchanted item's stats, Skill effect is doubled within the Tower and Tomb of Titans quests",---,---
+Scholar Spirit,Enchantment,---,---,---,"+10% XP, -45% Break Chance",---,---
+Scholar Spirit+,Enchantment,---,---,---,"+15% XP, -60% Break Chance",---,---
+Gleaming Aura,Aurasong,---,---,---,Heals party by 1 HP each turn,---,---
+Aura of Rains,Aurasong,---,---,---,Grants +10 bonus HP to the party,---,---
+Aura of Quakes,Aurasong,---,---,---,Grants +10% bonus Defense to the party,---,---
+Aura of Growth,Aurasong,---,---,---,Grants +5% HP to the party,---,---
+Aura of Flames,Aurasong,---,---,---,Grants +10% bonus Attack to the party,---,---
+Aura of Sands,Aurasong,---,---,---,Grants +10% Attack and +2% Critical Hit Chance and Evasion to the party,---,---
+Aura of Malice,Aurasong,---,---,---,Grants +20% Critical Hit Damage to the party,---,---
+Aura of Sparks,Aurasong,---,---,---,Grants +15% bonus Attack to the party,---,---
+Aura of Winds,Aurasong,---,---,---,Grants +2% Evasion to the party,---,---
+Aura of Love,Aurasong,---,---,---,Grants +10% HP to the party,---,---
+Aura of Jumanji,Aurasong,---,---,---,Grants +20% Critical Hit Damage and -20% Break Chance for the party,---,---
+Aura of Power,Aurasong,---,---,---,Grants +10% bonus Attack and Defense to the party,---,---
+Prismatic Aura,Aurasong,---,---,---,Grants +2% Critical Hit Chance and Evasion to the party,---,---
+Aura of Wonders,Aurasong,---,---,---,+3% quest speed and resting time,---,---
+Aura of Storms,Aurasong,---,---,---,Grants +15% bonus Attack and Defense to the party,---,---
+Aura of Victory,Aurasong,---,---,---,Grants +10% bonus Attack and HP to the party. Also increases XP earned by 25%,---,---
+Aura of Transmutation,Aurasong,---,---,---,Grants +18% bonus Defense and +12% HP to the party,---,---
+Aura of Inspiration,Aurasong,---,---,---,"Grants +12% bonus Attack and Defense, as well as +12% HP to the party",---,---
+Aura of Ostentatiousness,Aurasong,---,---,---,Grants +40 bonus HP to the party and reduces resting time by 10%,---,---
+A.U.R.A. Aura,Aurasong,---,---,---,Grants +25% Critical Hit Damage and +5% quest speed to the party,---,---
+Alien Aura,Aurasong,---,---,---,Grants +10% HP and heals party by 5 HP each turn,---,---
+Aura of Learning,Aurasong,---,---,---,Grants +10% bonus Attack and Defense to the party. Also increases XP earned by 30%,---,---
+Smidgen's Greed,Artifact,---,---,---,"User deals 2x damage against Golems, Keybearers, Platinum Golems, Platinum Keybearers, Coral Golems, Coral Keybearers",---,---
+Grimar's Collection,Artifact,---,---,---,This item's collection value is 5x higher than normal,---,---
+Savard's Aloofness,Artifact,---,---,---,"+40% Attack, +40% Defense, Nullify effects this Hero receives from Champions",---,---
+Myrthee's Left Hook,Artifact,---,---,---,"+20% Health, +20% Mana Shield, +10% Evasion, Equipped weapons grant no bonuses",---,---
+Muramonji's Style,Artifact,---,---,---,"+200% Critical Hit Damage, Critical Hit Chance is set to 20% and cannot change",---,---
+Aster's Invincibility,Artifact,---,---,---,Item cannot break,---,---
+Urist's Sturdiness,Artifact,---,---,---,"+25% Defense, +250 Defense, Evasion is set to 0% and cannot change",---,---
+Meirika's Secret,Artifact,---,---,---,"This item's Dragon Invasion score is 20% higher than normal, Wearer's Airship Power is increased by 20% when assigned to the Airship",---,---
+Bagginbak's Temper,Artifact,---,---,---,"+100% bonus from all items with Mace, User begins combat at 75% HP",---,---
+Everyone's Memories,Artifact,---,---,---,50000% of your Card Collection Score will be added to this item's value,---,---
+Midas' Tragedy,Artifact,---,---,---,+25% Bonus Stats From Lost City of Gold Equipment,---,---
+Midas' Tragedy,Artifact,---,---,---,+50% Bonus Stats From Lost City of Gold Equipment,---,---
+Central Thinking,Artifact,---,---,---,+50% XP → Attack,---,---
+Quiver Bow Bonus,---,---,---,---,+30% bonus from all items with Bow,---,---
