@@ -18,6 +18,7 @@ import {
   QUALITY_MULTIPLIERS,
   QUALITY_ROUNDING,
   SPIRIT_AFFINITY_MULTIPLIER,
+  SPIRIT_ELEMENT_BONUS,
   SPIRIT_PLUS_RULE,
   SPIRIT_SKILL_DOUBLING_ITEMS,
   TYPED_ITEM_BONUS_STATS,
@@ -92,7 +93,9 @@ export interface HeroStats {
   critDmg: number
   eva: number
   threat: number
-  /** Стихия героя (камни его стихии) — от неё зависят ступени навыков и пробитие барьера. */
+  /** Мана-щит (для симулятора боя). */
+  manaShield: number
+  /** Стихия героя (камни его стихии + духи A29) — от неё зависят ступени навыков и пробитие барьера. */
   element: number
   /** Сумма всех камней (для навыков «per point in any Element»). */
   elementAny: number
@@ -162,24 +165,37 @@ function elementStoneOf(slot: HeroSlot, l: Lookup): Enchant | undefined {
   return name ? l.enchants.get(name) : undefined
 }
 
-/** Стихия героя: Σ камней его стихии (A21). Класс `Any` (Spellblade) — любые камни. */
-export function heroElementValue(hero: HeroInstance, data: GameData): { element: number; elementAny: number } {
+export interface ElementValue {
+  /** Отображаемая стихия (камни + духи-носители A29) — её показывает игра и она идёт против барьера. */
+  element: number
+  /** Стихия для порогов ступеней навыков: только камни (A29: духи пороги не открывают). */
+  elementStones: number
+  /** Сумма всех камней (для навыков «per point in any Element»). */
+  elementAny: number
+}
+
+/** Стихия героя: Σ камней его стихии (A21) + духи из SPIRIT_ELEMENT_BONUS (A29). Класс `Any` (Spellblade) — любые камни. */
+export function heroElementValue(hero: HeroInstance, data: GameData): ElementValue {
   const l = lookup(data)
   const cls = l.classes.get(hero.className)
-  let element = 0
+  let elementStones = 0
   let elementAny = 0
+  let spiritBonus = 0
   for (const s of hero.slots) {
     const stone = elementStoneOf(s, l)
-    if (!stone?.element || !stone.elementValue) continue
-    elementAny += stone.elementValue
-    // ASSUMPTION: A21 — в стихию героя идут только камни его стихии (+ Gold как универсальная).
-    const counts =
-      cls?.element === 'Any' ||
-      stone.element === cls?.element ||
-      (GOLD_ELEMENT_COUNTS_FOR_ANY_HERO && stone.element === 'Gold')
-    if (counts) element += stone.elementValue
+    if (stone?.element && stone.elementValue) {
+      elementAny += stone.elementValue
+      // ASSUMPTION: A21 — в стихию героя идут только камни его стихии (+ Gold как универсальная).
+      const counts =
+        cls?.element === 'Any' ||
+        stone.element === cls?.element ||
+        (GOLD_ELEMENT_COUNTS_FOR_ANY_HERO && stone.element === 'Gold')
+      if (counts) elementStones += stone.elementValue
+    }
+    // ASSUMPTION: A29 — некоторые духи дают +5 стихии (Селена +5, Джорди +30); на ступени навыков не влияет.
+    if (s.spirit) spiritBonus += SPIRIT_ELEMENT_BONUS[s.spirit] ?? 0
   }
-  return { element, elementAny }
+  return { element: elementStones + spiritBonus, elementStones, elementAny }
 }
 
 /**
@@ -260,12 +276,16 @@ export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptio
   const cls = l.classes.get(hero.className)
   if (!cls) throw new Error(`Неизвестный класс «${hero.className}»`)
 
-  const { element, elementAny } = heroElementValue(hero, data)
-  const skills = activeSkills(hero, data, element)
+  const { element, elementStones, elementAny } = heroElementValue(hero, data)
+  // Ступени навыков считает стихия без духов (A29): экспорт Селены (95 при пороге 95) это подтверждает.
+  const skills = activeSkills(hero, data, elementStones)
   const effects = skills.flatMap((s) => s.effects).filter(isSheetEffect)
 
   const flat = zero()
   const pct = zero()
+  let manaBase = 0
+  let manaFlat = 0
+  let manaPct = 0
   // EVA/CRIT класса — как в HEROES, вместе с бонусом в скобках (Ninja «30% (+20%)»): так их показывает карточка героя,
   // хотя сам врождённый навык Ninja действует «until damaged» и в эффекты карточки не входит (A26, сверка: Ирвин, Нина).
   let crit = cls.base.crit
@@ -283,6 +303,10 @@ export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptio
     else if (e.stat === 'eva') eva += v / 100
     else if (e.stat === 'critDmg') critDmg += v / 100
     else if (e.stat === 'threat') threat += e.mode === 'flat' ? v : (cls.base.threat * v) / 100
+    else if (e.stat === 'manaShield') {
+      if (e.mode === 'pct') manaPct += v / 100
+      else manaFlat += v
+    }
   }
   // «+1% Attack per point in any Element» (Geomancer): парсер относит это к ignored, считаем здесь.
   for (const s of skills) {
@@ -332,6 +356,7 @@ export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptio
     }
     eva += item.stats.Normal.eva
     crit += item.stats.Normal.crit
+    manaBase += roundQ(item.stats.Normal.manaShield * q)
     contributions.push({ slot: i, item: item.name, itemStats, enchantStats, multiplier, total })
   })
 
@@ -351,6 +376,7 @@ export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptio
     critDmg,
     eva,
     threat,
+    manaShield: floorStat((manaBase + manaFlat) * (1 + manaPct)),
     element,
     elementAny,
     breakdown: { base, baseSource: ref ? 'reference' : 'model', seeds, items: contributions, flat, pct, skills },

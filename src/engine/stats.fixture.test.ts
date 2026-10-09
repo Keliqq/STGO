@@ -63,12 +63,8 @@ describe('сверка с fixtures/heroes.txt', () => {
     for (const st of MAIN_STATS) expect(Math.abs(err(s[st], ref(l)[st])), st).toBeLessThan(0.02)
   })
 
-  it('стихия героя совпадает с экспортом у 16 из 18; Селена и Джорди — необъяснённый излишек (A21)', () => {
-    const anomalies: Record<string, [number, number]> = { Селена: [90, 95], Джорди: [150, 180] }
-    for (const { h, s } of modelOnly) {
-      if (anomalies[h.name]) expect([s.element, ref(h).element], h.name).toEqual(anomalies[h.name])
-      else expect(s.element, h.name).toBe(ref(h).element)
-    }
+  it('стихия героя совпадает с экспортом у всех 18 (Селена +5 Ox, Джорди +30 Chimera — A29)', () => {
+    for (const { h, s } of modelOnly) expect(s.element, h.name).toBe(ref(h).element)
   })
 
   it('модельные Σ ATK% и Σ DEF% совпадают с игровыми (колонки 18/19 экспорта) у всех 18 — вкл. удвоение духа в Totem Pole (A27)', () => {

@@ -135,7 +135,7 @@ describe('правила предметов', () => {
       { item: "Aang's Robe", quality: 'Normal', element: 'Flame Element', spirit: null },
       empty, empty, empty, empty,
     ]
-    expect(heroElementValue(hero({ slots }), data)).toEqual({ element: 10, elementAny: 20 })
+    expect(heroElementValue(hero({ slots }), data)).toEqual({ element: 10, elementStones: 10, elementAny: 20 })
     const line = data.skills.filter((s) => s.line === 'Thick Skin').sort((a, b) => (a.tier ?? 0) - (b.tier ?? 0))
     expect(skillTierFor(line, 29, false).name).toBe('Thick Skin')
     expect(skillTierFor(line, 30, false).name).toBe('Stone Skin')

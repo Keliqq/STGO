@@ -103,3 +103,64 @@ export const SPIRIT_SKILL_DOUBLING_ITEMS = ['Portable Totem Pole'] as const
 // ASSUMPTION: A25
 export const TYPED_ITEM_BONUS_STATS: readonly ('atk' | 'def' | 'hp')[] = ['atk', 'hp']
 
+/**
+ * Духи, дающие +5 стихии носителю (на духа). Выведено сверкой с экспортом (A29): Селена (1× Ox) +5,
+ * Джорди (6× Chimera) +30; у носителей Lion/Bear/Walrus/Mammoth/Cat/Wolf/Eagle/Owl излишка нет.
+ * В листах ENCHANTMENTS/SKILLS колонки стихии у духов нет (проверено и в фикстуре, и в живой таблице) —
+ * только по экспорту. Влияет на отображаемую стихию и барьер, но НЕ на ступени навыков
+ * (иначе у Селены открылась бы ступень 3 «Dance of Blades» с порогом 95 — экспорт этому противоречит).
+ */
+// ASSUMPTION: A29
+export const SPIRIT_ELEMENT_BONUS: Readonly<Record<string, number>> = {
+  'Ox Spirit': 5,
+  'Chimera Spirit': 5,
+}
+
+// ─────────────────────────── Бой (симулятор) ───────────────────────────
+// Формулы — ST-Central Combat Compendium (https://st-central.net/combat-compendium/), см. A30.
+
+/** Максимальный множитель урона врага при DEF = 0 (Compendium: «Maximum DMG = Enemy DMG × 1.5»). */
+export const ENEMY_DMG_MAX_FACTOR = 1.5
+/** Шанс крита врага (Compendium: «Chance to crit = 10%~»). */
+// ASSUMPTION: A30 — выборка в статье небольшая.
+export const ENEMY_CRIT_CHANCE = 0.1
+/** Множитель крита врага (Compendium: «Critical Damage = 1.5x», считается от базового урона). */
+export const ENEMY_CRIT_MULT = 1.5
+/** Порог DEF → снижение урона (Compendium: 50% → ×0.5, 70% → ×0.3, cap → ×0.25; между порогами линейно). */
+export const DEF_MITIGATION = { at50: 0.5, at70: 0.3, at75: 0.25 } as const
+/**
+ * Шанс AoE-атаки врага (Compendium: «AoE chance = 20-25% pending on Quest/Enemy»;
+ * урон — отдельная колонка Monster AOE DMG).
+ */
+// ASSUMPTION: A31 — точный шанс по квесту неизвестен, берём нижнюю границу.
+export const AOE_CHANCE = 0.2
+/**
+ * Множитель урона отряда, если стихийный барьер не пробит (A9).
+ */
+// ASSUMPTION: A9 — точная механика барьера в данных не описана.
+export const BARRIER_UNBROKEN_DMG_FACTOR = 0.2
+/**
+ * Мана-щит восстанавливается полностью после N подряд раундов без получения урона.
+ */
+// ASSUMPTION: A32 — решение сессии 3b по наблюдениям игры, в данных не подтверждено.
+export const MANA_SHIELD_RECHARGE_ROUNDS = 3
+/**
+ * Лимит раундов боя: не победил за это время — поражение.
+ */
+// ASSUMPTION: A33 — в игре лимита не наблюдали; нужно, чтобы симуляция завершалась.
+export const MAX_ROUNDS = 50
+/** Прогонов по умолчанию в simulateTeam. */
+export const DEFAULT_SIM_RUNS = 2000
+/**
+ * Штраф уклонения на Extreme (и Terror): −20% от значения EVA (multiplicatively).
+ */
+// ASSUMPTION: A34 — сообщество («the 20% penalty Extreme and Terror Difficulty have», r/shoptitans);
+// точная форма (−20 п.п. или ×0.8) не подтверждена, выбрано ×0.8.
+export const EXTREME_EVA_PENALTY = 0.2
+/**
+ * «+40% of total Threat is added as an attack multiplier» (Chieftain): трактовка —
+ * множитель ATK = 1 + 0.4 × (угроза / 100).
+ */
+// ASSUMPTION: A35 — формулировка неоднозначна, другой кандидатуры нет.
+export const THREAT_ATTACK_MULTIPLIER_DIVISOR = 100
+
