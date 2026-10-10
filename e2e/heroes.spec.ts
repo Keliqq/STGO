@@ -16,6 +16,7 @@ test('импорт героев: файлом, перетаскиванием и
   await page.setInputFiles('input[type="file"][accept*=".txt"]', 'fixtures/heroes.txt')
   await expect(page.getByRole('heading', { name: /Мои герои \(18\)/ })).toBeVisible()
   await expect(page.getByText(/Импорт: добавлено 0, обновлено 18/)).toBeVisible()
+  expectClean(errors)
 })
 
 test('импорт перетаскиванием файла', async ({ page }) => {

@@ -10,7 +10,8 @@ const SCREENS = path.join(ROOT, 'docs', 'screens')
 /** Скриншот всего экрана в docs/screens/. */
 export async function shot(page: Page, name: string): Promise<void> {
   mkdirSync(SCREENS, { recursive: true })
-  await page.screenshot({ path: path.join(SCREENS, `${name}.png`), fullPage: true })
+  const file = name.endsWith('.png') ? name : `${name}.png`
+  await page.screenshot({ path: path.join(SCREENS, file), fullPage: true })
 }
 
 /**
