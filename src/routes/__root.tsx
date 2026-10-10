@@ -1,11 +1,21 @@
 import { useState } from 'react'
 import { Link, Outlet, createRootRoute } from '@tanstack/react-router'
+import { Swords, X } from 'lucide-react'
 import ThemeToggle from '#/components/ThemeToggle.tsx'
+import { Button } from '#/components/ui/button.tsx'
 import { useDataStatus } from '#/ui/dataSync.ts'
 
 export const Route = createRootRoute({
   component: RootComponent,
 })
+
+const NAV = [
+  { to: '/', label: 'Главная', exact: true },
+  { to: '/heroes', label: 'Герои' },
+  { to: '/optimize', label: 'Подбор' },
+  { to: '/inventory', label: 'Инвентарь' },
+  { to: '/data', label: 'Данные' },
+] as const
 
 function UpdateBanner() {
   const status = useDataStatus()
@@ -13,49 +23,54 @@ function UpdateBanner() {
   const update = status.lastUpdate
   if (!update || dismissed === update.at) return null
   return (
-    <div className="flex items-center justify-between gap-3 bg-emerald-100 px-4 py-2 text-sm text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
-      <span>{update.message}</span>
-      <button type="button" className="underline" onClick={() => setDismissed(update.at)}>
-        Закрыть
-      </button>
+    <div className="border-b border-success/30 bg-success/10 text-success">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-sm">
+        <span>{update.message}</span>
+        <Button variant="ghost" size="sm" onClick={() => setDismissed(update.at)}>
+          <X /> Закрыть
+        </Button>
+      </div>
     </div>
   )
 }
 
 function RootComponent() {
   return (
-    <>
-      <header className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-        <nav className="mx-auto flex max-w-6xl items-center gap-5 text-sm font-semibold">
-          <Link to="/" className="text-base">
-            Shop Titans: подбор экипировки
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <nav className="mx-auto flex max-w-6xl items-center gap-1 px-4 py-2 text-sm font-medium">
+          <Link to="/" className="mr-3 flex shrink-0 items-center gap-2 font-bold text-foreground no-underline" aria-label="Shop Titans: подбор экипировки">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Swords className="size-4" />
+            </span>
+            <span className="hidden md:inline">Shop Titans: подбор экипировки</span>
           </Link>
-          <Link to="/" activeProps={{ className: 'underline' }} activeOptions={{ exact: true }}>
-            Главная
-          </Link>
-          <Link to="/heroes" activeProps={{ className: 'underline' }}>
-            Герои
-          </Link>
-          <Link to="/optimize" activeProps={{ className: 'underline' }}>
-            Подбор
-          </Link>
-          <Link to="/inventory" activeProps={{ className: 'underline' }}>
-            Инвентарь
-          </Link>
-          <Link to="/data" activeProps={{ className: 'underline' }}>
-            Данные
-          </Link>
-          <span className="ml-auto">
-            <ThemeToggle />
-          </span>
+          <div className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1">
+            {NAV.map((n) => (
+              <Link
+                key={n.to}
+                to={n.to}
+                activeOptions={{ exact: 'exact' in n }}
+                className="shrink-0 rounded-md px-3 py-1.5 text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-accent-foreground"
+                activeProps={{ className: 'bg-accent !text-accent-foreground', 'aria-current': 'page' }}
+              >
+                {n.label}
+              </Link>
+            ))}
+          </div>
+          <ThemeToggle />
         </nav>
       </header>
       <UpdateBanner />
-      <Outlet />
-      <footer className="mx-auto max-w-6xl px-4 py-6 text-xs text-neutral-500">
-        Изображения и игровые данные принадлежат Kabam; картинки загружаются напрямую с playshoptitans.com и
-        stcentral-hub.github.io. Неофициальный фанатский инструмент.
+      <div className="flex-1">
+        <Outlet />
+      </div>
+      <footer className="border-t">
+        <p className="mx-auto max-w-6xl px-4 py-6 text-xs text-muted-foreground">
+          Изображения и игровые данные принадлежат Kabam; картинки загружаются напрямую с playshoptitans.com и
+          stcentral-hub.github.io. Неофициальный фанатский инструмент.
+        </p>
       </footer>
-    </>
+    </div>
   )
 }

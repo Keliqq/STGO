@@ -47,6 +47,8 @@ export async function blockExternal(page: Page): Promise<void> {
 
 /** Ждёт, пока страница «Герои» получит игровые данные (без них импорт невозможен). */
 export async function waitForData(page: Page): Promise<void> {
+  // Сначала ждём сам маршрут (он грузится лениво), иначе «текста загрузки нет» верно ещё до рендера
+  await expect(page.locator('main h1')).toBeVisible()
   await expect(page.getByText('Загрузка игровых данных…')).toHaveCount(0)
 }
 

@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { RefreshCw } from 'lucide-react'
+import { Button } from '#/components/ui/button.tsx'
+import { Input } from '#/components/ui/input.tsx'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table.tsx'
 import { BREAKPOINTS_SOURCE } from '#/data/breakpoints.ts'
 import { classIconId, elementIconId, skillIconId, typeIconId } from '#/data/images.ts'
 import { questsWithCaps } from '#/data/sync.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { type Settings, loadSettings, refreshNow, saveSettings, useDataStatus, useGameData } from '#/ui/dataSync.ts'
+import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 
 export const Route = createFileRoute('/data')({ component: DataPage })
 
@@ -14,15 +19,6 @@ function fmt(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString('ru-RU') : '—'
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mb-8">
-      <h2 className="mb-3 text-xl font-semibold">{title}</h2>
-      {children}
-    </section>
-  )
-}
-
 function TtlSetting() {
   const [settings, setSettings] = useState<Settings | null>(null)
   useEffect(() => {
@@ -30,9 +26,8 @@ function TtlSetting() {
   }, [])
   if (!settings) return null
   return (
-    <label className="flex items-center gap-2 text-sm">
-      Проверять обновления, если данные старше
-      <input
+    <Field label="Проверять обновления, если данные старше">
+      <Input
         type="number"
         min={1}
         max={24 * 30}
@@ -42,10 +37,10 @@ function TtlSetting() {
           setSettings(next)
           void saveSettings(next)
         }}
-        className="w-20 rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600 dark:bg-neutral-800"
+        className="w-20"
       />
       ч
-    </label>
+    </Field>
   )
 }
 
@@ -58,39 +53,32 @@ function DataPage() {
   const ignoredCount = data ? data.skills.reduce((n, s) => n + s.ignored.length, 0) : 0
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-6 text-3xl font-bold">Данные</h1>
-
+    <Page title="Данные" description="Источник игровых данных, их свежесть и то, что не удалось разобрать.">
       <Section title="Состояние">
-        <dl className="mb-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-          <dt className="text-neutral-500">Источник</dt>
-          <dd>{status.source ? SOURCE_LABEL[status.source] : 'загрузка…'}</dd>
-          <dt className="text-neutral-500">Дата данных</dt>
+        <dl className="mb-4 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-sm">
+          <dt className="text-muted-foreground">Источник</dt>
+          <dd className="font-medium">{status.source ? SOURCE_LABEL[status.source] : 'загрузка…'}</dd>
+          <dt className="text-muted-foreground">Дата данных</dt>
           <dd>{fmt(status.dataDate)}</dd>
-          <dt className="text-neutral-500">Последняя проверка</dt>
+          <dt className="text-muted-foreground">Последняя проверка</dt>
           <dd>{status.checking ? 'идёт сейчас…' : fmt(status.lastCheckAt)}</dd>
           {status.lastUpdate ? (
             <>
-              <dt className="text-neutral-500">Обновление</dt>
+              <dt className="text-muted-foreground">Обновление</dt>
               <dd>{status.lastUpdate.message}</dd>
             </>
           ) : null}
         </dl>
-        {status.error ? <p className="mb-3 rounded bg-red-100 p-3 text-sm text-red-900 dark:bg-red-950 dark:text-red-200">{status.error}</p> : null}
+        {status.error ? <Notice tone="error">{status.error}</Notice> : null}
         {status.warnings.map((w) => (
-          <p key={w} className="mb-2 rounded bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <Notice key={w} tone="warning">
             {w}
-          </p>
+          </Notice>
         ))}
         <div className="flex flex-wrap items-center gap-4">
-          <button
-            type="button"
-            disabled={status.checking}
-            onClick={refreshNow}
-            className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            Обновить данные сейчас
-          </button>
+          <Button disabled={status.checking} onClick={refreshNow}>
+            <RefreshCw className={status.checking ? 'animate-spin' : undefined} /> Обновить данные сейчас
+          </Button>
           <TtlSetting />
         </div>
       </Section>
@@ -108,20 +96,18 @@ function DataPage() {
           ). Загружаются в ваш браузер и хранятся только в нём.
         </p>
         {!bp ? (
-          <p className="text-sm">Загрузка…</p>
+          <p className="text-sm text-muted-foreground">Загрузка…</p>
         ) : bp.mode === 'noCaps' ? (
-          <p className="rounded bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            {bp.error} Оптимизатор работает в режиме «без порогов»: учитывает только урон и HP.
-          </p>
+          <Notice tone="warning">{bp.error} Оптимизатор работает в режиме «без порогов»: учитывает только урон и HP.</Notice>
         ) : (
           <p className="text-sm">
             Загружены {fmt(bp.fetchedAt)} ({bp.source === 'cache' ? 'из кэша' : 'только что'}); порогами покрыто {caps?.matched ?? 0} из{' '}
             {data?.quests.length ?? 0} квестов (у Lost City of Gold порогов нет нигде).
-            {bp.error ? <span className="block text-amber-700">{bp.error} Используются сохранённые.</span> : null}
+            {bp.error ? <span className="block text-warning">{bp.error} Используются сохранённые.</span> : null}
           </p>
         )}
         {caps?.warnings.map((w) => (
-          <p key={w} className="text-xs text-amber-700">
+          <p key={w} className="text-xs text-warning">
             {w}
           </p>
         ))}
@@ -164,43 +150,42 @@ function DataPage() {
             {data.rejects.length === 0 ? (
               <p className="text-sm">Все строки разобраны.</p>
             ) : (
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="text-neutral-500">
-                    <th className="pr-3">Лист</th>
-                    <th className="pr-3">Строка</th>
-                    <th className="pr-3">Ключ</th>
-                    <th>Причина</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Лист</TableHead>
+                    <TableHead>Строка</TableHead>
+                    <TableHead>Ключ</TableHead>
+                    <TableHead>Причина</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {data.rejects.map((r, i) => (
-                    <tr key={i} className="border-t border-neutral-200 dark:border-neutral-700">
-                      <td className="pr-3">{r.sheet}</td>
-                      <td className="pr-3">{r.row ?? '—'}</td>
-                      <td className="pr-3">{r.key ?? '—'}</td>
-                      <td>{r.reason}</td>
-                    </tr>
+                    <TableRow key={i}>
+                      <TableCell>{r.sheet}</TableCell>
+                      <TableCell>{r.row ?? '—'}</TableCell>
+                      <TableCell>{r.key ?? '—'}</TableCell>
+                      <TableCell className="whitespace-normal">{r.reason}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </Section>
 
           <Section title={`Несостыковки между листами (${data.warnings.length})`}>
-            <ul className="list-disc pl-5 text-sm">
+            <ul className="list-disc space-y-1 pl-5 text-sm">
               {data.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}
             </ul>
           </Section>
 
-          <Section title={`Нераспознанные эффекты навыков (${unparsed.length})`}>
-            <p className="mb-2 text-sm text-neutral-500">
-              Ещё {ignoredCount} клауз распознаны как небоевые или особые механики (время отдыха, лут, «выжить после смертельного удара»…) —
-              их движок пока не учитывает.
-            </p>
-            <ul className="list-disc pl-5 text-sm">
+          <Section
+            title={`Нераспознанные эффекты навыков (${unparsed.length})`}
+            description={`Ещё ${ignoredCount} клауз распознаны как небоевые или особые механики (время отдыха, лут, «выжить после смертельного удара»…) — их движок пока не учитывает.`}
+          >
+            <ul className="list-disc space-y-1 pl-5 text-sm">
               {unparsed.map((u) => (
                 <li key={u.skill + u.clause}>
                   <b>{u.skill}</b>: {u.clause}
@@ -210,6 +195,6 @@ function DataPage() {
           </Section>
         </>
       ) : null}
-    </main>
+    </Page>
   )
 }

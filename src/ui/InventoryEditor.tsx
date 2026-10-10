@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
+import { Button } from '#/components/ui/button.tsx'
+import { Input } from '#/components/ui/input.tsx'
+import { Textarea } from '#/components/ui/textarea.tsx'
 import { EMPTY_INVENTORY, mergeInventory, parseInventoryCsv, saveInventory, type Inventory } from '#/data/inventory.ts'
 import type { GameData } from '#/data/types.ts'
-
-const inputCls = 'rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-600 dark:bg-neutral-800'
-const btnCls = 'rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50'
+import { Notice } from '#/ui/layout.tsx'
 
 /** Ручной ввод и импорт CSV в инвентарь (общий для страниц «Инвентарь» и «Подбор»). */
 export function InventoryEditor({ data, inventory, onChange }: { data: GameData; inventory: Inventory; onChange: (inv: Inventory) => void }) {
@@ -24,35 +26,34 @@ export function InventoryEditor({ data, inventory, onChange }: { data: GameData;
   }
 
   return (
-    <div className="text-sm">
-      <p className="mb-2 text-neutral-600 dark:text-neutral-300">
+    <div className="space-y-3 text-sm">
+      <p className="text-muted-foreground">
         Сейчас в инвентаре: {inventory.items.length} предметов, {inventory.stones.length} камней, {inventory.spirits.length} духов.
         Формат строк: <code>type,name,quality</code> (type = item / stone / spirit).
       </p>
-      <textarea
+      <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={5}
-        placeholder={`item,${'Название меча'},Epic\nstone,Tide Element\nspirit,Bear Spirit`}
-        className={`${inputCls} mb-2 w-full font-mono`}
+        placeholder={'item,Название меча,Epic\nstone,Tide Element\nspirit,Bear Spirit'}
+        className="font-mono"
       />
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className={btnCls} onClick={() => void applyText(text)}>
-          Добавить из текста/CSV
-        </button>
-        <input
+        <Button onClick={() => void applyText(text)}>
+          <Plus /> Добавить из текста/CSV
+        </Button>
+        <Input
           type="file"
           accept=".csv,text/csv"
-          className="text-sm"
+          className="w-auto max-w-full"
           onChange={(e) => {
             const f = e.target.files?.[0]
             if (!f) return
             void f.text().then(applyText)
           }}
         />
-        <button
-          type="button"
-          className="text-sm underline"
+        <Button
+          variant="ghost"
           onClick={() => {
             void saveInventory(EMPTY_INVENTORY).then(() => {
               onChange(EMPTY_INVENTORY)
@@ -60,10 +61,10 @@ export function InventoryEditor({ data, inventory, onChange }: { data: GameData;
             })
           }}
         >
-          Очистить
-        </button>
+          <Trash2 /> Очистить
+        </Button>
       </div>
-      {report ? <p className="mt-2 rounded bg-neutral-100 p-2 dark:bg-neutral-800">{report}</p> : null}
+      {report ? <Notice>{report}</Notice> : null}
     </div>
   )
 }

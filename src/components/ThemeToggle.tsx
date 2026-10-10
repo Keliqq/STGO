@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Monitor, Moon, Sun } from 'lucide-react'
+import { Button } from '#/components/ui/button.tsx'
 
 type ThemeMode = 'light' | 'dark' | 'auto'
 
@@ -66,15 +68,12 @@ export default function ThemeToggle() {
       ? 'Тема: авто (как в системе). Нажмите, чтобы включить светлую.'
       : `Тема: ${mode === 'dark' ? 'тёмная' : 'светлая'}. Нажмите, чтобы сменить.`
 
+  const Icon = mode === 'auto' ? Monitor : mode === 'dark' ? Moon : Sun
+
   return (
-    <button
-      type="button"
-      onClick={toggleMode}
-      aria-label={label}
-      title={label}
-      className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-sm font-semibold text-[var(--sea-ink)] shadow-[0_8px_22px_rgba(30,90,72,0.08)] transition hover:-translate-y-0.5"
-    >
-      {mode === 'auto' ? 'Авто' : mode === 'dark' ? 'Тёмная' : 'Светлая'}
-    </button>
+    <Button variant="outline" size="sm" onClick={toggleMode} aria-label={label} title={label} className="shrink-0">
+      <Icon />
+      <span className="hidden sm:inline">{mode === 'auto' ? 'Авто' : mode === 'dark' ? 'Тёмная' : 'Светлая'}</span>
+    </Button>
   )
 }

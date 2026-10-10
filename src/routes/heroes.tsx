@@ -1,26 +1,26 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { Download, Trash2, Upload } from 'lucide-react'
+import { cn } from 'cn'
+import { Badge } from '#/components/ui/badge.tsx'
+import { Button } from '#/components/ui/button.tsx'
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '#/components/ui/card.tsx'
+import { Input } from '#/components/ui/input.tsx'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table.tsx'
+import { Textarea } from '#/components/ui/textarea.tsx'
 import { exportHeroesJson, loadHeroes, mergeHeroes, parseHeroesJson, saveHeroes, upsertByName } from '#/data/heroStore.ts'
 import { classIconId, itemIconId, skillIconId, spiritIconId, elementIconId } from '#/data/images.ts'
 import { importTitansDb, type ImportIssue } from '#/data/titansdb.ts'
 import type { GameData, HeroInstance } from '#/data/types.ts'
 import { calcStats, MAIN_STATS } from '#/engine/stats.ts'
+import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { useGameData } from '#/ui/dataSync.ts'
+import { Notice, Page, Section } from '#/ui/layout.tsx'
 
 export const Route = createFileRoute('/heroes')({ component: HeroesPage })
 
 const STAT_LABEL = { atk: 'ATK', def: 'DEF', hp: 'HP' } as const
-const btn = 'rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800'
-
-function download(name: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
-}
 
 function pct(x: number): string {
   return `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`
@@ -28,21 +28,21 @@ function pct(x: number): string {
 
 function ImportReport({ issues, summary }: { issues: ImportIssue[]; summary: string }) {
   return (
-    <div className="mt-3 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-700">
+    <Notice tone={issues.some((i) => i.level === 'error') ? 'warning' : 'success'} className="mt-4">
       <p className="font-semibold">{summary}</p>
       {issues.length > 0 ? (
-        <ul className="mt-2 list-disc pl-5">
+        <ul className="mt-1 list-disc pl-5">
           {issues.map((i, n) => (
-            <li key={n} className={i.level === 'error' ? 'text-red-700 dark:text-red-300' : 'text-amber-800 dark:text-amber-300'}>
+            <li key={n} className={i.level === 'error' ? 'text-destructive' : 'text-warning'}>
               строка {i.line}
               {i.hero ? `, ${i.hero}` : ''}: {i.message}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-1 text-neutral-500">Всё сопоставлено с данными таблицы.</p>
+        <p>Всё сопоставлено с данными таблицы.</p>
       )}
-    </div>
+    </Notice>
   )
 }
 
@@ -51,99 +51,107 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
   const model = calcStats(hero, data, { useReference: false })
   const ref = hero.reference?.stats
   return (
-    <article className="rounded border border-neutral-200 p-4 dark:border-neutral-700">
-      <header className="mb-3 flex items-center gap-3">
-        <GameIcon kind="class" id={classIconId(hero.className)} label={hero.className} size={40} />
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold">{hero.name}</h3>
-          <p className="text-sm text-neutral-500">
-            {hero.className}, уровень {hero.level}
-            {hero.titanSoul ? ', Душа Титана' : ''} · стихия {stats.element}
-          </p>
-        </div>
-        <button type="button" className={btn} onClick={onDelete}>
-          Удалить
-        </button>
-      </header>
-
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {hero.slots.map((s, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <GameIcon kind="item" id={s.item ? itemIconId(s.item) : null} label={s.item ?? 'пусто'} size={32} />
-            <div className="min-w-0">
-              <div className="truncate font-medium">{s.item ?? '—'}</div>
-              <div className="flex items-center gap-1 text-neutral-500">
-                {s.item ? s.quality : ''}
-                {s.element ? (
-                  <GameIcon kind="element" id={data.enchants.find((e) => e.name === s.element)?.iconId ?? elementIconId('Any')} label={s.element} size={14} />
-                ) : null}
-                {s.spirit ? <GameIcon kind="spirit" id={spiritIconId(s.spirit)} label={s.spirit} size={14} /> : null}
-              </div>
-            </div>
+    <article className="flex">
+      <Card className="flex-1 gap-4">
+        <CardHeader className="flex items-center gap-3">
+          <GameIcon kind="class" id={classIconId(hero.className)} label={hero.className} size={44} />
+          <div className="min-w-0 flex-1">
+            <CardTitle>
+              <h3 className="text-lg font-semibold">{hero.name}</h3>
+            </CardTitle>
+            <CardDescription>
+              {hero.className}, уровень {hero.level}
+              {hero.titanSoul ? ', Душа Титана' : ''} · стихия {stats.element}
+            </CardDescription>
           </div>
-        ))}
-      </div>
+          <CardAction>
+            <Button variant="ghost" size="sm" onClick={onDelete}>
+              <Trash2 /> Удалить
+            </Button>
+          </CardAction>
+        </CardHeader>
 
-      <div className="mb-3 flex flex-wrap gap-2 text-xs">
-        {stats.breakdown.skills
-          .filter((s) => s.type === 'Hero' || s.type === 'Innate' || s.type === 'Artifact')
-          .map((s, i) => (
-            <span key={i} className="flex items-center gap-1 rounded bg-neutral-100 px-2 py-1 dark:bg-neutral-800" title={s.text}>
-              <GameIcon kind="skill" id={skillIconId(s.name)} label={s.name} size={16} />
-              {s.name}
-              {s.tier ? ` (${s.tier})` : ''}
-            </span>
-          ))}
-      </div>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {hero.slots.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 p-1.5 text-xs">
+                <GameIcon kind="item" id={s.item ? itemIconId(s.item) : null} label={s.item ?? 'пусто'} size={32} />
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{s.item ?? '—'}</div>
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    {s.item ? s.quality : ''}
+                    {s.element ? (
+                      <GameIcon kind="element" id={data.enchants.find((e) => e.name === s.element)?.iconId ?? elementIconId('Any')} label={s.element} size={14} />
+                    ) : null}
+                    {s.spirit ? <GameIcon kind="spirit" id={spiritIconId(s.spirit)} label={s.spirit} size={14} /> : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
 
-      <table className="w-full text-sm">
-        <thead className="text-left text-neutral-500">
-          <tr>
-            <th className="font-normal" />
-            <th className="font-normal">Расчёт</th>
-            {ref ? <th className="font-normal">Экспорт</th> : null}
-            {ref ? <th className="font-normal" title="Расчёт с базой из модели роста по уровню, без эталона экспорта">Модель без эталона</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {MAIN_STATS.map((st) => (
-            <tr key={st}>
-              <td>{STAT_LABEL[st]}</td>
-              <td className="font-semibold">{stats[st]}</td>
-              {ref ? <td>{ref[st]}</td> : null}
-              {ref ? (
-                <td className="text-neutral-500">
-                  {model[st]} ({pct(model[st] / ref[st] - 1)})
-                </td>
-              ) : null}
-            </tr>
-          ))}
-          <tr>
-            <td>Крит</td>
-            <td>
-              {(stats.crit * 100).toFixed(0)}% ×{stats.critDmg.toFixed(1)}
-            </td>
-            {ref ? (
-              <td>
-                {(ref.crit * 100).toFixed(0)}% ×{ref.critDmg}
-              </td>
-            ) : null}
-          </tr>
-          <tr>
-            <td>Уклонение</td>
-            <td>{(stats.eva * 100).toFixed(0)}%</td>
-            {ref ? <td>{(ref.eva * 100).toFixed(0)}%</td> : null}
-          </tr>
-          <tr>
-            <td>Угроза</td>
-            <td>{stats.threat}</td>
-            {ref ? <td>{ref.threat}</td> : null}
-          </tr>
-        </tbody>
-      </table>
-      <p className="mt-2 text-xs text-neutral-500">
-        База: {stats.breakdown.baseSource === 'reference' ? 'из экспорта (уровень не менялся)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±10% HP)'}
-      </p>
+          <div className="flex flex-wrap gap-1.5">
+            {stats.breakdown.skills
+              .filter((s) => s.type === 'Hero' || s.type === 'Innate' || s.type === 'Artifact')
+              .map((s, i) => (
+                <Badge key={i} variant="secondary" className="gap-1.5 py-1" title={s.text}>
+                  <GameIcon kind="skill" id={skillIconId(s.name)} label={s.name} size={16} />
+                  {s.name}
+                  {s.tier ? ` (${s.tier})` : ''}
+                </Badge>
+              ))}
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead />
+                <TableHead>Расчёт</TableHead>
+                {ref ? <TableHead>Экспорт</TableHead> : null}
+                {ref ? <TableHead title="Расчёт с базой из модели роста по уровню, без эталона экспорта">Модель без эталона</TableHead> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {MAIN_STATS.map((st) => (
+                <TableRow key={st}>
+                  <TableCell className="text-muted-foreground">{STAT_LABEL[st]}</TableCell>
+                  <TableCell className="font-semibold">{stats[st]}</TableCell>
+                  {ref ? <TableCell>{ref[st]}</TableCell> : null}
+                  {ref ? (
+                    <TableCell className="text-muted-foreground">
+                      {model[st]} ({pct(model[st] / ref[st] - 1)})
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+              <TableRow>
+                <TableCell className="text-muted-foreground">Крит</TableCell>
+                <TableCell>
+                  {(stats.crit * 100).toFixed(0)}% ×{stats.critDmg.toFixed(1)}
+                </TableCell>
+                {ref ? (
+                  <TableCell>
+                    {(ref.crit * 100).toFixed(0)}% ×{ref.critDmg}
+                  </TableCell>
+                ) : null}
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">Уклонение</TableCell>
+                <TableCell>{(stats.eva * 100).toFixed(0)}%</TableCell>
+                {ref ? <TableCell>{(ref.eva * 100).toFixed(0)}%</TableCell> : null}
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">Угроза</TableCell>
+                <TableCell>{stats.threat}</TableCell>
+                {ref ? <TableCell>{ref.threat}</TableCell> : null}
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+        <CardFooter className="text-xs text-muted-foreground">
+          База: {stats.breakdown.baseSource === 'reference' ? 'из экспорта (уровень не менялся)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±10% HP)'}
+        </CardFooter>
+      </Card>
     </article>
   )
 }
@@ -168,10 +176,17 @@ function HeroesPage() {
     void saveHeroes(next).catch((e: unknown) => setError(`Не удалось сохранить: ${e instanceof Error ? e.message : String(e)}`))
   }
 
-  const importText = (text: string) => {
-    if (!data || !heroes) return
+  // Импорт мог начаться раньше, чем герои прочитались из IndexedDB: тогда дочитываем,
+  // иначе слияние с пустым списком перезаписало бы сохранённых героев.
+  const currentHeroes = async (): Promise<HeroInstance[]> => heroes ?? (await loadHeroes()).heroes
+
+  const importText = async (text: string) => {
+    if (!data) {
+      setReport({ issues: [], summary: 'Игровые данные ещё загружаются — повторите импорт через пару секунд.' })
+      return
+    }
     const r = importTitansDb(text, data)
-    const merged = upsertByName(heroes, r.heroes)
+    const merged = upsertByName(await currentHeroes(), r.heroes)
     update(merged.heroes)
     setReport({ issues: r.issues, summary: `Импорт: добавлено ${merged.added}, обновлено ${merged.updated}, замечаний ${r.issues.length}.` })
   }
@@ -182,18 +197,15 @@ function HeroesPage() {
       const r = parseHeroesJson(text)
       if ('error' in r) setReport({ issues: [], summary: r.error })
       else {
-        update(mergeHeroes(heroes ?? [], r.heroes))
+        update(mergeHeroes(await currentHeroes(), r.heroes))
         setReport({ issues: [], summary: `Загружено героев из JSON: ${r.heroes.length}.` })
       }
-    } else importText(text)
+    } else await importText(text)
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-6 text-3xl font-bold">Герои</h1>
-
-      <section className="mb-8">
-        <h2 className="mb-3 text-xl font-semibold">Импорт из TitansDB</h2>
+    <Page title="Герои" description="Импортируйте экспорт TitansDB. Герои хранятся только в этом браузере.">
+      <Section title="Импорт из TitansDB">
         <div
           onDragOver={(e) => {
             e.preventDefault()
@@ -206,53 +218,61 @@ function HeroesPage() {
             const file = e.dataTransfer.files[0]
             if (file) void importFile(file)
           }}
-          className={`rounded border-2 border-dashed p-4 ${dragging ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950' : 'border-neutral-300 dark:border-neutral-600'}`}
+          className={cn('space-y-3 rounded-lg border-2 border-dashed p-4 transition-colors', dragging ? 'border-primary bg-primary/5' : 'border-border')}
         >
-          <p className="mb-2 text-sm">
-            Перетащите сюда файл экспорта (.txt) или файл героев (.json), выберите его{' '}
-            <input type="file" accept=".txt,.tsv,.json,text/plain,application/json" onChange={(e) => e.target.files?.[0] && void importFile(e.target.files[0])} className="text-sm" />
-            или вставьте текст:
-          </p>
-          <textarea
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+            <Upload className="size-5 text-muted-foreground" />
+            <span>Перетащите сюда файл экспорта (.txt) или файл героев (.json), выберите его</span>
+            <Input
+              type="file"
+              accept=".txt,.tsv,.json,text/plain,application/json"
+              onChange={(e) => e.target.files?.[0] && void importFile(e.target.files[0])}
+              className="w-auto max-w-full"
+            />
+            <span>или вставьте текст:</span>
+          </div>
+          <Textarea
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
             rows={4}
             placeholder="Строки экспорта TitansDB, поля через TAB"
-            className="w-full rounded border border-neutral-300 p-2 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900"
+            className="font-mono text-xs"
           />
-          <button type="button" className={btn} disabled={!data || !paste.trim()} onClick={() => importText(paste)}>
-            Импортировать текст
-          </button>
-          {!data ? <p className="mt-2 text-sm text-neutral-500">Загрузка игровых данных…</p> : null}
+          <div className="flex items-center gap-3">
+            <Button disabled={!data || !paste.trim()} onClick={() => void importText(paste)}>
+              Импортировать текст
+            </Button>
+            {!data ? <span className="text-sm text-muted-foreground">Загрузка игровых данных…</span> : null}
+          </div>
         </div>
         {report ? <ImportReport {...report} /> : null}
-      </section>
+      </Section>
 
       <section>
-        <div className="mb-3 flex items-center gap-3">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <h2 className="flex-1 text-xl font-semibold">Мои герои ({heroes?.length ?? '…'})</h2>
-          <button type="button" className={btn} disabled={!heroes?.length} onClick={() => heroes && download('st-heroes.json', exportHeroesJson(heroes))}>
-            Экспорт JSON
-          </button>
-          <button
-            type="button"
-            className={btn}
+          <Button variant="outline" size="sm" disabled={!heroes?.length} onClick={() => heroes && downloadText('st-heroes.json', exportHeroesJson(heroes))}>
+            <Download /> Экспорт JSON
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             disabled={!heroes?.length}
             onClick={() => {
               if (window.confirm('Удалить всех героев из этого браузера?')) update([])
             }}
           >
-            Очистить
-          </button>
+            <Trash2 /> Очистить
+          </Button>
         </div>
-        {error ? <p className="mb-3 rounded bg-red-100 p-3 text-sm text-red-900 dark:bg-red-950 dark:text-red-200">{error}</p> : null}
-        {heroes && heroes.length === 0 ? <p className="text-sm text-neutral-500">Пока нет героев — импортируйте экспорт TitansDB.</p> : null}
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {heroes && heroes.length === 0 ? <p className="text-sm text-muted-foreground">Пока нет героев — импортируйте экспорт TitansDB.</p> : null}
         <div className="grid gap-4 md:grid-cols-2">
           {data && heroes
             ? heroes.map((h) => <HeroCard key={h.id} hero={h} data={data} onDelete={() => update(heroes.filter((x) => x.id !== h.id))} />)
             : null}
         </div>
       </section>
-    </main>
+    </Page>
   )
 }

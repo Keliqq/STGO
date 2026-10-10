@@ -25,7 +25,8 @@ export default tseslint.config(
   },
   {
     // Файлы роутов TanStack экспортируют `Route` рядом с компонентом — это штатный паттерн
-    files: ['src/routes/**/*.tsx'],
+    // и для компонентов shadcn (экспорт `buttonVariants`/`badgeVariants` рядом с компонентом)
+    files: ['src/routes/**/*.tsx', 'src/components/ui/**/*.tsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
   {
