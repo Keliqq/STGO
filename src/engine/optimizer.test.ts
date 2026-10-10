@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Тесты оптимизатора: ограничения слотов/артефактов/камней/духов, детерминизм,
  * и проверка отсева — «отсев (top-K + разнообразные + адаптивный K) не выбрасывает лучший
  * по симуляции вариант слота» на 20 случаях (доля промахов фиксируется в PROGRESS.md).
@@ -50,6 +50,7 @@ const baseInput = (hero: HeroInstance, over: Partial<OptimizerInput> = {}): Opti
 const itemByName = (name: string) => data.items.find((i) => i.name === name)!
 const enchantByName = (name: string) => data.enchants.find((e) => e.name === name)!
 const clsOf = (h: HeroInstance) => data.heroClasses.find((c) => c.name === h.className)!
+const maxTier = (h: HeroInstance) => Math.max(0, ...h.slots.filter((s) => s.item).map((s) => itemByName(s.item!).tier))
 
 const elValue = new Map(data.enchants.filter((e) => e.kind === 'element').map((e) => [e.name, e.elementValue ?? 0]))
 const slotFeats = (heroEl: string) => (sc: SlotConfig): SlotFeatures => {
@@ -85,6 +86,27 @@ describe('оптимизатор: ограничения', () => {
       }
     })
     expect(artifacts).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('оптимизатор: ограничения на героя (per-hero), а не на отряд', () => {
+  it('слабому герою не предлагаются предметы под сильного', async () => {
+    const strong = heroes.slice().sort((a, b) => maxTier(b) - maxTier(a))[0]
+    const weak: HeroInstance = { ...heroes[0], id: 'weak', name: 'Слабый', slots: heroes[0].slots.map((s) => ({ ...s, item: null, element: null, spirit: null })) }
+    const res = await runOptimizer(data, {
+      heroes: [strong, weak],
+      mode: 'quest',
+      quests: [{ quest: quest(), weight: 1 }],
+      // Общий потолок высокий, но герои ограничены каждый своим надетым (макс. надетый у него + 1).
+      constraints: { maxItemTier: 15, maxQuality: 'Flawless', maxStoneTier: 9, spirits: null, perHero: [{ hero: 0, maxItemTier: 15, maxStoneTier: 9 }, { hero: 1, maxItemTier: 3, maxStoneTier: 9 }] },
+      simBudget: 40,
+      simRuns: 200,
+    })
+    for (const sc of res.configs[1]) {
+      if (!sc.item) continue
+      expect(itemByName(sc.item).tier, `слабый герой: ${sc.item}`).toBeLessThanOrEqual(3)
+    }
+    expect(res.configs[0].some((sc) => sc.item && itemByName(sc.item).tier > 3)).toBe(true)
   })
 })
 

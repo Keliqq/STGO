@@ -18,6 +18,7 @@ import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { useGameData } from '#/ui/dataSync.ts'
 import { Notice, Page, Section } from '#/ui/layout.tsx'
+import { HeroWeightsPanel } from '#/ui/optimize/HeroWeightsPanel.tsx'
 
 export const Route = createFileRoute('/heroes')({ component: HeroesPage })
 
@@ -159,6 +160,9 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
         <CardFooter className="text-xs text-muted-foreground">
           База: {stats.breakdown.baseSource === 'reference' ? 'из экспорта (уровень не менялся)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±10% HP)'}
         </CardFooter>
+        <CardContent>
+          <HeroWeightsPanel hero={hero} data={data} />
+        </CardContent>
       </Card>
     </article>
   )

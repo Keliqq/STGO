@@ -16,13 +16,16 @@ import { QUALITIES, type HeroInstance, type Quality, type Quest } from '#/data/t
 import {
   defaultConstraints,
   NO_OVERRIDES,
+  perHeroTierNote,
   resolveConstraints,
   upgradeOutcome,
   upgradeScenarios,
   type ConstraintOverrides,
 } from '#/engine/constraints.ts'
 import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
+import { SEED_STAT_PER_SEED } from '#/engine/constants.ts'
 import type { SkillAdviceResult } from '#/engine/skills.ts'
+import { seedAdviceFromWeights, type SeedAdvice } from '#/engine/statWeights.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
@@ -111,6 +114,8 @@ function OptimizePage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [result, setResult] = useState<{ res: OptimizerResult; fromCache: boolean; ctx: RunContext } | null>(null)
   const [advice, setAdvice] = useState<SkillAdviceResult | null>(null)
+  /** Совет по семенам — из весов статов (см. ResultView), отдельной симуляции не требует. */
+  const [seeds, setSeeds] = useState<(SeedAdvice & { heroIndex: number })[] | undefined>(undefined)
   const [upgrades, setUpgrades] = useState<UpgradeRow[] | null>(null)
   const [upgrading, setUpgrading] = useState(false)
   const cancelRequested = useRef(false)
@@ -125,6 +130,7 @@ function OptimizePage() {
   const selectedTeam = useMemo(() => heroes.filter((h) => selHeroes.includes(h.id)), [heroes, selHeroes])
   const defaults = useMemo(() => (data ? defaultConstraints(data, selectedTeam, titanSoul) : null), [data, selectedTeam, titanSoul])
   const cons = defaults ? resolveConstraints(defaults, overrides) : null
+  const tierNote = useMemo(() => (cons ? perHeroTierNote(selectedTeam, cons) : []), [cons, selectedTeam])
   const hasOverrides = Object.values(overrides).some((v) => v !== null)
 
   /** Выбранные ограничения сразу сохраняются (IndexedDB) и подхватываются при следующем визите. */
@@ -160,6 +166,8 @@ function OptimizePage() {
       robust,
       constraints: cons,
       titanSoul,
+      // Веса статов («почему именно эти вещи») — в режиме «квест»: в универсальном отдача видна в таблице локаций.
+      withStatWeights: mode === 'quest',
     }
   }
 
@@ -179,6 +187,7 @@ function OptimizePage() {
     setError(null)
     setResult(null)
     setAdvice(null)
+    setSeeds(undefined)
     setUpgrades(null)
     setRunning(true)
     setProgress({ done: 0, total: 1 })
@@ -188,6 +197,8 @@ function OptimizePage() {
       const { result: res, fromCache } = await engineRef.current.optimize(data, input, (done, total) => setProgress({ done, total }))
       setResult({ res, fromCache, ctx })
       main = res
+      // Совет по семенам — из весов статов результата (они уже посчитаны оптимизатором).
+      setSeeds(res.statWeights ? res.statWeights.heroes.map((h) => ({ ...seedAdviceFromWeights(res.statWeights!, SEED_STAT_PER_SEED, h.index), heroIndex: h.index })) : undefined)
       try {
         const cfgHeroes = input.heroes.map((h, i) => applyHeroConfig(h, res.configs[i]))
         setAdvice(await engineRef.current.skillAdvice(data, cfgHeroes, input.champion ?? null, input.quests))
@@ -385,8 +396,9 @@ function OptimizePage() {
           </Field>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          По умолчанию: тир ≤ {defaults.maxItemTier} (макс. надетый + 1), качество ≤ {defaults.maxQuality}, камни ≤ T{defaults.maxStoneTier} (или макс.
-          надетого), духи — все обычные{defaults.spirits?.length === spirits.length ? '' : ', без Титана (не у всех героев есть Душа)'}.
+          По умолчанию: тир ≤ {defaults.maxItemTier} — НА КАЖДОГО ГЕРОЯ «макс. надетый у него + 1»{tierNote.length > 0 ? ` (${tierNote.join(', ')})` : ''},
+          качество ≤ {defaults.maxQuality}, камни ≤ T{defaults.maxStoneTier} (или макс. надетого), духи — все обычные
+          {defaults.spirits?.length === spirits.length ? '' : ', без Титана (не у всех героев есть Душа)'}. Своё значение в поле «Max тир» — общий потолок для всех.
         </p>
         <details className="mt-3 rounded-md border p-3">
           <summary className="cursor-pointer text-sm">
@@ -442,7 +454,7 @@ function OptimizePage() {
 
       {result ? (
         <>
-          <ResultView data={data} team={result.ctx.team} result={result} objectiveLabel={result.ctx.objectiveLabel} />
+          <ResultView data={data} team={result.ctx.team} result={result} objectiveLabel={result.ctx.objectiveLabel} seeds={seeds} />
           {upgrades ? <UpgradeView team={result.ctx.team} rows={upgrades} objectiveLabel={result.ctx.objectiveLabel} /> : null}
           {advice && advice.advice.length > 0 ? <SkillAdviceView team={result.ctx.team} advice={advice} /> : null}
           <RealityChecksView

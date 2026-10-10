@@ -110,6 +110,60 @@ export interface Fighter {
   group?: ClassGroup
   isChampion?: boolean
   skills: Skill[]
+  /**
+   * Внешняя правка статов (веса статов, семена силы) — уже применена к полям выше,
+   * здесь хранится только её «хвост», который бой читает отдельно: прибавка к максимуму HP
+   * и к уклонению в tryHit. См. FighterBonus / applyFighterBonus.
+   */
+  bonus?: FighterBonus
+}
+
+/**
+ * Внешняя правка статов бойца — «а что если добавить герою N стата». Нужна там, где статы
+ * нельзя выразить экипировкой: веса статов (src/engine/statWeights.ts) и совет по семенам силы.
+ * Поля трактуются как в эффектах навыков: atk/def — плоская прибавка к стату (то есть «+5% ATK»
+ * = 0.05 × текущий ATK), hp — плоская прибавка к максимуму HP, crit/eva/critDmg — прибавка к доле
+ * или множителю, threat — плоская, elementAll — величина стихии в стихии героя (для барьера).
+ */
+export interface FighterBonus {
+  atk?: number
+  def?: number
+  hp?: number
+  crit?: number
+  eva?: number
+  critDmg?: number
+  threat?: number
+  /** Прибавка к стихии героя (в его собственной стихии). */
+  element?: number
+}
+
+/** Есть ли в бонусе хоть что-то ненулевое. */
+export function hasBonus(b: FighterBonus | undefined | null): boolean {
+  if (!b) return false
+  return Object.values(b).some((v) => (v ?? 0) !== 0)
+}
+
+/** Боец с применённым бонусом (исходный объект не мутируется). */
+export function applyFighterBonus(f: Fighter, b: FighterBonus): Fighter {
+  if (!hasBonus(b)) return f
+  const elements = { ...f.elements }
+  if (b.element) {
+    // Стихия бойца — его собственная (у «Any»-классов она пустая: стихию задаёт камень, см. stats.ts).
+    const own = (Object.keys(elements) as Element[])[0]
+    if (own) elements[own] = (elements[own] ?? 0) + b.element
+  }
+  return {
+    ...f,
+    atk: f.atk + (b.atk ?? 0),
+    def: f.def + (b.def ?? 0),
+    hp: f.hp + (b.hp ?? 0),
+    crit: f.crit + (b.crit ?? 0),
+    eva: f.eva + (b.eva ?? 0),
+    critDmg: f.critDmg + (b.critDmg ?? 0),
+    threat: f.threat + (b.threat ?? 0),
+    elements,
+    bonus: b,
+  }
 }
 
 /** Особые боевые механики, собранные со всех навыков бойца. */
@@ -557,7 +611,9 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     }
     selfStatic.push(sm)
     selfCond.push(cond)
-    maxHp.push(Math.max(1, Math.floor((f.hp + hpFlat) * (1 + hpPct))))
+    // Внешняя правка HP (FighterBonus.hp) — плоская прибавка к максимуму, как «+N Health» навыка.
+    const bonusHp = f.bonus?.hp ?? 0
+    maxHp.push(Math.max(1, Math.floor((f.hp + bonusHp + hpFlat) * (1 + hpPct))))
     manaMax.push(Math.floor((f.manaShield + manaFlat) * (1 + manaPct)))
   })
 
@@ -666,6 +722,8 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       return
     }
     let eva = sp.evaSet ?? f.eva + m.eva
+    // Внешняя правка уклонения (веса статов): +N п.п. к шансу уклонения.
+    eva += f.bonus?.eva ?? 0
     if (p.extreme) eva *= 1 - EXTREME_EVA_PENALTY
     // ASSUMPTION: A42 — уклонение ограничено пределом; «+N% to max Evasion» его поднимает.
     eva = Math.min(eva, p.evaCap + sp.maxEvaBonusPct / 100)
@@ -730,7 +788,8 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       // «Equipped Shield's DEF is added to ATK» (A45) и прибавка от дренажа (Hemma) — плоские.
       let atk = (f.atk + (f.atkFromShieldDef ?? 0) + drainAtk[i] + m.atkFlat) * (1 + m.atkPct) * atkBonus
       if (sp.threatAtkPct > 0) atk *= 1 + (sp.threatAtkPct / 100) * (f.threat / THREAT_ATTACK_MULTIPLIER_DIVISOR)
-      const critChance = sp.critSet ?? f.crit + m.crit
+      const critChance = sp.critSet ?? f.crit + m.crit + (f.bonus?.crit ?? 0)
+
       let isCrit = false
       if (riposteArmed[i]) {
         isCrit = true
@@ -742,7 +801,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       }
       let dmg = atk
       if (isCrit) {
-        dmg *= f.critDmg + m.critDmg + consec[i] * (sp.consecCritPct / 100)
+        dmg *= f.critDmg + m.critDmg + (f.bonus?.critDmg ?? 0) + consec[i] * (sp.consecCritPct / 100)
         consec[i] = Math.min(consec[i] + 1, sp.consecCritMax)
       } else consec[i] = 0
       const ignoreBarrier = sp.firstRoundCrit && round === 1 && isCrit // Iaido: крит игнорирует барьер
@@ -788,6 +847,28 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     }
   }
   return { win: false, rounds: p.maxRounds, alive, dmgDealt, minSurvivorHpFrac: minSurvivorHpFrac() }
+}
+
+/**
+ * Доли атак монстра по каждому бойцу (в сумме 1): 20% ударов — AoE по всем живым,
+ * остальные — одиночная цель с вероятностью threat / Σ threat (A30/A31).
+ * Это ожидание до боя, поэтому «кто принимает удары» не зависит от исхода каждого прогона.
+ */
+export function threatShares(fighters: Fighter[], opts: { aoeChance?: number } = {}): number[] {
+  const n = fighters.length
+  if (n === 0) return []
+  const aoe = opts.aoeChance ?? AOE_CHANCE
+  // Один боец (или бой без AoE по механике) — все удары идут в него.
+  if (n === 1) return [1]
+  const sum = fighters.reduce((a, f) => a + Math.max(0, f.threat), 0)
+  return fighters.map((f) => (1 - aoe) * (sum > 0 ? Math.max(0, f.threat) / sum : 1 / n) + aoe / n)
+}
+
+/** Вклад каждого бойца в каждую стихию барьера квеста: [герой][стихия] = величина. */
+export function elementContributions(fighters: Fighter[], quest: Quest): { elements: Element[]; values: number[][] } {
+  const elements = quest.barrier?.elements ?? []
+  const values = fighters.map((f) => elements.map((el) => (f.elements[el] ?? 0) + f.elementAny * (f.barrierAnyPct / 100)))
+  return { elements, values }
 }
 
 /** N прогонов Монте-Карло. Детерминированно: один и тот же seed → один и тот же результат. */

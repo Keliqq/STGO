@@ -18,7 +18,7 @@ import {
   TITAN_SPIRIT_NAME,
 } from './constants.ts'
 import { QUALITY_ORDER } from './quality.ts'
-import { applyHeroConfig, type OptimizerConstraints, type OptimizerInput, type OptimizerResult, type SlotExplanation } from './optimizer.ts'
+import { applyHeroConfig, capForHero, type OptimizerConstraints, type OptimizerInput, type OptimizerResult, type PerHeroCap, type SlotExplanation } from './optimizer.ts'
 
 /** Переопределения пользователя; null — взять значение по умолчанию. */
 export interface ConstraintOverrides {
@@ -38,28 +38,60 @@ export function maxDataTier(data: GameData): number {
 /**
  * Ограничения по умолчанию для отряда. Без героев или без надетых предметов — тир не ограничен
  * (макс. тир таблицы). titanSoul — переопределение «Души Титана» со страницы подбора.
+ *
+ * Тиры считаются НА КАЖДОГО ГЕРОЯ (требование владельца, сессия 13): «макс. тир = макс. надетый
+ * у этого героя + DEFAULT_ITEM_TIER_HEADROOM», иначе слабому герою предлагались вещи под сильного.
+ * maxItemTier/maxStoneTier отряда остаются верхней границей (для переопределений пользователя).
  */
 export function defaultConstraints(data: GameData, team: HeroInstance[], titanSoul: 'as-is' | 'on' | 'off' = 'as-is'): OptimizerConstraints {
   const itemTier = new Map(data.items.map((i) => [i.name, i.tier]))
   const stoneTier = new Map(data.enchants.filter((e) => e.kind === 'element').map((e) => [e.name, e.tier ?? 0]))
-  const slots = team.flatMap((h) => h.slots)
-  const equippedTiers = slots.map((s) => (s.item ? itemTier.get(s.item) : undefined)).filter((t): t is number => t != null)
   const dataTier = maxDataTier(data)
-  const maxItemTier = equippedTiers.length > 0 ? Math.min(dataTier, Math.max(...equippedTiers) + DEFAULT_ITEM_TIER_HEADROOM) : dataTier
-  const maxStoneTier = Math.max(DEFAULT_MAX_STONE_TIER, ...slots.map((s) => (s.element ? (stoneTier.get(s.element) ?? 0) : 0)))
+  const perHero: PerHeroCap[] = team.map((h, hi) => {
+    const equippedItems = h.slots.map((s) => (s.item ? itemTier.get(s.item) : undefined)).filter((t): t is number => t != null)
+    const heroItemTier = equippedItems.length > 0 ? Math.min(dataTier, Math.max(...equippedItems) + DEFAULT_ITEM_TIER_HEADROOM) : null
+    const heroStoneTier = Math.max(DEFAULT_MAX_STONE_TIER, ...h.slots.map((s) => (s.element ? (stoneTier.get(s.element) ?? 0) : 0)))
+    return {
+      hero: hi,
+      maxItemTier: heroItemTier ?? dataTier,
+      maxStoneTier: heroStoneTier,
+    }
+  })
   const allSoul = team.length > 0 && team.every((h) => (titanSoul === 'as-is' ? h.titanSoul : titanSoul === 'on'))
   const spirits = data.enchants.filter((e) => e.kind === 'spirit' && (allSoul || e.name !== TITAN_SPIRIT_NAME)).map((e) => e.name)
-  return { maxItemTier, maxQuality: DEFAULT_MAX_QUALITY, maxStoneTier, spirits }
+  return {
+    // Верхняя граница отряда — максимум по героям (у каждого своё ограничение в perHero).
+    maxItemTier: perHero.length > 0 ? Math.max(...perHero.map((c) => c.maxItemTier)) : dataTier,
+    maxQuality: DEFAULT_MAX_QUALITY,
+    maxStoneTier: perHero.length > 0 ? Math.max(...perHero.map((c) => c.maxStoneTier ?? 0)) : DEFAULT_MAX_STONE_TIER,
+    spirits,
+    perHero,
+  }
 }
 
 /** Итоговые ограничения: переопределения пользователя поверх значений по умолчанию. */
 export function resolveConstraints(defaults: OptimizerConstraints, o: ConstraintOverrides): OptimizerConstraints {
+  const spirits = o.spirits ?? defaults.spirits
+  // Ручной список духов снимает ограничения «по герою» — иначе выбор пользователя не применился бы.
+  const keepPerHero = o.spirits == null
   return {
     maxItemTier: o.maxItemTier ?? defaults.maxItemTier,
     maxQuality: o.maxQuality ?? defaults.maxQuality,
     maxStoneTier: o.maxStoneTier ?? defaults.maxStoneTier,
-    spirits: o.spirits ?? defaults.spirits,
+    spirits,
+    perHero: keepPerHero ? defaults.perHero : undefined,
   }
+}
+
+/**
+ * Пояснение к ограничениям по герою: «Антуан — до T9, Беовульф — до T7». Пусто, если у всех
+ * одинаково или ограничение снято переопределением.
+ */
+export function perHeroTierNote(team: HeroInstance[], cons: OptimizerConstraints): string[] {
+  if (!cons.perHero || cons.perHero.length === 0) return []
+  const caps = team.map((h, i) => ({ name: h.name, cap: capForHero(cons, i).maxItemTier }))
+  if (new Set(caps.map((c) => c.cap)).size <= 1) return []
+  return caps.map((c) => `${c.name} — до T${c.cap}`)
 }
 
 export const nextQuality = (q: Quality): Quality | null => QUALITY_ORDER[QUALITY_ORDER.indexOf(q) + 1] ?? null

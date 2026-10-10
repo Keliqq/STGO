@@ -14,6 +14,7 @@ import { defaultConstraints } from '../src/engine/constraints.ts'
 import { fighterFromChampion, fighterFromHero, simulateTeam } from '../src/engine/combat.ts'
 import { applyHeroConfig, questLabel, runOptimizer } from '../src/engine/optimizer.ts'
 import { rerollAdvice } from '../src/engine/skills.ts'
+import { threatWarning } from '../src/engine/statWeights.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const data = fixtureGameData()
@@ -42,6 +43,8 @@ const heroMaxTier = (level: number): number => data.heroLevels.find((l) => l.lev
 const realTier = Math.max(...team.map((h) => heroMaxTier(h.level))) + 1
 
 const defaults = defaultConstraints(data, team)
+/** Потолки тира по героям: «макс. надетый у него + 1» (сессия 13 — ограничения на героя). */
+const perHeroNote = (defaults.perHero ?? []).map((c, i) => `${team[i]?.name ?? `герой ${i + 1}`} T${c.maxItemTier}`).join(', ')
 
 interface PoolCase {
   title: string
@@ -57,7 +60,7 @@ const pools: PoolCase[] = [
     constraints: { maxItemTier: realTier, maxQuality: 'Legendary', maxStoneTier: realTier, spirits: null },
   },
   {
-    title: `ограничения по умолчанию: до T${defaults.maxItemTier} (макс. надетый + 1), ${defaults.maxQuality}, камни до T${defaults.maxStoneTier}, духи без Титана`,
+    title: `ограничения по умолчанию: до T${defaults.maxItemTier} на героя (макс. надетый у него + 1; ${perHeroNote}), ${defaults.maxQuality}, камни до T${defaults.maxStoneTier}, духи без Титана`,
     constraints: defaults,
   },
 ]
@@ -79,13 +82,26 @@ function renderCase(title: string, res: OptimizerResult, ms: number, before: num
   if (res.worstQuest) lines.push(`- Худшая локация: ${res.worstQuest.label} — ${pct(res.worstQuest.winRate)}`)
   for (const w of res.warnings) lines.push(`- ⚠ ${w}`)
   lines.push('')
-  lines.push('| Герой | Слот | Было | Стало | Отдача |')
-  lines.push('|---|---|---|---|---|')
+  lines.push('| Герой | Слот | Было | Стало | Отдача | Почему (какой стат) |')
+  lines.push('|---|---|---|---|---|---|')
   res.explanations.forEach((expls, hi) => {
     for (const e of expls) {
-      lines.push(`| ${team[hi].name} | ${e.slot + 1} | ${e.from} | ${e.to} | ${e.winRateDelta >= 0 ? '+' : ''}${(e.winRateDelta * 100).toFixed(1)} п.п. |`)
+      const why = [e.statHint?.text, e.statHint?.fallback ? `минус: ${e.statHint.fallback}` : ''].filter(Boolean).join(' · ')
+      lines.push(`| ${team[hi].name} | ${e.slot + 1} | ${e.from} | ${e.to} | ${e.winRateDelta >= 0 ? '+' : ''}${(e.winRateDelta * 100).toFixed(1)} п.п. | ${why || '—'} |`)
     }
   })
+  const w = res.statWeights
+  if (w) {
+    lines.push('')
+    lines.push(`Веса статов (метрика: ${w.metric}${w.probe ? `, на ослабленном зонде: HP ÷ ${w.probe.hpFactor.toFixed(0)}, урон ÷ ${w.probe.dmgFactor.toFixed(1)}` : ''}):`)
+    for (const h of w.heroes) lines.push(`- ${h.name}: ${h.headline}`)
+    const shares = w.threat.map((t) => `${t.name} ${(t.share * 100).toFixed(0)}%`).join(', ')
+    lines.push(`- Доли атак босса: ${shares}`)
+    const tankIdx = team.length > 1 ? team.map((h) => fighterFromHero(h, data).def).reduce((b, d, i, a) => (d > a[b] ? i : b), 0) : null
+    const warn = threatWarning(w, tankIdx)
+    if (warn) lines.push(`- ⚠ ${warn}`)
+    if (w.barrier) lines.push(`- Барьер ${w.barrier.bestElement} ${w.barrier.hp}: у отряда ${w.barrier.have}${w.barrier.broken ? ' (пробит)' : `, не хватает ${w.barrier.missing}`}`)
+  }
   if (adviceText.length) {
     lines.push('')
     lines.push('Навыки:')
@@ -116,6 +132,8 @@ for (const q of chosen) {
       mode: 'quest',
       quests: [{ quest: q, weight: 1 }],
       constraints: p.constraints,
+      withStatWeights: true,
+      statWeightRuns: 500,
     }
     const before = baseWinRate([q], [1])
     const t0 = Date.now()

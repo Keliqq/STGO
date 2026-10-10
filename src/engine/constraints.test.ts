@@ -10,10 +10,12 @@ import {
   maxDataTier,
   NO_OVERRIDES,
   nextQuality,
+  perHeroTierNote,
   resolveConstraints,
   upgradeOutcome,
   upgradeScenarios,
 } from './constraints.ts'
+import { capForHero } from './optimizer.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult } from './optimizer.ts'
 
 const data = fixtureGameData()
@@ -27,13 +29,35 @@ const bare = (h: HeroInstance): HeroInstance => ({
 })
 
 describe('defaultConstraints', () => {
-  it('тир = макс. надетый в отряде + 1, качество Superior, камни ≥ T9', () => {
+  it('тир, качество и камни — на каждого героя (макс. надетый у него + 1)', () => {
     const team = heroes.slice(0, 2)
-    const maxEquipped = Math.max(...team.flatMap((h) => h.slots).filter((s) => s.item).map((s) => tierOf(s.item!)))
     const c = defaultConstraints(data, team)
-    expect(c.maxItemTier).toBe(Math.min(maxEquipped + 1, maxDataTier(data)))
+    team.forEach((h, hi) => {
+      const equipped = h.slots.filter((s) => s.item).map((s) => tierOf(s.item!))
+      const own = c.perHero!.find((x) => x.hero === hi)!
+      const expected = equipped.length > 0 ? Math.min(Math.max(...equipped) + 1, maxDataTier(data)) : maxDataTier(data)
+      expect(own.maxItemTier, `герой ${hi}`).toBe(expected)
+      expect(own.maxStoneTier).toBeGreaterThanOrEqual(DEFAULT_MAX_STONE_TIER)
+    })
     expect(c.maxQuality).toBe(DEFAULT_MAX_QUALITY)
-    expect(c.maxStoneTier).toBeGreaterThanOrEqual(DEFAULT_MAX_STONE_TIER)
+    // Верхняя граница отряда — максимум по героям (для переопределений пользователя).
+    expect(c.maxItemTier).toBe(Math.max(...c.perHero!.map((x) => x.maxItemTier)))
+  })
+
+  it('слабый герой не получает тир сильного (per-hero, а не на отряд)', () => {
+    const strong = heroes.slice().sort((a, b) => Math.max(...b.slots.filter((s) => s.item).map((s) => tierOf(s.item!))) - Math.max(...a.slots.filter((s) => s.item).map((s) => tierOf(s.item!))))[0]
+    const weak: HeroInstance = {
+      ...heroes[0],
+      slots: heroes[0].slots.map((s) => (s.item ? { ...s, item: data.items.find((i) => i.name === s.item && i.tier <= 2)?.name ?? s.item } : s)),
+    }
+    const strongTier = Math.max(...strong.slots.filter((s) => s.item).map((s) => tierOf(s.item!)))
+    const weakTiers = weak.slots.filter((s) => s.item).map((s) => tierOf(s.item!))
+    const c = defaultConstraints(data, [strong, weak])
+    const capStrong = c.perHero!.find((x) => x.hero === 0)!.maxItemTier
+    const capWeak = c.perHero!.find((x) => x.hero === 1)!.maxItemTier
+    expect(capStrong).toBe(Math.min(strongTier + 1, maxDataTier(data)))
+    expect(capWeak).toBe(Math.min(Math.max(...weakTiers) + 1, maxDataTier(data)))
+    expect(capWeak).toBeLessThanOrEqual(capStrong)
   })
 
   it('камни: если надет камень выше T9 — лимит = его тир', () => {
@@ -41,12 +65,14 @@ describe('defaultConstraints', () => {
     expect(top.tier).toBeGreaterThan(DEFAULT_MAX_STONE_TIER)
     const h = bare(heroes[0])
     h.slots[0] = { ...h.slots[0], element: top.name }
-    expect(defaultConstraints(data, [h]).maxStoneTier).toBe(top.tier)
-    expect(defaultConstraints(data, [bare(heroes[0])]).maxStoneTier).toBe(DEFAULT_MAX_STONE_TIER)
+    expect(defaultConstraints(data, [h]).perHero![0].maxStoneTier).toBe(top.tier)
+    expect(defaultConstraints(data, [bare(heroes[0])]).perHero![0].maxStoneTier).toBe(DEFAULT_MAX_STONE_TIER)
   })
 
   it('без надетых предметов — тир не ограничен', () => {
-    expect(defaultConstraints(data, [bare(heroes[0])]).maxItemTier).toBe(maxDataTier(data))
+    const c = defaultConstraints(data, [bare(heroes[0])])
+    expect(c.perHero![0].maxItemTier).toBe(maxDataTier(data))
+    expect(c.maxItemTier).toBe(maxDataTier(data))
   })
 
   it('Титан — только если «Душа» у всех героев (с учётом переопределения)', () => {
@@ -63,9 +89,43 @@ describe('defaultConstraints', () => {
 
   it('переопределения пользователя поверх значений по умолчанию', () => {
     const d = defaultConstraints(data, [heroes[0]])
-    expect(resolveConstraints(d, NO_OVERRIDES)).toEqual(d)
+    const r0 = resolveConstraints(d, NO_OVERRIDES)
+    expect(r0).toEqual(d)
     const r = resolveConstraints(d, { ...NO_OVERRIDES, maxItemTier: 3, maxQuality: 'Epic', spirits: ['Bear Spirit'] })
-    expect(r).toEqual({ ...d, maxItemTier: 3, maxQuality: 'Epic', spirits: ['Bear Spirit'] })
+    expect(r).toEqual({ ...d, maxItemTier: 3, maxQuality: 'Epic', spirits: ['Bear Spirit'], perHero: undefined })
+    // Ручной список духов снимает ограничения «по герою» (иначе выбор пользователя не применился бы).
+    expect(resolveConstraints(d, { ...NO_OVERRIDES, spirits: ['Bear Spirit'] }).perHero).toBeUndefined()
+    // Переопределение тира сохраняет ограничения героев: они лишь урезаются общим потолком.
+    expect(resolveConstraints(d, { ...NO_OVERRIDES, maxItemTier: 4 }).perHero).toEqual(d.perHero)
+  })
+})
+
+describe('capForHero', () => {
+  it('итог = min(ограничение героя, ограничение отряда)', () => {
+    const cons = {
+      maxItemTier: 8,
+      maxQuality: 'Superior' as Quality,
+      maxStoneTier: 9,
+      spirits: null,
+      perHero: [{ hero: 0, maxItemTier: 12, maxStoneTier: 12 }, { hero: 1, maxItemTier: 3, maxStoneTier: 4 }],
+    }
+    expect(capForHero(cons, 0)).toEqual({ hero: 0, maxItemTier: 8, maxStoneTier: 9 })
+    expect(capForHero(cons, 1)).toEqual({ hero: 1, maxItemTier: 3, maxStoneTier: 4 })
+    expect(capForHero(cons, 2)).toEqual({ hero: 2, maxItemTier: 8, maxStoneTier: 9 })
+  })
+
+  it('perHeroTierNote показывает разные потолки', () => {
+    const team = heroes.slice(0, 2)
+    const cons = { ...defaultConstraints(data, team), maxItemTier: 12 }
+    cons.perHero = [
+      { hero: 0, maxItemTier: 9, maxStoneTier: 9 },
+      { hero: 1, maxItemTier: 6, maxStoneTier: 9 },
+    ]
+    const note = perHeroTierNote(team, cons)
+    expect(note).toHaveLength(2)
+    expect(note[0]).toContain('до T9')
+    expect(note[1]).toContain('до T6')
+    expect(perHeroTierNote(team, { ...cons, perHero: undefined })).toEqual([])
   })
 })
 
@@ -124,6 +184,7 @@ describe('сценарии +1 тир / +1 качество', () => {
       configs: [[]],
       objective,
       winRate: objective,
+      improvement: 0,
       perQuest: [],
       worstQuest: null,
       explanations: [[{ slot: 0, from: 'a', to: 'b', winRateDelta: 0.1 }]],

@@ -34,6 +34,7 @@ import {
 } from './constants.ts'
 import { barrierBroken, fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
 import { quickScore } from './score.ts'
+import { statWeights, type StatWeightStat, type StatWeightsResult } from './statWeights.ts'
 import { effectiveClass } from './stats.ts'
 
 // ─────────────────────────── вход/выход ───────────────────────────
@@ -55,6 +56,33 @@ export interface OptimizerConstraints {
   maxStoneTier: number | null
   /** Доступные духи; null — все из таблицы. */
   spirits: string[] | null
+  /**
+   * Ограничения НА ГЕРОЯ, а не на отряд (требование владельца, сессия 13): по умолчанию
+   * «макс. тир = макс. надетый у ЭТОГО героя + 1», поэтому слабому герою не предлагаются
+   * вещи под сильного. Значения пользователя (maxItemTier/maxQuality/maxStoneTier) —
+   * дополнительный потолок сверху: итог = min(своё значение, ограничение отряда).
+   */
+  perHero?: PerHeroCap[]
+}
+
+/** Ограничение на одного героя (массивы в порядке input.heroes). */
+export interface PerHeroCap {
+  /** Индекс героя в отряде. */
+  hero: number
+  /** Макс. тир предметов для этого героя. */
+  maxItemTier: number
+  /** Макс. тир камней для этого героя (null — без ограничения, если и у отряда его нет). */
+  maxStoneTier: number | null
+}
+
+/** Итоговые ограничения героя: не выше ограничения отряда и не выше собственного потолка. */
+export function capForHero(cons: OptimizerConstraints, hi: number): PerHeroCap {
+  const own = cons.perHero?.find((c) => c.hero === hi)
+  return {
+    hero: hi,
+    maxItemTier: own?.maxItemTier != null ? Math.min(own.maxItemTier, cons.maxItemTier) : cons.maxItemTier,
+    maxStoneTier: own?.maxStoneTier != null ? (cons.maxStoneTier != null ? Math.min(own.maxStoneTier, cons.maxStoneTier) : own.maxStoneTier) : cons.maxStoneTier,
+  }
 }
 
 export interface QuestWeight {
@@ -77,6 +105,13 @@ export interface OptimizerInput {
   titanSoul?: 'as-is' | 'on' | 'off'
   /** Общий seed кандидатов (CRN). */
   seed?: number
+  /**
+   * Считать веса статов (симуляция «+1% CRIT / +5% ATK / …», src/engine/statWeights.ts).
+   * Дорого (≈ (1 + 8) × героев симуляций) — включается, когда результат показывают пользователю.
+   */
+  withStatWeights?: boolean
+  /** Прогонов на симуляцию в весах статов (по умолчанию STAT_WEIGHT_RUNS). */
+  statWeightRuns?: number
   topK?: number
   simBudget?: number
   simRuns?: number
@@ -88,6 +123,8 @@ export interface SlotExplanation {
   to: string
   /** Насколько финальный win rate выше win rate набора «вернуть этот слот в исходное». */
   winRateDelta: number
+  /** Главный стат, который дала замена (для строки «почему» в UI). */
+  statHint?: SlotStatHint | null
 }
 
 export interface QuestOutcome {
@@ -99,6 +136,23 @@ export interface QuestOutcome {
   barrierBroken: boolean
 }
 
+/**
+ * Строка «почему» для слота: какой стат дала замена и сколько это в win rate или уроне.
+ * Считается относительно надетого ранее (baseline) — то есть «что дал именно этот предмет».
+ */
+export interface SlotStatHint {
+  /** «+ATK: +614 (было 12238)». */
+  text: string
+  /** Стат, по которому замена сильнее всего (для сортировки/подписи). */
+  stat: StatWeightStat | 'other'
+  /** Цифра «сколько это в win rate» или уроне (в единицах веса), если удалось измерить. */
+  value?: number
+  /** Что за цифра: п.п. win rate или доля урона. */
+  metric?: 'winRatePp' | 'damagePct'
+  /** Что стало хуже в замене (например, HP −95) — показывается отдельно. */
+  fallback?: string
+}
+
 export interface OptimizerResult {
   /** Финальная экипировка по героям (порядок как в input.heroes). */
   configs: HeroConfig[]
@@ -106,6 +160,8 @@ export interface OptimizerResult {
   objective: number
   /** Средзвешенный win rate (для universal — по всем локациям). */
   winRate: number
+  /** Прирост win rate относительно надетой экипировки (п.п.); на отмене может быть 0. */
+  improvement: number
   perQuest: QuestOutcome[]
   /** Худшая локация (universal) — минимальный win rate. */
   worstQuest: QuestOutcome | null
@@ -118,6 +174,12 @@ export interface OptimizerResult {
    * и финальный выбор сделан по тай-брейку (меньше раундов → больше мин. % HP выжившего → урон/раунд).
    */
   tieBreakUsed: boolean
+  /**
+   * Веса статов на найденном наборе (если input.withStatWeights): «почему именно эти вещи» —
+   * прирост от +1% CRIT / +5% ATK и т. д. Считается тем же seed (CRN). null — не считались.
+   * Массив `heroes` соответствует всем бойцам (герои отряда + чемпион), у элемента есть `isChampion`.
+   */
+  statWeights?: StatWeightsResult | null
 }
 
 export interface OptimizerHooks {
@@ -154,20 +216,44 @@ function applyConfig(hero: HeroInstance, cfg: HeroConfig): HeroInstance {
 
 const itemLabel = (c: SlotConfig): string => (c.item ? `${c.item} (${c.quality})${c.element ? ` +${c.element}` : ''}${c.spirit ? ` +${c.spirit}` : ''}` : '—')
 
+/** Статы, по которым сравниваются предметы в строке «почему» (как в весах, но без урона крита «в единицах»). */
+type SlotStatStat = 'atk' | 'def' | 'hp' | 'crit' | 'eva' | 'critDmg' | 'threat' | 'element'
+
+/** «+614 ATK», «+3% CRIT», «+15 стихии». */
+function statDeltaText(key: SlotStatStat, value: number): string {
+  const sign = value > 0 ? '+' : ''
+  switch (key) {
+    case 'crit':
+      return `${sign}${Math.round(value)}% CRIT`
+    case 'eva':
+      return `${sign}${Math.round(value)}% EVA`
+    case 'critDmg':
+      return `${sign}${Math.round((value / 10) * 100)}% урона крита`
+    case 'element':
+      return `${sign}${Math.round(value)} стихии`
+    case 'threat':
+      return `${sign}${Math.round(value)} угрозы`
+    default:
+      return `${sign}${Math.round(value)} ${key.toUpperCase()}`
+  }
+}
+
 // ─────────────────────────── перебор вариантов ───────────────────────────
 
-function itemChoices(data: GameData, cons: OptimizerConstraints, types: string[]): { item: Item; quality: Quality }[] {
+function itemChoices(data: GameData, cons: OptimizerConstraints, types: string[], hi: number): { item: Item; quality: Quality }[] {
+  const cap = capForHero(cons, hi).maxItemTier
   return data.items
-    .filter((it) => it.isEquipment && !NON_EQUIPMENT_TYPES.includes(it.type) && types.includes(it.type) && it.tier <= cons.maxItemTier)
+    .filter((it) => it.isEquipment && !NON_EQUIPMENT_TYPES.includes(it.type) && types.includes(it.type) && it.tier <= cap)
     .map((item) => ({ item, quality: cons.maxQuality }))
     .sort((a, b) => (a.item.name < b.item.name ? -1 : 1))
 }
 
-function stoneChoices(data: GameData, cons: OptimizerConstraints, heroEl: Element | 'Any'): string[] {
+function stoneChoices(data: GameData, cons: OptimizerConstraints, heroEl: Element | 'Any', hi: number): string[] {
+  const cap = capForHero(cons, hi).maxStoneTier
   const out: string[] = []
   for (const e of data.enchants) {
     if (e.kind !== 'element' || !e.elementValue) continue
-    if (cons.maxStoneTier != null && (e.tier ?? 0) > cons.maxStoneTier) continue
+    if (cap != null && (e.tier ?? 0) > cap) continue
     const okEl = heroEl === 'Any' || e.element === heroEl || (GOLD_ELEMENT_COUNTS_FOR_ANY_HERO && e.element === 'Gold')
     if (!okEl) continue
     out.push(e.name)
@@ -303,15 +389,15 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     return { atk: st.atk, def: st.def, hp: st.hp, eva: st.eva, crit: st.crit, element: el, artifact: !!it.artifactSkill, affinity }
   }
 
-  const ctxs: HeroCtx[] = heroes.map((hero) => {
+  const ctxs: HeroCtx[] = heroes.map((hero, hi) => {
     // A47: при «Душе Титана» слоты и стихия берутся у промоушена (у него шире список типов).
     const cls = effectiveClass(hero, data)
     if (!cls) throw new Error(`Неизвестный класс «${hero.className}»`)
     return {
       hero,
       cls,
-      items: cls.slots.map((types) => itemChoices(data, input.constraints, types)),
-      stones: stoneChoices(data, input.constraints, cls.element),
+      items: cls.slots.map((types) => itemChoices(data, input.constraints, types, hi)),
+      stones: stoneChoices(data, input.constraints, cls.element, hi),
       spirits: spiritChoices(data, input.constraints),
       tank: false,
     }
@@ -354,6 +440,8 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
 
   // Симуляционный слой (используется и для финального выбора, и для finish при ранней отмене).
   let simsUsed = 0
+  /** Симуляции, потраченные на веса статов (сверх бюджета поиска). */
+  let weightSims = 0
   const simCache = new Map<string, CandEval>()
   // Лексикографический тай-брейк (решение по итогам сессии 7): win rate → средние раунды (меньше) →
   // мин. % HP выжившего (больше) → урон/раунд (больше). В universal метрики усредняются по весам локаций.
@@ -428,10 +516,10 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
   const options: SlotConfig[][][] = ctxs.map((_, hi) => ctxs[hi].items.map((_, si) => pruneSlot(hi, si, baseline)))
   await yieldC()
   if (cancel()) return finish(cloneTeam(baseline), [], 'Отменено на этапе отсева')
-
   // ── 2. Координатный спуск по quickScore: сначала по ролям (танк → ДД), затем совместная доводка ──
   let best = cloneTeam(baseline)
   let bestScore = quickObj(best)
+  /** Win rate надетой экипировки (для «+N п.п. к надетому»); считается в блоке финального выбора. */
   const beam = new Map<string, { cfg: HeroConfig[]; score: number }>()
   const addBeam = (cfg: HeroConfig[], score: number): void => {
     const k = configKey(cfg)
@@ -497,6 +585,11 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
   }
 
   // ── 3. Финальный выбор симуляцией (CRN: один seed на всех кандидатов) ──
+  // Базовая экипировка (то, что надето) — точка отсчёта для строки «+N п.п. к надетому».
+  // Метрики базового набора берём из кэша, если он там уже есть: лишних симуляций не добавляем.
+  const baseKey = configKey(baseline)
+  const baseHit = simCache.get(baseKey)
+  const baselineWinRate = baseHit ? baseHit.wr : 0
   let bestEv = await evaluate(best)
   const changedCount = best.reduce((n, cfg, hi) => n + cfg.filter((sc, si) => slotKey(sc) !== slotKey(baseline[hi][si])).length, 0)
   const explCost = changedCount * quests.length
@@ -569,7 +662,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     if (!improved) break
   }
 
-  // ── 4. Объяснения: отдача каждого изменённого слота (win rate с заменой − без неё) ──
+  // ── 4. Объяснения: отдача каждого изменённого слота (win rate с заменой − без неё) + какой стат дала замена ──
   const explanations: SlotExplanation[][] = []
   for (let hi = 0; hi < best.length; hi++) {
     const out: SlotExplanation[] = []
@@ -583,12 +676,68 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
         trial[hi][si] = b
         delta = bestEv.wr - (await evaluate(trial)).wr
       }
-      out.push({ slot: si, from: itemLabel(b), to: itemLabel(sc), winRateDelta: delta })
+      out.push({ slot: si, from: itemLabel(b), to: itemLabel(sc), winRateDelta: delta, statHint: slotStatHint(hi, si, b, sc) })
     }
     explanations.push(out)
   }
 
-  return finish(best, explanations, null, simsUsed, bestEv)
+  // Веса статов — после выбора набора: объясняют, ПОЧЕМУ он такой (и заодно дают барьер/угрозу).
+  const weights = computeWeights(teamOf(best))
+  return finish(best, explanations, null, simsUsed, bestEv, weights, baselineWinRate)
+
+  /** «Почему» для слота: какой стат дала замена (сравнение бойца с этой вещью и без неё). */
+  function slotStatHint(hi: number, si: number, from: SlotConfig, to: SlotConfig): SlotStatHint | null {
+    if (!to.item) return null
+    const withNew = heroFighter(hi, best[hi])
+    const withOld = heroFighter(hi, best[hi].map((sc, j) => (j === si ? from : sc)) as HeroConfig)
+    const deltas: { key: SlotStatStat; value: number; rel: number }[] = []
+    const add = (key: SlotStatStat, value: number, basis: number): void => {
+      if (value !== 0) deltas.push({ key, value, rel: basis > 0 ? Math.abs(value) / basis : Math.abs(value) })
+    }
+    add('atk', withNew.atk - withOld.atk, withOld.atk)
+    add('def', withNew.def - withOld.def, withOld.def)
+    add('hp', withNew.hp - withOld.hp, withOld.hp)
+    add('crit', (withNew.crit - withOld.crit) * 100, withOld.crit * 100)
+    add('eva', (withNew.eva - withOld.eva) * 100, withOld.eva * 100)
+    add('critDmg', (withNew.critDmg - withOld.critDmg) * 10, withOld.critDmg * 10)
+    add('threat', withNew.threat - withOld.threat, withOld.threat)
+    const elNew = elementOf(withNew)
+    const elOld = elementOf(withOld)
+    add('element', elNew - elOld, elOld)
+    if (deltas.length === 0) return { text: `«${to.item}» даёт тот же набор статов, что и прежний предмет`, stat: 'other' }
+    const up = deltas.filter((d) => d.value > 0).sort((a, b) => b.rel - a.rel)
+    const down = deltas.filter((d) => d.value < 0).sort((a, b) => b.rel - a.rel)
+    const top = up[0] ?? null
+    const worst = down[0] ?? null
+    if (!top) {
+      return { text: `«${to.item}» меняет статы в минус (${statDeltaText(worst!.key, worst!.value)})`, stat: 'other', fallback: statDeltaText(worst!.key, worst!.value) }
+    }
+    const parts = up.slice(0, 2).map((d) => statDeltaText(d.key, d.value))
+    return {
+      text: `${parts.join(', ')}${up.length > 2 ? ' и др.' : ''}`,
+      stat: top.key,
+      fallback: worst ? statDeltaText(worst.key, worst.value) : undefined,
+    }
+  }
+
+  /** Стихия бойца (отображаемая величина в его стихии). */
+  function elementOf(f: Fighter): number {
+    const own = (Object.keys(f.elements) as Element[])[0]
+    return own ? (f.elements[own] ?? 0) : 0
+  }
+
+  /**
+   * Веса статов на финальном наборе. Только для режима «квест»: в универсальном веса зависели бы
+   * от нескольких локалий сразу и объясняли бы хуже, чем таблица win rate по локациям.
+   */
+  function computeWeights(fs: Fighter[]): StatWeightsResult | null {
+    if (!input.withStatWeights || quests.length !== 1) return null
+    // Чемпион не входит в веса героев: его экипировку программа не подбирает.
+    const heroesOnly = fs.slice(0, heroes.length)
+    const w = statWeights(heroesOnly, quests[0].quest, { runs: input.statWeightRuns, seed })
+    weightSims += w.heroes.length * (1 + 8) + 1
+    return w
+  }
 
   // ── сборка результата ──
   function finish(
@@ -597,6 +746,9 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     cancelNote: string | null,
     sims = 0,
     ev: CandEval | null = null,
+    weights: StatWeightsResult | null = null,
+    /** Win rate надетой экипировки: на раннем выходе (отмена) неизвестен — 0. */
+    baselineWinRate = 0,
   ): OptimizerResult {
     const fs = teamOf(cfg)
     const per = ev?.per ?? quests.map((qw) => simulateTeam(fs, qw.quest, { runs, seed }))
@@ -614,6 +766,8 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     const o = ev ?? objectiveOf(per)
     let worst: QuestOutcome | null = null
     if (input.mode === 'universal') worst = perQuest.reduce((a, b) => (b.winRate < a.winRate ? b : a), perQuest[0])
+    // Насколько вырос win rate относительно надетого (для строки «итого» в UI).
+    const improvement = o.wr - baselineWinRate
     if (cancelNote) warnings.push(cancelNote)
     // Были ли среди проверенных кандидатов другие наборы с той же целью (выбор сделал тай-брейк)?
     let tieBreakUsed = false
@@ -630,13 +784,16 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
       configs: cfg,
       objective: o.obj,
       winRate: o.wr,
+      /** Прирост win rate относительно надетой экипировки (п.п.). */
+      improvement,
       perQuest,
       worstQuest: worst,
       explanations: expl,
       warnings,
-      simsUsed: sims,
+      simsUsed: sims + weightSims,
       cancelled: cancelNote != null,
       tieBreakUsed,
+      statWeights: weights,
     }
   }
 }

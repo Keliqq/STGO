@@ -10,6 +10,7 @@ import type { EngineApi } from './engine.worker.ts'
 import type { Fighter, SimMetrics } from '../engine/combat.ts'
 import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
 import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
+import type { SeedAdvice, StatWeightsResult } from '../engine/statWeights.ts'
 import type { GameData, HeroInstance, Quest } from '../data/types.ts'
 import { ENGINE_MODEL_VERSION } from '../engine/constants.ts'
 import { idbStore, KEYS, type KeyValueStore } from '../data/storage.ts'
@@ -29,6 +30,14 @@ export interface Engine {
     quests: QuestWeight[],
     options?: SkillAdviceOptions,
   ): Promise<SkillAdviceResult>
+  /** Веса статов («+1% крита ≈ …»), угроза, барьер и совет по семенам — в воркере. */
+  statWeights(
+    data: GameData,
+    heroes: HeroInstance[],
+    champion: { name: string; rank: number } | null,
+    quest: Quest,
+    runs?: number,
+  ): Promise<{ weights: StatWeightsResult; seeds: (SeedAdvice & { heroIndex: number })[] }>
   /**
    * Оптимизатор. Сначала кэш IndexedDB по хешу входа; промах — расчёт в воркере, затем запись в кэш.
    * Отменённые результаты не кэшируются.
@@ -75,6 +84,7 @@ export function createEngine(store: KeyValueStore = idbStore): Engine {
       remote.simulate(fighters, quest, opts ?? {}, onProgress ? Comlink.proxy(onProgress) : undefined),
     skillAdvice: (data, heroes, champion, quests, options) =>
       remote.skillAdvice(data, heroes, champion, quests, options),
+    statWeights: (data, heroes, champion, quest, runs) => remote.statWeights(data, heroes, champion, quest, runs),
     optimize: async (data, input, onProgress) => {
       const hash = optimizerInputHash(data, input)
       const cache = await cacheRead(store)
