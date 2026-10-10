@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { RefreshCw } from 'lucide-react'
+import { Download, RefreshCw } from 'lucide-react'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table.tsx'
+import { exportAppStateJson, importAppStateJson } from '#/data/appState.ts'
 import { BREAKPOINTS_SOURCE } from '#/data/breakpoints.ts'
+import { loadHeroes } from '#/data/heroStore.ts'
 import { classIconId, elementIconId, skillIconId, typeIconId } from '#/data/images.ts'
+import { loadRealityChecks } from '#/data/realityChecks.ts'
 import { questsWithCaps } from '#/data/sync.ts'
+import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { type Settings, loadSettings, refreshNow, saveSettings, useDataStatus, useGameData } from '#/ui/dataSync.ts'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
@@ -44,6 +48,64 @@ function TtlSetting() {
   )
 }
 
+async function loadCounts(): Promise<{ heroes: number; checks: number }> {
+  const [h, c] = await Promise.all([loadHeroes(), loadRealityChecks()])
+  return { heroes: h.heroes.length, checks: c.checks.length }
+}
+
+/** Резервная копия: герои и отметки «проходит/не проходит» одним JSON-файлом. */
+function BackupSection() {
+  const [counts, setCounts] = useState<{ heroes: number; checks: number }>({ heroes: 0, checks: 0 })
+  const [report, setReport] = useState<string | null>(null)
+
+  useEffect(() => {
+    void loadCounts().then(setCounts)
+  }, [])
+
+  async function importAll(text: string): Promise<void> {
+    const r = await importAppStateJson(text)
+    if ('error' in r) {
+      setReport(r.error)
+      return
+    }
+    setReport(
+      `Импортировано: героев добавлено ${r.heroesAdded}, обновлено ${r.heroesUpdated}; ` +
+        `всего — героев ${r.counts.heroes}, отметок ${r.counts.realityChecks}.`,
+    )
+    setCounts(await loadCounts())
+  }
+
+  return (
+    <Section
+      title="Резервная копия"
+      description={
+        <>
+          В файл попадают герои ({counts.heroes}) и отметки «проходит/не проходит» ({counts.checks}). Импорт объединяет с текущими
+          данными: герои обновляются по имени и классу, отметки добавляются.
+        </>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={() => void exportAppStateJson().then((json) => downloadText('st-app-state.json', json))}>
+          <Download /> Экспорт JSON
+        </Button>
+        <span className="text-sm text-muted-foreground">Импорт:</span>
+        <Input
+          type="file"
+          accept=".json,application/json"
+          className="w-auto max-w-full"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (!f) return
+            void f.text().then(importAll)
+          }}
+        />
+      </div>
+      {report ? <Notice className="mt-3">{report}</Notice> : null}
+    </Section>
+  )
+}
+
 function DataPage() {
   const status = useDataStatus()
   const data = useGameData()
@@ -53,7 +115,7 @@ function DataPage() {
   const ignoredCount = data ? data.skills.reduce((n, s) => n + s.ignored.length, 0) : 0
 
   return (
-    <Page title="Данные" description="Источник игровых данных, их свежесть и то, что не удалось разобрать.">
+    <Page title="Данные" description="Источник игровых данных, их свежесть, резервная копия ваших данных и то, что не удалось разобрать.">
       <Section title="Состояние">
         <dl className="mb-4 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 text-sm">
           <dt className="text-muted-foreground">Источник</dt>
@@ -82,6 +144,8 @@ function DataPage() {
           <TtlSetting />
         </div>
       </Section>
+
+      <BackupSection />
 
       <Section title="Пороги защиты квестов">
         <p className="mb-2 text-sm">

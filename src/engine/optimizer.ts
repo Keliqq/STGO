@@ -15,7 +15,6 @@
  *
  * Ограничения: в слоте только допустимые классом типы; не больше 1 артефакта на героя;
  * камень — только стихии героя (Any/Spellblade — любой; против барьера «Any» считает combat.ts);
- * пул owned — только предметы/камни/духи из инвентаря.
  * Стихия не пробивает барьер → симуляция уже штрафует урон ×BARRIER_UNBROKEN_DMG_FACTOR (A9),
  * в результат добавляется предупреждение.
  */
@@ -33,7 +32,6 @@ import {
   OPTIMIZER_TOP_K,
   OPTIMIZER_YIELD_INTERVAL_MS,
 } from './constants.ts'
-import { QUALITY_ORDER } from './quality.ts'
 import { barrierBroken, fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
 import { quickScore } from './score.ts'
 
@@ -48,16 +46,6 @@ export interface SlotConfig {
   spirit: string | null
 }
 export type HeroConfig = SlotConfig[]
-
-export interface OwnedItem {
-  name: string
-  quality: Quality
-}
-
-/** `owned` — инвентарь пользователя; `all` — любые предметы до max-тира. */
-export type ItemPool =
-  | { kind: 'all' }
-  | { kind: 'owned'; items: OwnedItem[]; stones: string[]; spirits: string[] }
 
 export interface OptimizerConstraints {
   maxItemTier: number
@@ -82,7 +70,7 @@ export interface OptimizerInput {
   quests: QuestWeight[]
   /** universal: максимизировать минимум win rate по локациям. */
   robust?: boolean
-  pool: ItemPool
+  /** Пул — любые предметы таблицы (всё покупается на рынке), в пределах этих ограничений. */
   constraints: OptimizerConstraints
   /** Переопределить «Душа Титана» у всех героев (есть/нет). */
   titanSoul?: 'as-is' | 'on' | 'off'
@@ -143,8 +131,6 @@ export interface OptimizerHooks {
 
 // ─────────────────────────── вспомогательное ───────────────────────────
 
-const qRank = (q: Quality): number => QUALITY_ORDER.indexOf(q)
-
 const slotKey = (c: SlotConfig): string => `${c.item}|${c.quality}|${c.element}|${c.spirit}`
 const heroKey = (cfg: HeroConfig): string => cfg.map(slotKey).join(';')
 const configKey = (cfgs: HeroConfig[]): string => cfgs.map(heroKey).join('#')
@@ -169,48 +155,30 @@ const itemLabel = (c: SlotConfig): string => (c.item ? `${c.item} (${c.quality})
 
 // ─────────────────────────── перебор вариантов ───────────────────────────
 
-function itemChoices(data: GameData, pool: ItemPool, cons: OptimizerConstraints, types: string[]): { item: Item; quality: Quality }[] {
-  const byName = new Map(data.items.map((i) => [i.name, i]))
-  const picked = new Map<string, Quality>()
-  if (pool.kind === 'all') {
-    for (const it of data.items) {
-      if (!it.isEquipment || NON_EQUIPMENT_TYPES.includes(it.type)) continue
-      if (!types.includes(it.type) || it.tier > cons.maxItemTier) continue
-      picked.set(it.name, cons.maxQuality)
-    }
-  } else {
-    for (const own of pool.items) {
-      const it = byName.get(own.name)
-      if (!it || !it.isEquipment || !types.includes(it.type) || it.tier > cons.maxItemTier) continue
-      const q = QUALITY_ORDER[Math.min(qRank(own.quality), qRank(cons.maxQuality))]
-      const cur = picked.get(it.name)
-      if (!cur || qRank(q) > qRank(cur)) picked.set(it.name, q)
-    }
-  }
-  return [...picked.entries()]
-    .map(([name, quality]) => ({ item: byName.get(name)!, quality }))
+function itemChoices(data: GameData, cons: OptimizerConstraints, types: string[]): { item: Item; quality: Quality }[] {
+  return data.items
+    .filter((it) => it.isEquipment && !NON_EQUIPMENT_TYPES.includes(it.type) && types.includes(it.type) && it.tier <= cons.maxItemTier)
+    .map((item) => ({ item, quality: cons.maxQuality }))
     .sort((a, b) => (a.item.name < b.item.name ? -1 : 1))
 }
 
-function stoneChoices(data: GameData, pool: ItemPool, cons: OptimizerConstraints, heroEl: Element | 'Any'): string[] {
+function stoneChoices(data: GameData, cons: OptimizerConstraints, heroEl: Element | 'Any'): string[] {
   const out: string[] = []
   for (const e of data.enchants) {
     if (e.kind !== 'element' || !e.elementValue) continue
     if (cons.maxStoneTier != null && (e.tier ?? 0) > cons.maxStoneTier) continue
     const okEl = heroEl === 'Any' || e.element === heroEl || (GOLD_ELEMENT_COUNTS_FOR_ANY_HERO && e.element === 'Gold')
     if (!okEl) continue
-    if (pool.kind === 'owned' && !pool.stones.includes(e.name)) continue
     out.push(e.name)
   }
   return out
 }
 
-function spiritChoices(data: GameData, pool: ItemPool, cons: OptimizerConstraints): string[] {
+function spiritChoices(data: GameData, cons: OptimizerConstraints): string[] {
   const out: string[] = []
   for (const e of data.enchants) {
     if (e.kind !== 'spirit') continue
     if (cons.spirits && !cons.spirits.includes(e.name)) continue
-    if (pool.kind === 'owned' && !pool.spirits.includes(e.name)) continue
     out.push(e.name)
   }
   return out
@@ -319,9 +287,6 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
   const heroes = input.heroes.map((h) =>
     input.titanSoul && input.titanSoul !== 'as-is' ? { ...h, titanSoul: input.titanSoul === 'on' } : h,
   )
-  if (input.pool.kind === 'owned' && input.pool.items.length === 0) {
-    warnings.push('Инвентарь пуст: из предметов доступны только текущие; камни и духи — по списку инвентаря.')
-  }
 
   const champion = input.champion ? data.champions.find((c) => c.name === input.champion?.name) : undefined
   if (input.champion && !champion) warnings.push(`Чемпион «${input.champion.name}» не найден в данных — без чемпиона.`)
@@ -343,9 +308,9 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     return {
       hero,
       cls,
-      items: cls.slots.map((types) => itemChoices(data, input.pool, input.constraints, types)),
-      stones: stoneChoices(data, input.pool, input.constraints, cls.element),
-      spirits: spiritChoices(data, input.pool, input.constraints),
+      items: cls.slots.map((types) => itemChoices(data, input.constraints, types)),
+      stones: stoneChoices(data, input.constraints, cls.element),
+      spirits: spiritChoices(data, input.constraints),
       tank: false,
     }
   })

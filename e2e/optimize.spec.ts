@@ -20,8 +20,45 @@ test('подбор для одного героя под квест + совет
   await expect(page.getByRole('heading', { name: 'Навыки: вклад и перекидка' })).toBeVisible()
   await shot(page, 'optimize-skills.png')
 
+  // «Стоит ли улучшать?»: прирост при +1 тире и +1 качестве считается после основного подбора.
+  const upgrade = section(page, 'Стоит ли улучшать?')
+  await expect(upgrade.getByText(/\+1 тир \(до T\d+\)/)).toBeVisible()
+  await expect(upgrade.getByText(/\+1 качество \(до Flawless\)/)).toBeVisible()
+  await expect(upgrade.getByText('считаю…')).toHaveCount(0, { timeout: 120_000 })
+  await expect(upgrade.getByText(/\d+\.\d% \(\+\d+\.\d п\.п\.\)/)).toHaveCount(2)
+  await upgrade.scrollIntoViewIfNeeded()
+  await shot(page, 'optimize-upgrade.png')
+
   await section(page, 'Проверка на реальности').getByRole('button', { name: 'проходит', exact: true }).click()
   await expect(section(page, 'Проверка на реальности').getByText(/· проходит ·/)).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('ограничения по умолчанию от надетого; выбранные значения запоминаются', async ({ page }) => {
+  const errors = watchErrors(page)
+  await importHeroesViaFile(page)
+  await page.goto('/#/optimize')
+  await pickHero(page, 'Антуан')
+  const lim = section(page, 'Ограничения')
+  const tier = lim.locator('input[type=number]').first()
+  const quality = page.getByLabel('Max качество')
+  await expect(tier).toHaveValue('')
+  expect(Number(await tier.getAttribute('placeholder'))).toBeGreaterThan(1)
+  await expect(quality.locator('option:checked')).toHaveText('по умолчанию (Superior)')
+  await expect(page.getByLabel('Max тир камней')).toHaveAttribute('placeholder', /^(9|1\d)$/)
+  await expect(lim.getByText(/качество ≤ Superior/)).toBeVisible()
+  await expect(lim.getByText(/Духи: \d+ из \d+ \(по умолчанию\)/)).toBeVisible()
+
+  await tier.fill('12')
+  await quality.selectOption('Epic')
+  await page.reload()
+  await expect(section(page, 'Ограничения').locator('input[type=number]').first()).toHaveValue('12')
+  await expect(page.getByLabel('Max качество')).toHaveValue('Epic')
+
+  await section(page, 'Ограничения').getByRole('button', { name: 'По умолчанию' }).click()
+  await expect(section(page, 'Ограничения').locator('input[type=number]').first()).toHaveValue('')
+  await page.reload()
+  await expect(page.getByLabel('Max качество')).toHaveValue('')
   expect(errors).toEqual([])
 })
 

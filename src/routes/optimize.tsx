@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Loader2, Sparkles, X } from 'lucide-react'
+import { Loader2, RotateCcw, Sparkles, X } from 'lucide-react'
 import { cn } from 'cn'
 import { Button } from '#/components/ui/button.tsx'
 import { Checkbox } from '#/components/ui/checkbox.tsx'
@@ -9,19 +9,27 @@ import { NativeSelect, NativeSelectOption } from '#/components/ui/native-select.
 import { Progress } from '#/components/ui/progress.tsx'
 import { RadioGroup, RadioGroupItem } from '#/components/ui/radio-group.tsx'
 import { loadHeroes } from '#/data/heroStore.ts'
-import { EMPTY_INVENTORY, loadInventory, type Inventory } from '#/data/inventory.ts'
+import { loadConstraintOverrides, saveConstraintOverrides } from '#/data/optimizeSettings.ts'
 import { addRealityCheck, loadRealityChecks, type RealityCheck } from '#/data/realityChecks.ts'
 import { questsWithCaps } from '#/data/sync.ts'
 import { QUALITIES, type HeroInstance, type Quality, type Quest } from '#/data/types.ts'
+import {
+  defaultConstraints,
+  NO_OVERRIDES,
+  resolveConstraints,
+  upgradeOutcome,
+  upgradeScenarios,
+  type ConstraintOverrides,
+} from '#/engine/constraints.ts'
 import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
 import type { SkillAdviceResult } from '#/engine/skills.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
-import { InventoryEditor } from '#/ui/InventoryEditor.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 import { RealityChecksView } from '#/ui/optimize/RealityChecksView.tsx'
 import { ResultView } from '#/ui/optimize/ResultView.tsx'
 import { SkillAdviceView } from '#/ui/optimize/SkillAdviceView.tsx'
+import { UpgradeView, type UpgradeRow } from '#/ui/optimize/UpgradeView.tsx'
 
 export const Route = createFileRoute('/optimize')({ component: OptimizePage })
 
@@ -56,6 +64,20 @@ function RadioItem({ value, children }: { value: string; children: ReactNode }) 
 
 const toggle = (list: string[], v: string, on: boolean): string[] => (on ? [...list, v] : list.filter((x) => x !== v))
 
+/** Число с режимом «по умолчанию»: пустое поле = значение по умолчанию (оно же в placeholder). */
+function OverrideNumber({ value, auto, min, onChange }: { value: number | null; auto: number; min: number; onChange: (v: number | null) => void }) {
+  return (
+    <Input
+      type="number"
+      min={min}
+      className="w-20"
+      placeholder={String(auto)}
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value === '' ? null : Math.max(min, Math.round(Number(e.target.value)) || min))}
+    />
+  )
+}
+
 function OptimizePage() {
   const data = useGameData()
   const engineRef = useRef<Engine | null>(null)
@@ -65,12 +87,12 @@ function OptimizePage() {
   }, [])
 
   const [heroes, setHeroes] = useState<HeroInstance[]>([])
-  const [inventory, setInventory] = useState<Inventory>(EMPTY_INVENTORY)
   const [checks, setChecks] = useState<RealityCheck[]>([])
+  const [overrides, setOverrides] = useState<ConstraintOverrides>(NO_OVERRIDES)
   useEffect(() => {
     void loadHeroes().then((r) => setHeroes(r.heroes))
-    void loadInventory().then((r) => setInventory(r.inventory))
     void loadRealityChecks().then((r) => setChecks(r.checks))
+    void loadConstraintOverrides().then(setOverrides)
   }, [])
 
   const [selHeroes, setSelHeroes] = useState<string[]>([])
@@ -82,12 +104,6 @@ function OptimizePage() {
   const [uniVariant, setUniVariant] = useState<'normal' | 'boss'>('boss')
   const [uniAreas, setUniAreas] = useState<string[]>([])
   const [robust, setRobust] = useState(false)
-  const [pool, setPool] = useState<'owned' | 'all'>('all')
-  const [maxTier, setMaxTier] = useState(20)
-  const [maxQuality, setMaxQuality] = useState<Quality>('Legendary')
-  const [maxStoneTier, setMaxStoneTier] = useState('')
-  const [spiritsAll, setSpiritsAll] = useState(true)
-  const [spiritsSel, setSpiritsSel] = useState<string[]>([])
   const [titanSoul, setTitanSoul] = useState<'as-is' | 'on' | 'off'>('as-is')
   const [levelOverride, setLevelOverride] = useState('')
 
@@ -95,6 +111,9 @@ function OptimizePage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [result, setResult] = useState<{ res: OptimizerResult; fromCache: boolean; ctx: RunContext } | null>(null)
   const [advice, setAdvice] = useState<SkillAdviceResult | null>(null)
+  const [upgrades, setUpgrades] = useState<UpgradeRow[] | null>(null)
+  const [upgrading, setUpgrading] = useState(false)
+  const cancelRequested = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   const quests = useMemo(() => (data ? questsWithCaps(data).quests : []), [data])
@@ -103,10 +122,20 @@ function OptimizePage() {
     () => [...new Set(quests.filter((q) => q.difficulty === uniDiff && q.variant === uniVariant).map((q) => q.area))],
     [quests, uniDiff, uniVariant],
   )
-  const selectedTeam = heroes.filter((h) => selHeroes.includes(h.id))
+  const selectedTeam = useMemo(() => heroes.filter((h) => selHeroes.includes(h.id)), [heroes, selHeroes])
+  const defaults = useMemo(() => (data ? defaultConstraints(data, selectedTeam, titanSoul) : null), [data, selectedTeam, titanSoul])
+  const cons = defaults ? resolveConstraints(defaults, overrides) : null
+  const hasOverrides = Object.values(overrides).some((v) => v !== null)
+
+  /** Выбранные ограничения сразу сохраняются (IndexedDB) и подхватываются при следующем визите. */
+  function updateOverrides(patch: Partial<ConstraintOverrides>): void {
+    const next = { ...overrides, ...patch }
+    setOverrides(next)
+    void saveConstraintOverrides(next)
+  }
 
   function buildInput(): OptimizerInput | string {
-    if (!data) return 'Данные ещё не загружены.'
+    if (!data || !cons) return 'Данные ещё не загружены.'
     if (selectedTeam.length === 0) return 'Выберите хотя бы одного героя.'
     if (selectedTeam.length > 3) return 'Не больше трёх героев.'
     const level = levelOverride === '' ? null : Math.max(1, Number(levelOverride) || 1)
@@ -129,13 +158,7 @@ function OptimizePage() {
       mode,
       quests: qs,
       robust,
-      pool: pool === 'owned' ? { kind: 'owned', items: inventory.items, stones: inventory.stones, spirits: inventory.spirits } : { kind: 'all' },
-      constraints: {
-        maxItemTier: maxTier,
-        maxQuality,
-        maxStoneTier: maxStoneTier === '' ? null : Math.max(0, Number(maxStoneTier) || 0),
-        spirits: spiritsAll ? null : spiritsSel,
-      },
+      constraints: cons,
       titanSoul,
     }
   }
@@ -156,11 +179,15 @@ function OptimizePage() {
     setError(null)
     setResult(null)
     setAdvice(null)
+    setUpgrades(null)
     setRunning(true)
     setProgress({ done: 0, total: 1 })
+    cancelRequested.current = false
+    let main: OptimizerResult | null = null
     try {
       const { result: res, fromCache } = await engineRef.current.optimize(data, input, (done, total) => setProgress({ done, total }))
       setResult({ res, fromCache, ctx })
+      main = res
       try {
         const cfgHeroes = input.heroes.map((h, i) => applyHeroConfig(h, res.configs[i]))
         setAdvice(await engineRef.current.skillAdvice(data, cfgHeroes, input.champion ?? null, input.quests))
@@ -173,6 +200,38 @@ function OptimizePage() {
       setRunning(false)
       setProgress(null)
     }
+    if (main && !main.cancelled) await runUpgrades(input, main)
+  }
+
+  /** Сценарии «+1 тир» и «+1 качество» — после основного подбора, по очереди в том же воркере. */
+  async function runUpgrades(input: OptimizerInput, base: OptimizerResult): Promise<void> {
+    const engine = engineRef.current
+    if (!data || !engine) return
+    const scenarios = upgradeScenarios(data, input, base)
+    setUpgrades(scenarios.map((sc) => ({ kind: sc.kind, label: sc.label, state: 'pending' })))
+    const patch = (i: number, row: Partial<UpgradeRow>): void => setUpgrades((cur) => cur?.map((r, j) => (j === i ? { ...r, ...row } : r)) ?? cur)
+    setUpgrading(true)
+    try {
+      for (let i = 0; i < scenarios.length; i++) {
+        if (cancelRequested.current) {
+          patch(i, { state: 'cancelled' })
+          continue
+        }
+        setProgress({ done: 0, total: 1 })
+        const { result: alt } = await engine.optimize(data, scenarios[i].input, (done, total) => setProgress({ done, total }))
+        patch(i, alt.cancelled && cancelRequested.current ? { state: 'cancelled' } : { state: 'done', outcome: upgradeOutcome(base, alt) })
+      }
+    } catch {
+      setUpgrades((cur) => cur?.map((r) => (r.state === 'pending' ? { ...r, state: 'cancelled' } : r)) ?? cur)
+    } finally {
+      setUpgrading(false)
+      setProgress(null)
+    }
+  }
+
+  function cancel(): void {
+    cancelRequested.current = true
+    engineRef.current?.cancel()
   }
 
   async function markReality(passed: boolean): Promise<void> {
@@ -190,7 +249,7 @@ function OptimizePage() {
     setChecks(next)
   }
 
-  if (!data) {
+  if (!data || !defaults || !cons) {
     return (
       <Page title="Подбор экипировки">
         <p className="text-sm text-muted-foreground">Загружаю данные…</p>
@@ -199,6 +258,7 @@ function OptimizePage() {
   }
 
   const progressPct = progress ? Math.min(100, (progress.done / progress.total) * 100) : 0
+  const busy = running || upgrading
 
   return (
     <Page title="Подбор экипировки" description="Выберите отряд, цель и ограничения — симуляция боя в фоне подберёт предметы, стихии и духов.">
@@ -295,55 +355,77 @@ function OptimizePage() {
         )}
       </Section>
 
-      <Section title="Пул и ограничения">
-        <RadioGroup value={pool} onValueChange={(v) => setPool(v as 'owned' | 'all')} className="mb-4 flex flex-wrap gap-x-6 gap-y-2">
-          <RadioItem value="all">любые предметы</RadioItem>
-          <RadioItem value="owned">только мой инвентарь</RadioItem>
-        </RadioGroup>
+      <Section
+        title="Ограничения"
+        description="Всё покупается на рынке — ограничения задают, что вам по карману. Пустое поле = значение по умолчанию; выбранное запоминается."
+        action={
+          hasOverrides ? (
+            <Button variant="outline" size="sm" onClick={() => updateOverrides(NO_OVERRIDES)}>
+              <RotateCcw /> По умолчанию
+            </Button>
+          ) : null
+        }
+      >
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <Field label="Max тир">
-            <Input type="number" min={1} max={30} className="w-20" value={maxTier} onChange={(e) => setMaxTier(Number(e.target.value))} />
+            <OverrideNumber value={overrides.maxItemTier} auto={defaults.maxItemTier} min={1} onChange={(v) => updateOverrides({ maxItemTier: v })} />
           </Field>
           <Field label="Max качество">
-            <NativeSelect value={maxQuality} onChange={(e) => setMaxQuality(e.target.value as Quality)}>
+            <NativeSelect value={overrides.maxQuality ?? ''} onChange={(e) => updateOverrides({ maxQuality: (e.target.value || null) as Quality | null })}>
+              <NativeSelectOption value="">по умолчанию ({defaults.maxQuality})</NativeSelectOption>
               {QUALITIES.map((q) => (
-                <NativeSelectOption key={q}>{q}</NativeSelectOption>
+                <NativeSelectOption key={q} value={q}>
+                  {q}
+                </NativeSelectOption>
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Max тир камней (пусто = все)">
-            <Input type="number" min={0} className="w-20" value={maxStoneTier} onChange={(e) => setMaxStoneTier(e.target.value)} />
+          <Field label="Max тир камней">
+            <OverrideNumber value={overrides.maxStoneTier} auto={defaults.maxStoneTier ?? 0} min={0} onChange={(v) => updateOverrides({ maxStoneTier: v })} />
           </Field>
-          <CheckItem checked={spiritsAll} onChange={setSpiritsAll}>
-            все духи
-          </CheckItem>
         </div>
-        {!spiritsAll ? (
-          <div className="mt-3 flex max-h-36 flex-wrap gap-x-4 gap-y-2 overflow-y-auto rounded-md border p-3">
-            {spirits.map((s) => (
-              <CheckItem key={s} checked={spiritsSel.includes(s)} onChange={(v) => setSpiritsSel((cur) => toggle(cur, s, v))}>
-                {s}
+        <p className="mt-2 text-xs text-muted-foreground">
+          По умолчанию: тир ≤ {defaults.maxItemTier} (макс. надетый + 1), качество ≤ {defaults.maxQuality}, камни ≤ T{defaults.maxStoneTier} (или макс.
+          надетого), духи — все обычные{defaults.spirits?.length === spirits.length ? '' : ', без Титана (не у всех героев есть Душа)'}.
+        </p>
+        <details className="mt-3 rounded-md border p-3">
+          <summary className="cursor-pointer text-sm">
+            Духи: {cons.spirits?.length ?? spirits.length} из {spirits.length} {overrides.spirits ? '(выбраны вручную)' : '(по умолчанию)'}
+          </summary>
+          <div className="mt-3 mb-2 flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits })}>
+              все
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits: [] })}>
+              ни одного
+            </Button>
+            {overrides.spirits ? (
+              <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits: null })}>
+                по умолчанию
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex max-h-36 flex-wrap gap-x-4 gap-y-2 overflow-y-auto">
+            {spirits.map((sp) => (
+              <CheckItem
+                key={sp}
+                checked={cons.spirits?.includes(sp) ?? true}
+                onChange={(v) => updateOverrides({ spirits: toggle(cons.spirits ?? spirits, sp, v) })}
+              >
+                {sp}
               </CheckItem>
             ))}
           </div>
-        ) : null}
-        {pool === 'owned' ? (
-          <details className="mt-4 rounded-md border p-3" open={inventory.items.length === 0}>
-            <summary className="cursor-pointer text-sm font-semibold">Инвентарь (ручной ввод или CSV)</summary>
-            <div className="mt-3">
-              <InventoryEditor data={data} inventory={inventory} onChange={setInventory} />
-            </div>
-          </details>
-        ) : null}
+        </details>
       </Section>
 
       <div className="mb-6 flex flex-wrap items-center gap-4">
-        <Button size="lg" disabled={running} onClick={() => void run()}>
+        <Button size="lg" disabled={busy} onClick={() => void run()}>
           {running ? <Loader2 className="animate-spin" /> : <Sparkles />}
           {running ? 'Идёт подбор…' : 'Подобрать'}
         </Button>
-        {running ? (
-          <Button variant="outline" onClick={() => engineRef.current?.cancel()}>
+        {busy ? (
+          <Button variant="outline" onClick={cancel}>
             <X /> Отменить
           </Button>
         ) : null}
@@ -351,7 +433,7 @@ function OptimizePage() {
           <div className="flex min-w-40 flex-1 items-center gap-3">
             <Progress value={progressPct} className="flex-1" />
             <span className="text-xs whitespace-nowrap text-muted-foreground">
-              симуляций {progress.done}/{progress.total}
+              {upgrading ? 'оценка апгрейда · ' : ''}симуляций {progress.done}/{progress.total}
             </span>
           </div>
         ) : null}
@@ -361,6 +443,7 @@ function OptimizePage() {
       {result ? (
         <>
           <ResultView data={data} team={result.ctx.team} result={result} objectiveLabel={result.ctx.objectiveLabel} />
+          {upgrades ? <UpgradeView team={result.ctx.team} rows={upgrades} objectiveLabel={result.ctx.objectiveLabel} /> : null}
           {advice && advice.advice.length > 0 ? <SkillAdviceView team={result.ctx.team} advice={advice} /> : null}
           <RealityChecksView
             checks={checks}

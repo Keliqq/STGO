@@ -1,5 +1,5 @@
 ﻿/**
- * Тесты оптимизатора: ограничения слотов/артефактов, пул owned, детерминизм,
+ * Тесты оптимизатора: ограничения слотов/артефактов/камней/духов, детерминизм,
  * и проверка отсева — «отсев (top-K + разнообразные + адаптивный K) не выбрасывает лучший
  * по симуляции вариант слота» на 20 случаях (доля промахов фиксируется в PROGRESS.md).
  */
@@ -12,7 +12,7 @@ import { fixtureGameData } from '../test/fixtures.ts'
 import { fighterFromHero, mulberry32, simulateTeam } from './combat.ts'
 import { OPTIMIZER_TOP_K } from './constants.ts'
 import { QUALITY_ORDER } from './quality.ts'
-import { applyHeroConfig, runOptimizer, selectSlotCandidates, type ItemPool, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
+import { applyHeroConfig, runOptimizer, selectSlotCandidates, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
 import { quickScore } from './score.ts'
 
 const data = fixtureGameData()
@@ -41,7 +41,6 @@ const baseInput = (hero: HeroInstance, over: Partial<OptimizerInput> = {}): Opti
   heroes: [hero],
   mode: 'quest',
   quests: [{ quest: quest(), weight: 1 }],
-  pool: { kind: 'all' },
   constraints: CONS,
   simBudget: 60,
   simRuns: 300,
@@ -87,54 +86,19 @@ describe('оптимизатор: ограничения', () => {
     })
     expect(artifacts).toBeLessThanOrEqual(1)
   })
-
-  it('не больше одного артефакта на героя (пул с артефактами)', async () => {
-    const artifactItems = data.items.filter((i) => i.artifactSkill && i.isEquipment && i.tier <= 15)
-    if (artifactItems.length < 2) return
-    const pool: ItemPool = {
-      kind: 'owned',
-      items: artifactItems.map((i) => ({ name: i.name, quality: 'Flawless' })),
-      stones: [],
-      spirits: [],
-    }
-    const res = await runOptimizer(data, baseInput(heroes[0], { pool }))
-    const n = res.configs[0].filter((s) => s.item && itemByName(s.item).artifactSkill).length
-    expect(n).toBeLessThanOrEqual(1)
-  })
 })
 
-describe('оптимизатор: пул owned', () => {
-  it('предлагаются только предметы из инвентаря (или текущая экипировка)', async () => {
-    const hero = heroes[0]
-    const ownedNames = new Set(hero.slots.map((s) => s.item).filter((x): x is string => !!x))
-    // Добавим по одному предмету на слот из допустимых типов.
-    const cls = clsOf(hero)
-    for (let si = 0; si < 6; si++) {
-      const extra = data.items.find((i) => i.isEquipment && cls.slots[si].includes(i.type) && i.tier <= 15 && !ownedNames.has(i.name))
-      if (extra) ownedNames.add(extra.name)
-    }
-    const pool: ItemPool = {
-      kind: 'owned',
-      items: [...ownedNames].map((name) => ({ name, quality: 'Flawless' as Quality })),
-      stones: [],
-      spirits: [],
-    }
-    const res = await runOptimizer(data, baseInput(hero, { pool }))
-    for (const sc of res.configs[0]) {
-      if (sc.item) expect(ownedNames.has(sc.item), `чужой предмет ${sc.item}`).toBe(true)
-    }
-  })
-
-  it('owned: камни и духи только из инвентаря', async () => {
+describe('оптимизатор: камни и духи по ограничениям', () => {
+  it('камни — до maxStoneTier, духи — только из списка', async () => {
     // Герой без текущей экипировки — чтобы базовые камни не смешивали проверку.
     const bare: HeroInstance = {
       ...heroes[0],
       slots: Array.from({ length: 6 }, () => ({ item: null, quality: 'Normal' as Quality, element: null, spirit: null })),
     }
-    const pool: ItemPool = { kind: 'owned', items: [], stones: ['Tide Element'], spirits: ['Bear Spirit'] }
-    const res = await runOptimizer(data, baseInput(bare, { pool }))
+    const constraints = { ...CONS, maxStoneTier: 4, spirits: ['Bear Spirit'] }
+    const res = await runOptimizer(data, baseInput(bare, { constraints }))
     for (const sc of res.configs[0]) {
-      if (sc.element) expect(sc.element).toBe('Tide Element')
+      if (sc.element) expect(enchantByName(sc.element).tier ?? 0).toBeLessThanOrEqual(4)
       if (sc.spirit) expect(sc.spirit).toBe('Bear Spirit')
     }
   })

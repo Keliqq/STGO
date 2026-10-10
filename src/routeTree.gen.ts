@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DataRouteImport } from './routes/data'
 import { Route as HeroesRouteImport } from './routes/heroes'
-import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as OptimizeRouteImport } from './routes/optimize'
 
 const IndexRoute = IndexRouteImport.update({
@@ -30,11 +29,6 @@ const HeroesRoute = HeroesRouteImport.update({
   path: '/heroes',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InventoryRoute = InventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const OptimizeRoute = OptimizeRouteImport.update({
   id: '/optimize',
   path: '/optimize',
@@ -45,14 +39,12 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/data': typeof DataRoute
   '/heroes': typeof HeroesRoute
-  '/inventory': typeof InventoryRoute
   '/optimize': typeof OptimizeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/data': typeof DataRoute
   '/heroes': typeof HeroesRoute
-  '/inventory': typeof InventoryRoute
   '/optimize': typeof OptimizeRoute
 }
 export interface FileRoutesById {
@@ -60,22 +52,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/data': typeof DataRoute
   '/heroes': typeof HeroesRoute
-  '/inventory': typeof InventoryRoute
   '/optimize': typeof OptimizeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/data' | '/heroes' | '/inventory' | '/optimize'
+  fullPaths: '/' | '/data' | '/heroes' | '/optimize'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/data' | '/heroes' | '/inventory' | '/optimize'
-  id: '__root__' | '/' | '/data' | '/heroes' | '/inventory' | '/optimize'
+  to: '/' | '/data' | '/heroes' | '/optimize'
+  id: '__root__' | '/' | '/data' | '/heroes' | '/optimize'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DataRoute: typeof DataRoute
   HeroesRoute: typeof HeroesRoute
-  InventoryRoute: typeof InventoryRoute
   OptimizeRoute: typeof OptimizeRoute
 }
 
@@ -102,13 +92,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HeroesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/inventory': {
-      id: '/inventory'
-      path: '/inventory'
-      fullPath: '/inventory'
-      preLoaderRoute: typeof InventoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/optimize': {
       id: '/optimize'
       path: '/optimize'
@@ -123,7 +106,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DataRoute: DataRoute,
   HeroesRoute: HeroesRoute,
-  InventoryRoute: InventoryRoute,
   OptimizeRoute: OptimizeRoute,
 }
 export const routeTree = rootRouteImport

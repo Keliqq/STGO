@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowRight, Backpack, Database, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, Database, Sparkles, Users } from 'lucide-react'
 import { Badge } from '#/components/ui/badge.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Card, CardDescription, CardHeader, CardTitle } from '#/components/ui/card.tsx'
@@ -10,9 +10,8 @@ export const Route = createFileRoute('/')({ component: Home })
 
 const STEPS = [
   { to: '/heroes', icon: Users, title: '1. Герои', text: 'Импортируйте экспорт TitansDB — уровни, классы, экипировку и навыки.' },
-  { to: '/inventory', icon: Backpack, title: '2. Инвентарь', text: 'Необязательно: перечислите свои предметы, камни и духов, чтобы подбирать только из них.' },
-  { to: '/optimize', icon: Sparkles, title: '3. Подбор', text: 'Выберите отряд и квест (или группу локаций) — симуляция найдёт лучший набор.' },
-  { to: '/data', icon: Database, title: 'Данные', text: 'Откуда берутся данные, когда обновлялись, что не удалось разобрать.' },
+  { to: '/optimize', icon: Sparkles, title: '2. Подбор', text: 'Выберите отряд и квест (или группу локаций) — симуляция найдёт лучший набор из того, что продаётся на рынке.' },
+  { to: '/data', icon: Database, title: 'Данные', text: 'Откуда берутся данные, когда обновлялись; резервная копия героев и отметок.' },
 ] as const
 
 function Home() {
@@ -40,7 +39,7 @@ function Home() {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {STEPS.map(({ to, icon: Icon, title, text }) => (
           <Link key={to} to={to} className="group text-inherit no-underline">
             <Card className="h-full gap-3 transition-colors group-hover:border-primary/50 group-hover:bg-accent/40">

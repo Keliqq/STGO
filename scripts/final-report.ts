@@ -1,15 +1,16 @@
-﻿/**
+/**
  * Финальная проверка оптимизатора на fixtures/heroes.txt: типовые локации + универсальный режим,
  * каждый случай в трёх пулах: «all до T20» (эталонный верх), «all до T(макс. тир героев + 1)»
- * и «только мои вещи» (инвентарь = то, что надето на героях фикстуры).
+ * и «по умолчанию» (ограничения страницы «Подбор»: макс. надетый тир + 1, Superior, камни до T9, духи без Титана).
  * Результат — docs/REPORT.md. Запуск: node scripts/final-report.ts
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fixtureGameData } from '../src/test/fixtures.ts'
 import { importTitansDb } from '../src/data/titansdb.ts'
-import type { ItemPool, OptimizerConstraints, OptimizerInput, OptimizerResult } from '../src/engine/optimizer.ts'
-import type { Quality, Quest } from '../src/data/types.ts'
+import type { OptimizerConstraints, OptimizerInput, OptimizerResult } from '../src/engine/optimizer.ts'
+import type { Quest } from '../src/data/types.ts'
+import { defaultConstraints } from '../src/engine/constraints.ts'
 import { fighterFromChampion, fighterFromHero, simulateTeam } from '../src/engine/combat.ts'
 import { applyHeroConfig, questLabel, runOptimizer } from '../src/engine/optimizer.ts'
 import { rerollAdvice } from '../src/engine/skills.ts'
@@ -40,46 +41,24 @@ const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
 const heroMaxTier = (level: number): number => data.heroLevels.find((l) => l.level === level)?.maxItemTier ?? 0
 const realTier = Math.max(...team.map((h) => heroMaxTier(h.level))) + 1
 
-/** Инвентарь «как надето»: предметы/камни/духи из текущих слотов героев фикстуры. */
-function ownedFromTeam(): { items: { name: string; quality: Quality }[]; stones: string[]; spirits: string[] } {
-  const items = new Map<string, Quality>()
-  const stones = new Set<string>()
-  const spirits = new Set<string>()
-  const order: Quality[] = ['Normal', 'Superior', 'Flawless', 'Epic', 'Legendary']
-  for (const h of team) {
-    for (const s of h.slots) {
-      if (s.item) {
-        const cur = items.get(s.item)
-        if (!cur || order.indexOf(s.quality) > order.indexOf(cur)) items.set(s.item, s.quality)
-      }
-      if (s.element) stones.add(s.element)
-      if (s.spirit) spirits.add(s.spirit)
-    }
-  }
-  return { items: [...items.entries()].map(([name, quality]) => ({ name, quality })), stones: [...stones], spirits: [...spirits] }
-}
-const owned = ownedFromTeam()
+const defaults = defaultConstraints(data, team)
 
 interface PoolCase {
   title: string
-  pool: ItemPool
   constraints: OptimizerConstraints
 }
 const pools: PoolCase[] = [
   {
     title: 'пул all: любые предметы до T20, Legendary (эталонный верх, для этих героев недостижим)',
-    pool: { kind: 'all' },
     constraints: { maxItemTier: 20, maxQuality: 'Legendary', maxStoneTier: null, spirits: null },
   },
   {
     title: `пул all: любые предметы и камни до T${realTier} (макс. тир героев ${realTier - 1} + 1), Legendary`,
-    pool: { kind: 'all' },
     constraints: { maxItemTier: realTier, maxQuality: 'Legendary', maxStoneTier: realTier, spirits: null },
   },
   {
-    title: `пул owned «только мои вещи»: инвентарь = надетое на героях фикстуры (${owned.items.length} предметов, ${owned.stones.length} камней, ${owned.spirits.length} духов)`,
-    pool: { kind: 'owned', items: owned.items, stones: owned.stones, spirits: owned.spirits },
-    constraints: { maxItemTier: 30, maxQuality: 'Legendary', maxStoneTier: null, spirits: null },
+    title: `ограничения по умолчанию: до T${defaults.maxItemTier} (макс. надетый + 1), ${defaults.maxQuality}, камни до T${defaults.maxStoneTier}, духи без Титана`,
+    constraints: defaults,
   },
 ]
 
@@ -126,7 +105,7 @@ out.push('Данные — фикстуры листов (fixtures/sheets), по
 out.push('')
 out.push('Каждая локация посчитана в трёх пулах (см. «Пулы» ниже). Sanity-вывод по «Cinderlake Volcano Extreme 0 % → 100 %»:')
 out.push(`это достигается только на пуле all до T20 с качеством Legendary (раздел с пометкой «эталонный верх»);`)
-out.push(`для героев 25–26 уровней (макс. тир ${realTier - 1} по HERO LEVELS) T20-набор недостижим — см. разделы «достижимый пул» и «только мои вещи».`)
+out.push(`для героев 25–26 уровней (макс. тир ${realTier - 1} по HERO LEVELS) T20-набор недостижим — см. разделы «достижимый пул» и «ограничения по умолчанию».`)
 out.push('')
 
 for (const q of chosen) {
@@ -136,7 +115,6 @@ for (const q of chosen) {
       champion,
       mode: 'quest',
       quests: [{ quest: q, weight: 1 }],
-      pool: p.pool,
       constraints: p.constraints,
     }
     const before = baseWinRate([q], [1])
@@ -159,7 +137,6 @@ for (const p of pools) {
     champion,
     mode: 'universal',
     quests: uniQuests.map((q) => ({ quest: q, weight: 1 })),
-    pool: p.pool,
     constraints: p.constraints,
   }
   const beforeUni = baseWinRate(uniQuests, uniQuests.map(() => 1))

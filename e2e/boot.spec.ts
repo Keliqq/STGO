@@ -24,7 +24,7 @@ test('офлайн-запуск: снапшот без сети, после он
   await page.evaluate(() => navigator.serviceWorker.ready)
   await page.waitForTimeout(2000)
   // Прогрев: посещаем все страницы, чтобы их чанки попали в кэш SW (как у реального пользователя).
-  for (const h of ['/#/heroes', '/#/optimize', '/#/inventory', '/#/data']) {
+  for (const h of ['/#/heroes', '/#/optimize', '/#/data']) {
     await page.goto(h)
     await page.waitForTimeout(400)
   }

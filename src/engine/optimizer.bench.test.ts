@@ -42,7 +42,6 @@ describe('бенчмарк оптимизатора', () => {
       champion: { name: 'Argon', rank: 5 },
       mode: 'quest',
       quests: [{ quest, weight: 1 }],
-      pool: { kind: 'all' },
       constraints: { maxItemTier: 20, maxQuality: 'Legendary' as Quality, maxStoneTier: 5, spirits: null },
     }
     const t0 = performance.now()

@@ -7,11 +7,11 @@
 
 Каждая локация посчитана в трёх пулах (см. «Пулы» ниже). Sanity-вывод по «Cinderlake Volcano Extreme 0 % → 100 %»:
 это достигается только на пуле all до T20 с качеством Legendary (раздел с пометкой «эталонный верх»);
-для героев 25–26 уровней (макс. тир 9 по HERO LEVELS) T20-набор недостижим — см. разделы «достижимый пул» и «только мои вещи».
+для героев 25–26 уровней (макс. тир 9 по HERO LEVELS) T20-набор недостижим — см. разделы «достижимый пул» и «ограничения по умолчанию».
 
 ### Локация: Lost City of Gold · босс · 13 — пул all: любые предметы до T20, Legendary (эталонный верх, для этих героев недостижим)
 
-- Цель: **100.0%** (до подбора — 0.0%), симуляций: 493, время: 9.8 с, выбор частично по тай-брейку
+- Цель: **100.0%** (до подбора — 0.0%), симуляций: 493, время: 16.6 с, выбор частично по тай-брейку
 - Lost City of Gold · босс · 13: win rate 100.0%, раундов 9.8, барьер пробит
 
 | Герой | Слот | Было | Стало | Отдача |
@@ -47,7 +47,7 @@
 
 ### Локация: Lost City of Gold · босс · 13 — пул all: любые предметы и камни до T10 (макс. тир героев 9 + 1), Legendary
 
-- Цель: **7.3%** (до подбора — 0.0%), симуляций: 496, время: 10.5 с, выбор частично по тай-брейку
+- Цель: **7.3%** (до подбора — 0.0%), симуляций: 496, время: 16.5 с, выбор частично по тай-брейку
 - Lost City of Gold · босс · 13: win rate 7.3%, раундов 24.1, барьер пробит
 
 | Герой | Слот | Было | Стало | Отдача |
@@ -69,24 +69,32 @@
 | Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Druidic Grimoire (Legendary) +Opulent Element +Leviathan Spirit | +7.2 п.п. |
 | Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Druidic Grimoire (Legendary) +Opulent Element +Leviathan Spirit | +7.2 п.п. |
 
-### Локация: Lost City of Gold · босс · 13 — пул owned «только мои вещи»: инвентарь = надетое на героях фикстуры (14 предметов, 3 камней, 4 духов)
+### Локация: Lost City of Gold · босс · 13 — ограничения по умолчанию: до T8 (макс. надетый + 1), Superior, камни до T9, духи без Титана
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 23, время: 0.2 с, выбор частично по тай-брейку
-- Lost City of Gold · босс · 13: win rate 0.0%, раундов 8.7, барьер пробит
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 494, время: 9.0 с, выбор частично по тай-брейку
+- Lost City of Gold · босс · 13: win rate 0.0%, раундов 7.0, барьер пробит
 
 | Герой | Слот | Было | Стало | Отдача |
 |---|---|---|---|---|
-| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Topaz Greaves (Superior) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Neku Shield (Normal) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Warlord Plate (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Republic Gauntlets (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Gladiator Helm (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | Fizzy Guzzle Bottle (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | +0.0 п.п. |
+| Антуан | 2 | Warlord Plate (Normal) +Sacred Element +Mammoth Spirit | Santa's Guard Plate (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 3 | Republic Gauntlets (Normal) +Sacred Element +Mammoth Spirit | Fruity Gauntlets (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 4 | Gladiator Helm (Normal) +Sacred Element +Walrus Spirit | Titan Helm (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Xenotype Walkers (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Painted Palette (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Breastplate (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Demi Gauntlets (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Brinewater Helm (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | Fizzy Guzzle Bottle (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Эбигейл | 1 | Owl Wing Wand (Flawless) +Nightmare Element +Bear Spirit | The Backscratcher (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 2 | Aang's Robe (Superior) +Nightmare Element +Bear Spirit | Blood Monarch Outfit (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 3 | Cat Burglar Claws (Normal) +Nightmare Element +Bear Spirit | Macaron Set (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 4 | Cardboard Clogs (Normal) +Nightmare Element +Bear Spirit | Moonlight Zōri (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Grimar's Collection (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Superior) +Nightmare Element +Bahamut Spirit | +0.0 п.п. |
 
 ### Локация: Meteor Zone · босс · Extreme — пул all: любые предметы до T20, Legendary (эталонный верх, для этих героев недостижим)
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 499, время: 10.8 с, выбор частично по тай-брейку
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 499, время: 11.0 с, выбор частично по тай-брейку
 - Meteor Zone · босс · Extreme: win rate 0.0%, раундов 12.0, барьер НЕ пробит
 - ⚠ Барьер квеста «Meteor Zone · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
@@ -123,7 +131,7 @@
 
 ### Локация: Meteor Zone · босс · Extreme — пул all: любые предметы и камни до T10 (макс. тир героев 9 + 1), Legendary
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 498, время: 7.1 с, выбор частично по тай-брейку
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 498, время: 8.1 с, выбор частично по тай-брейку
 - Meteor Zone · босс · Extreme: win rate 0.0%, раундов 6.9, барьер НЕ пробит
 - ⚠ Барьер квеста «Meteor Zone · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
@@ -146,27 +154,34 @@
 | Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Grimar's Collection (Legendary) +Opulent Element +Leviathan Spirit | +0.0 п.п. |
 | Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Druidic Grimoire (Legendary) +Opulent Element +Leviathan Spirit | +0.0 п.п. |
 
-### Локация: Meteor Zone · босс · Extreme — пул owned «только мои вещи»: инвентарь = надетое на героях фикстуры (14 предметов, 3 камней, 4 духов)
+### Локация: Meteor Zone · босс · Extreme — ограничения по умолчанию: до T8 (макс. надетый + 1), Superior, камни до T9, духи без Титана
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 19, время: 0.1 с, выбор частично по тай-брейку
-- Meteor Zone · босс · Extreme: win rate 0.0%, раундов 8.3, барьер НЕ пробит
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 495, время: 9.7 с, выбор частично по тай-брейку
+- Meteor Zone · босс · Extreme: win rate 0.0%, раундов 6.5, барьер НЕ пробит
 - ⚠ Барьер квеста «Meteor Zone · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
 | Герой | Слот | Было | Стало | Отдача |
 |---|---|---|---|---|
-| Антуан | 4 | Gladiator Helm (Normal) +Sacred Element +Walrus Spirit | Gladiator Helm (Normal) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Topaz Greaves (Superior) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Neku Shield (Normal) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Беовульф | 1 | Hotshot Bowgun (Superior) +Tempest Element +Lion Spirit | Hotshot Bowgun (Superior) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Warlord Plate (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Republic Gauntlets (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Gladiator Helm (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | Fizzy Guzzle Bottle (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | +0.0 п.п. |
+| Антуан | 1 | Twicicle Javelin (Normal) +Sacred Element +Mammoth Spirit | Pickaxe of Greed (Superior) +Sacred Element +Behemoth Spirit | +0.0 п.п. |
+| Антуан | 2 | Warlord Plate (Normal) +Sacred Element +Mammoth Spirit | Santa's Guard Plate (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 3 | Republic Gauntlets (Normal) +Sacred Element +Mammoth Spirit | Fruity Gauntlets (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 4 | Gladiator Helm (Normal) +Sacred Element +Walrus Spirit | Titan Helm (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Xenotype Walkers (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Painted Palette (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Breastplate (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Demi Gauntlets (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Brinewater Helm (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | XL Healing Potion (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Эбигейл | 1 | Owl Wing Wand (Flawless) +Nightmare Element +Bear Spirit | Wiccan Broomstick (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 2 | Aang's Robe (Superior) +Nightmare Element +Bear Spirit | Cupid Robes (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 3 | Cat Burglar Claws (Normal) +Nightmare Element +Bear Spirit | Strawberry Mochi (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 4 | Cardboard Clogs (Normal) +Nightmare Element +Bear Spirit | Moonlight Zōri (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Grimar's Collection (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Superior) +Nightmare Element +Bahamut Spirit | +0.0 п.п. |
 
 ### Локация: Meteor Zone · обычный · Extreme — пул all: любые предметы до T20, Legendary (эталонный верх, для этих героев недостижим)
 
-- Цель: **77.8%** (до подбора — 0.0%), симуляций: 499, время: 18.4 с
+- Цель: **77.8%** (до подбора — 0.0%), симуляций: 499, время: 35.8 с
 - Meteor Zone · обычный · Extreme: win rate 77.8%, раундов 39.2, барьер НЕ пробит
 - ⚠ Барьер квеста «Meteor Zone · обычный · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
@@ -193,7 +208,7 @@
 
 ### Локация: Meteor Zone · обычный · Extreme — пул all: любые предметы и камни до T10 (макс. тир героев 9 + 1), Legendary
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 496, время: 7.3 с, выбор частично по тай-брейку
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 496, время: 12.8 с, выбор частично по тай-брейку
 - Meteor Zone · обычный · Extreme: win rate 0.0%, раундов 7.6, барьер НЕ пробит
 - ⚠ Барьер квеста «Meteor Zone · обычный · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
@@ -214,24 +229,32 @@
 | Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Scroll of Fortune (Legendary) +Opulent Element +Leviathan Spirit | +0.0 п.п. |
 | Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Druidic Grimoire (Legendary) +Opulent Element +Leviathan Spirit | +0.0 п.п. |
 
-### Локация: Meteor Zone · обычный · Extreme — пул owned «только мои вещи»: инвентарь = надетое на героях фикстуры (14 предметов, 3 камней, 4 духов)
+### Локация: Meteor Zone · обычный · Extreme — ограничения по умолчанию: до T8 (макс. надетый + 1), Superior, камни до T9, духи без Титана
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 24, время: 0.2 с, выбор частично по тай-брейку
-- Meteor Zone · обычный · Extreme: win rate 0.0%, раундов 8.7, барьер НЕ пробит
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 493, время: 9.3 с, выбор частично по тай-брейку
+- Meteor Zone · обычный · Extreme: win rate 0.0%, раундов 7.0, барьер НЕ пробит
 - ⚠ Барьер квеста «Meteor Zone · обычный · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
 | Герой | Слот | Было | Стало | Отдача |
 |---|---|---|---|---|
-| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Topaz Greaves (Superior) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Neku Shield (Normal) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Republic Gauntlets (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Gladiator Helm (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | Fizzy Guzzle Bottle (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | +0.0 п.п. |
+| Антуан | 3 | Republic Gauntlets (Normal) +Sacred Element +Mammoth Spirit | Fruity Gauntlets (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 4 | Gladiator Helm (Normal) +Sacred Element +Walrus Spirit | Titan Helm (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Xenotype Walkers (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Painted Palette (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Breastplate (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Demi Gauntlets (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Brinewater Helm (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | XL Healing Potion (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Эбигейл | 1 | Owl Wing Wand (Flawless) +Nightmare Element +Bear Spirit | Owl Perch (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 2 | Aang's Robe (Superior) +Nightmare Element +Bear Spirit | Cupid Robes (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 3 | Cat Burglar Claws (Normal) +Nightmare Element +Bear Spirit | Macaron Set (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 4 | Cardboard Clogs (Normal) +Nightmare Element +Bear Spirit | Moonlight Zōri (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Grimar's Collection (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Superior) +Nightmare Element +Bahamut Spirit | +0.0 п.п. |
 
 ### Локация: Cinderlake Volcano · босс · Extreme — пул all: любые предметы до T20, Legendary (эталонный верх, для этих героев недостижим)
 
-- Цель: **100.0%** (до подбора — 0.0%), симуляций: 496, время: 10.8 с, выбор частично по тай-брейку
+- Цель: **100.0%** (до подбора — 0.0%), симуляций: 496, время: 17.6 с, выбор частично по тай-брейку
 - Cinderlake Volcano · босс · Extreme: win rate 100.0%, раундов 13.7, барьер НЕ пробит
 - ⚠ Барьер квеста «Cinderlake Volcano · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
@@ -267,7 +290,7 @@
 
 ### Локация: Cinderlake Volcano · босс · Extreme — пул all: любые предметы и камни до T10 (макс. тир героев 9 + 1), Legendary
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 497, время: 9.3 с, выбор частично по тай-брейку
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 497, время: 14.4 с, выбор частично по тай-брейку
 - Cinderlake Volcano · босс · Extreme: win rate 0.0%, раундов 11.0, барьер НЕ пробит
 - ⚠ Барьер квеста «Cinderlake Volcano · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
@@ -289,26 +312,33 @@
 | Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Scroll of Fortune (Legendary) +Opulent Element +Leviathan Spirit | +0.0 п.п. |
 | Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Druidic Grimoire (Legendary) +Opulent Element +Leviathan Spirit | +0.0 п.п. |
 
-### Локация: Cinderlake Volcano · босс · Extreme — пул owned «только мои вещи»: инвентарь = надетое на героях фикстуры (14 предметов, 3 камней, 4 духов)
+### Локация: Cinderlake Volcano · босс · Extreme — ограничения по умолчанию: до T8 (макс. надетый + 1), Superior, камни до T9, духи без Титана
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 19, время: 0.2 с, выбор частично по тай-брейку
-- Cinderlake Volcano · босс · Extreme: win rate 0.0%, раундов 13.0, барьер НЕ пробит
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 494, время: 8.9 с, выбор частично по тай-брейку
+- Cinderlake Volcano · босс · Extreme: win rate 0.0%, раундов 10.1, барьер НЕ пробит
 - ⚠ Барьер квеста «Cinderlake Volcano · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
 | Герой | Слот | Было | Стало | Отдача |
 |---|---|---|---|---|
-| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Topaz Greaves (Superior) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Neku Shield (Normal) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Беовульф | 1 | Hotshot Bowgun (Superior) +Tempest Element +Lion Spirit | Hotshot Bowgun (Superior) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Warlord Plate (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Republic Gauntlets (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Gladiator Helm (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | Fizzy Guzzle Bottle (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | +0.0 п.п. |
+| Антуан | 2 | Warlord Plate (Normal) +Sacred Element +Mammoth Spirit | Santa's Guard Plate (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 3 | Republic Gauntlets (Normal) +Sacred Element +Mammoth Spirit | Fruity Gauntlets (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 4 | Gladiator Helm (Normal) +Sacred Element +Walrus Spirit | Titan Helm (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Xenotype Walkers (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Painted Palette (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Breastplate (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Demi Gauntlets (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Brinewater Helm (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | Elegant Tea Set (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Эбигейл | 1 | Owl Wing Wand (Flawless) +Nightmare Element +Bear Spirit | The Backscratcher (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 2 | Aang's Robe (Superior) +Nightmare Element +Bear Spirit | Cupid Robes (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 3 | Cat Burglar Claws (Normal) +Nightmare Element +Bear Spirit | Taiyaki (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 4 | Cardboard Clogs (Normal) +Nightmare Element +Bear Spirit | Moonlight Zōri (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Grimar's Collection (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Superior) +Nightmare Element +Bahamut Spirit | +0.0 п.п. |
 
 ### Универсальный режим: Meteor Zone, Ancient Jungle, Lost City of Gold, Lost City of Gold (Hard, боссы) — пул all: любые предметы до T20, Legendary (эталонный верх, для этих героев недостижим)
 
-- Цель: **50.0%** (до подбора — 0.0%), симуляций: 440, время: 31.0 с, выбор частично по тай-брейку
+- Цель: **50.0%** (до подбора — 0.0%), симуляций: 440, время: 34.2 с, выбор частично по тай-брейку
 - Meteor Zone · босс · Extreme: win rate 0.0%, раундов 25.4, барьер НЕ пробит
 - Ancient Jungle · босс · Extreme: win rate 0.0%, раундов 29.2, барьер НЕ пробит
 - Lost City of Gold · босс · 13: win rate 100.0%, раундов 9.7, барьер пробит
@@ -340,7 +370,7 @@
 
 ### Универсальный режим: Meteor Zone, Ancient Jungle, Lost City of Gold, Lost City of Gold (Hard, боссы) — пул all: любые предметы и камни до T10 (макс. тир героев 9 + 1), Legendary
 
-- Цель: **10.8%** (до подбора — 0.0%), симуляций: 442, время: 29.9 с
+- Цель: **10.8%** (до подбора — 0.0%), симуляций: 442, время: 28.4 с
 - Meteor Zone · босс · Extreme: win rate 0.0%, раундов 21.9, барьер НЕ пробит
 - Ancient Jungle · босс · Extreme: win rate 0.0%, раундов 24.7, барьер НЕ пробит
 - Lost City of Gold · босс · 13: win rate 6.6%, раундов 23.7, барьер пробит
@@ -370,24 +400,32 @@
 | Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Druidic Grimoire (Legendary) +Opulent Element +Leviathan Spirit | +10.1 п.п. |
 | Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Druidic Grimoire (Legendary) +Opulent Element +Leviathan Spirit | +10.2 п.п. |
 
-### Универсальный режим: Meteor Zone, Ancient Jungle, Lost City of Gold, Lost City of Gold (Hard, боссы) — пул owned «только мои вещи»: инвентарь = надетое на героях фикстуры (14 предметов, 3 камней, 4 духов)
+### Универсальный режим: Meteor Zone, Ancient Jungle, Lost City of Gold, Lost City of Gold (Hard, боссы) — ограничения по умолчанию: до T8 (макс. надетый + 1), Superior, камни до T9, духи без Титана
 
-- Цель: **0.0%** (до подбора — 0.0%), симуляций: 24, время: 0.7 с, выбор частично по тай-брейку
-- Meteor Zone · босс · Extreme: win rate 0.0%, раундов 8.0, барьер НЕ пробит
-- Ancient Jungle · босс · Extreme: win rate 0.0%, раундов 8.9, барьер НЕ пробит
-- Lost City of Gold · босс · 13: win rate 0.0%, раундов 8.9, барьер пробит
-- Lost City of Gold · босс · 12: win rate 0.0%, раундов 10.0, барьер пробит
+- Цель: **0.0%** (до подбора — 0.0%), симуляций: 439, время: 16.0 с, выбор частично по тай-брейку
+- Meteor Zone · босс · Extreme: win rate 0.0%, раундов 6.5, барьер НЕ пробит
+- Ancient Jungle · босс · Extreme: win rate 0.0%, раундов 7.4, барьер НЕ пробит
+- Lost City of Gold · босс · 13: win rate 0.0%, раундов 7.0, барьер пробит
+- Lost City of Gold · босс · 12: win rate 0.0%, раундов 8.1, барьер пробит
 - Худшая локация: Meteor Zone · босс · Extreme — 0.0%
 - ⚠ Барьер квеста «Meteor Zone · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 - ⚠ Барьер квеста «Ancient Jungle · босс · Extreme» не пробит — урон отряда снижен (стихия не подходит или её мало).
 
 | Герой | Слот | Было | Стало | Отдача |
 |---|---|---|---|---|
-| Антуан | 4 | Gladiator Helm (Normal) +Sacred Element +Walrus Spirit | Gladiator Helm (Normal) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Topaz Greaves (Superior) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Neku Shield (Normal) +Sacred Element +Mammoth Spirit | +0.0 п.п. |
-| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Republic Gauntlets (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Gladiator Helm (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | Fizzy Guzzle Bottle (Normal) +Tempest Element +Bear Spirit | +0.0 п.п. |
-| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | +0.0 п.п. |
+| Антуан | 2 | Warlord Plate (Normal) +Sacred Element +Mammoth Spirit | Santa's Guard Plate (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 3 | Republic Gauntlets (Normal) +Sacred Element +Mammoth Spirit | Fruity Gauntlets (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 4 | Gladiator Helm (Normal) +Sacred Element +Walrus Spirit | Titan Helm (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 5 | Topaz Greaves (Superior) +Sacred Element +Walrus Spirit | Xenotype Walkers (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Антуан | 6 | Neku Shield (Normal) +Sacred Element +Walrus Spirit | Painted Palette (Superior) +Sacred Element +Krampus Spirit | +0.0 п.п. |
+| Беовульф | 2 | Warlord Plate (Normal) +Tempest Element +Lion Spirit | Breastplate (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 3 | Republic Gauntlets (Normal) +Tempest Element +Lion Spirit | Demi Gauntlets (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 4 | Gladiator Helm (Normal) +Tempest Element +Lion Spirit | Brinewater Helm (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Беовульф | 5 | Fizzy Guzzle Bottle (Normal) +Tempest Element +Lion Spirit | XL Healing Potion (Superior) +Tempest Element +Kraken Spirit | +0.0 п.п. |
+| Эбигейл | 1 | Owl Wing Wand (Flawless) +Nightmare Element +Bear Spirit | Owl Wing Wand (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 2 | Aang's Robe (Superior) +Nightmare Element +Bear Spirit | Cupid Robes (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 3 | Cat Burglar Claws (Normal) +Nightmare Element +Bear Spirit | Macaron Set (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 4 | Cardboard Clogs (Normal) +Nightmare Element +Bear Spirit | Moonlight Zōri (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 5 | Firework Bundle (Flawless) +Nightmare Element +Bear Spirit | Grimar's Collection (Superior) +Nightmare Element +Leviathan Spirit | +0.0 п.п. |
+| Эбигейл | 6 | Firework Bundle (Superior) +Nightmare Element +Bear Spirit | Firework Bundle (Superior) +Nightmare Element +Bahamut Spirit | +0.0 п.п. |
 
