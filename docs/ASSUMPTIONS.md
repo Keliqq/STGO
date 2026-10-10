@@ -185,9 +185,9 @@ TitansDB показывает в описании навыка **высшую** 
 
 Midas' Tragedy усиливает «Lost City of Gold Equipment». Признак в данных — сундук `Luxurious/Opulent/Platinum Chest` (`LCOG_CHESTS`); на playshoptitans.com у таких предметов `chest = goldcity1–3`.
 
-## A24 — Душа Титана · ⚠️
+## A24 — Душа Титана · ✅ / ⚠️
 
-Ступень врождённого навыка, требующая Души Титана, заменяет обычную ступень и не требует порога стихии. В фикстуре у всех `Душа Титана = No` — не проверено.
+Ступень врождённого навыка, требующая Души Титана, заменяет обычную ступень и не требует порога стихии. В фикстуре у всех `Душа Титана = No` — не проверено. С сессии 12 Душа дополнительно включает бонусы промоушена (статы, слоты, набор врождённых навыков) — см. A47.
 
 ## A25 — «stats with <тип>» и «bonus from all items with <тип>» не усиливают DEF · ⚠️ выведено из сверки
 
@@ -243,9 +243,36 @@ Monk (`+100% stats with Ring`), Sorcerer (`+50% stats with Spell`): если п�
 
 Формулировка неоднозначна. Трактовка: множитель ATK = 1 + 0.4 × (угроза / 100) (`THREAT_ATTACK_MULTIPLIER_DIVISOR = 100`). Альтернативное чтение (доля от суммарной угрозы отряда) не пробовано — данных нет.
 
-## A36 — Особые боевые механики навыков · ⚠️
+## A36 — Особые боевые механики навыков · ⚠️ (расширено в сессии 12)
 
-Клаузы, которые парсер относит в `ignored`, симулятор разбирает текстом (`combat.ts → parseSpecials`): «N% chance to survive one fatal blow» — один раз за бой, выжить с 1 HP; «Heal(s) [party by] N HP each turn» — лечение в конце раунда; «Guarantees a Critical Hit after dodging» (Dancer) — следующий удар крит; «+N% more critical damage per consecutive critical hits. Stacks M» (Conquistador) — стаки сбрасываются не-критом; «Protect an ally from a Lethal attack once per battle» (Lord) — союзник выживает с 1 HP, сам лорд себя не защищает; «Bonuses are doubled against bosses» (Ashley) — удвоение стат-эффектов навыка в бою с боссом; «Evasion/Critical Hit Chance is set to N%» — переопределения артефактов. Всё это — догадки по формулировкам, игра пока не сверялась.
+Клаузы, которые парсер относит в `ignored`, симулятор разбирает текстом (`combat.ts → parseSpecials`). Полный список на сессию 12:
+
+| Клауза (текст в листах) | Носители | Реализация |
+|---|---|---|
+| `N% chance to survive one fatal blow` | Cleric/Bishop | один раз за бой выжить с 1 HP |
+| `Heal N HP each turn` / `Heals party by N HP each turn` | Cleric/Bishop, Lilu | лечение в конце раунда |
+| `Guarantees a Critical Hit after dodging an attack` | Dancer/Acrobat | следующий удар — крит |
+| `+N% more critical damage per consecutive critical hits. Stacks M times` | Conquistador | стаки сбрасываются не-критом |
+| `Protect an ally from a Lethal attack once per battle` | Lord | союзник выживает с 1 HP (лорд себя не защищает) |
+| `Bonuses are doubled against bosses` | Ashley | удвоение стат-эффектов навыка в бою с боссом |
+| `Evasion/Critical Hit Chance is set to N%` | артефакты | переопределения |
+| `+N% of total Threat is added as an attack multiplier` | Chieftain | трактовка A35 |
+| `Can use any element, but only counts as N% against Elemental Barriers` | Spellblade/Spellknight | A9 |
+| `+N% party Element bonus VS Elemental Barriers` | Rudo | A9 |
+| `+1% Attack per point in any Element` | Geomancer/Astramancer | `stats.ts` |
+| `The Samurai's first attack is always a critical hit that ignores Elemental Barriers` | Samurai | 1-й удар — крит, барьер не снижает его |
+| `Guaranteed evasion and critical hit on the first round` + `This attack ignores Elemental Barriers` | Daimyo | A49 |
+| `Effect is doubled below X% HP and tripled below Y% HP` | Berserker/Jarl | A48 |
+| `Regain bonuses after 2 rounds` | Sensei | A49 |
+| `Upon striking, defeat any enemy below N% HP` | Dark Knight/Death Knight | A50 |
+| `If the party is defeated, allows an immediate second attempt…` | Chronomancer/Fateweaver | A51 |
+| `Equipped Shield's DEF is added to ATK` | Velite/Praetorian | A45 |
+| `Each turn, drain N% HP from all allies…` | Hemma | A46 |
+| `Highly random attack bonus for the party, up to +N%` | Tamas | A43 |
+| `+N% increased effect received from Champion skills` | Mercenary | A52 |
+| `+N% to max Evasion` | Pathfinder | A42 |
+
+Небоевые клаузы (время отдыха, лут, кража, обучение навыкам, семена, Break Chance) движок игнорирует осознанно — они перечислены в отчёте `npm run model-report`. Всё это — догадки по формулировкам, игра не сверялась.
 
 ## A37 — Ролевая эвристика оптимизатора · ⚠️
 
@@ -259,18 +286,84 @@ Monk (`+100% stats with Ring`), Sorcerer (`+50% stats with Spell`): если п�
 3. **Локальный поиск** — после координатного спуска для каждого слота симуляцией проверяются `OPTIMIZER_LOCAL_NEIGHBORS = 3` следующих по рангу quickScore кандидата (число — эвристика).
 После правки промах отсева — 2,5 % (3/120), потеря win rate при промахе 0 п.п. (все оставшиеся промахи — «ничьи»: win rate совпадает с лучшими из множества). Реализация: `optimizer.ts → selectSlotCandidates`, `pruneSlot`, локальный поиск в `runOptimizer`.
 
-## A39 — Лексикографический тай-брейк и кубики для перекидки навыков · ⚠️ (сессия 8)
+## A39 — Лексикографический тай-брейк и кубики для перекидки навыков · ✅ / ⚠️ (сессия 12)
 
 Две части:
 1. **Тай-брейк финального выбора.** В исходном наборе из 120 случаев 74 % вариантов имеют win rate ровно 0 % или 100 % (замер — `optimizer.prune.test.ts`), цель на них не различает наборы. Финальный выбор упорядочен лексикографически: win rate → средние раунды (меньше) → средний минимальный % HP среди выживших (больше, `SimMetrics.avgMinSurvivorHpPct`) → урон/раунд (больше). На откалиброванном наборе из 30 случаев с базовым win rate 20–80 % промах отсева — 0/30. Если у нескольких проверенных наборов цель совпадает, `OptimizerResult.tieBreakUsed = true`, и UI показывает, что выбор сделан по тай-брейку.
-2. **Кубики.** Иерархия задана владельцем: 1 — базовый, 2 — супер, 3 — мега, 4 — идеальный, Роланд — последним. Какие ступени навыков каким кубиком выпадают — в данных нет; считаем, что кубик k может выдать навык до тира `CUBE_MAX_TIER[k]` (10/15/20/25), Роланд — любой. Совет: минимальный кубик, способный выдать навык тира выше текущего (`cubeForTier`). Порог «вклад ≤ 0,5 п.п. — перекидывать» (`SKILL_REROLL_EPS`) выбран по шуму симуляции (~1 п.п. на 2000 прогонов). Реализация: `src/engine/skills.ts`.
+2. **Кубики — подтверждено ST-Central** («Skill Rerolls: A Basic Breakdown», https://st-central.net/skill-rerolls-roland/, 21–22.11.2025; слоты независимо подтверждены японской вики по Tower of Titans):
+   - **слоты:** Basic — «Used to reroll skill slot 1»; Super — «skill slot 1 & 2»; Mega — «skill slot 1, 2, & 3»; Perfect — «skill slot 1, 2, 3 & 4». Кубик роллит и все младшие слоты, поэтому в совете берём минимальный кубик, покрывающий нужный слот (`cubeForSlot`), и предупреждаем о младших слотах;
+   - **стоимость:** «A single T2 costs double that of a T1, T3 is 4x a T1, and T4s are 8x» → супер = 2 базовых, мега = 4, идеальный = 8 (плюс flawless-предмет соответствующего тира — в совете не учитываем);
+   - **Роланд:** любой навык в любой слот, но «ONCE per hero» → советуем тратить последним, обычно на слот 3 (в статье: «slot 3 is usually the hardest slot to roll using dice»), и держать до конца;
+   - **«проверка одним кубиком» (ODC):** «throwing one single T1 die at them to reroll their first slot once» для сомнительного героя; если и он пустой — героя менять, не тратиться дальше.
+   ⚠️ Остаётся допущением **соответствие кубик → максимальный тир навыка** (`CUBE_MAX_TIER` 10/15/20/25): в ST-Central про тиры ничего нет, в данных таблицы тоже. Совет по тиру показывается отдельной оговоркой.
+3. **Блокировки (A40)** учитываются в `reasons`.
 
-## A40 — Блокировки навыков при перекидке · ⚠️ (сессия 8)
+## A40 — Блокировки навыков при перекидке · ✅ / ⚠️ (сессия 12)
 
-По формулировке владельца: одна иконка — взаимоисключение (два навыка одной линейки на герое не уживаются); на оружие — не больше одного общего (Common/Rare) и одного эпического навыка. В совете по перекидке это учитывается как предупреждение в `reasons` (`rerollAdvice`): если на герое уже есть навык той же линейки или занят эпический слот. Точный механизм блокировок в игре (что именно запрещает игра при реролле) не сверялся.
+Подтверждено ST-Central («Skill Rerolls: A Basic Breakdown»): «Some skills can block other skills. If a skill is blocked, it will not appear in the pool at all and is physically impossible to roll». Конкретно:
+- **одинаковая иконка** блокирует: «If two skills share the same icon. (S1 & S2) or (S3 & S4) [There are more examples]» (формулировка оригинала неоднозначна — приводим дословно) — у нас это «одна линейка навыка»;
+- **обычный навык оружия:** «If the hero already has a common weapon skill, they can't get another common weapon skill»;
+- **эпический навык оружия:** «If the hero already has an epic weapon skill, they can't roll another one»;
+- **обычный + эпический вместе можно:** «You can roll a Common and an Epic weapon skill on the same set»;
+- исключение: «Skills that offer the same stat combination but use a different icon do not block each other».
+
+В совете по перекидке это — предупреждения в `reasons` (`rerollAdvice`). Независимой проверки, кроме ST-Central, нет (Fandom отдаёт 403).
 
 ## A41 — Ограничения подбора по умолчанию и оценка «+1 тир / +1 качество» · ⚠️ (сессия 11)
 
 Инвентаря больше нет: всё покупается на рынке, пул — любые предметы таблицы. «По карману» задают ограничения по умолчанию (требование владельца, `src/engine/constraints.ts → defaultConstraints`): макс. тир = макс. тир надетого в отряде + 1 (без надетых — без ограничения); качество ≤ Superior; камни ≤ T9 или макс. надетого; духи — все, кроме Titan Spirit, если хоть у одного героя отряда нет «Души Титана» (с учётом переключателя «Душа Титана» на странице). Ограничения общие для отряда, поэтому «макс. надетый» берётся по всем выбранным героям.
 
 Оценка апгрейда (`upgradeScenarios` / `upgradeOutcome`): подбор повторяется с ограничением на ступень выше (тир +1 или следующее качество), стартуя с уже найденного набора, на урезанном бюджете `OPTIMIZER_WHATIF_SIM_BUDGET = 150` симуляций и с тем же seed (CRN). Если сценарий не нашёл лучше — прирост считается 0 (текущий набор остаётся доступен), т. е. оценка — нижняя граница. Прирост < `WHATIF_WORTH_MIN_DELTA = 1 п.п.` UI называет «в пределах шума» — порог по шуму симуляции, игровых данных нет.
+
+## A42 — Предел уклонения и «+N% to max Evasion» · ⚠️ (сессия 12)
+
+В игре у EVA есть предел, и навык `+N% to max Evasion` (Pathfinder/Insubstantial, Wanderer → Pathfinder) поднимает именно его, а не текущее значение. Величина предела в данных не описана, наблюдений нет; принято `MAX_EVASION = 1.0` (100%): на достижимых в фикстуре значениях (максимум 71% у Ирвина) поведение модели не меняется, а `+3%` поднимает предел до 1.03. Реализация: `constants.ts → MAX_EVASION`, `combat.ts → tryHit` (`evaCap`), `prepare`. Что закроет вопрос: экран героя с EVA у предела.
+
+## A43 — «Highly random attack bonus for the party, up to +N%» (Tamas) · ⚠️ (сессия 12)
+
+Распределение случайного бонуса в данных не описано: «Highly random attack bonus for the party, up to +50%/+100%/+150%/+200%» (Tamas, 4 ступени). Взят **математическое ожидание равномерного распределения** `N/2` (`RANDOM_BONUS_EXPECTED_FACTOR = 0.5`): на 4-й ступени +100% ATK отряда ко всем бойцам. Реализация: `combat.ts → prepare` (`selfStatic.atkPct`).
+
+## A44 — «+15% power bonus» второй попытки (Fateweaver) · ⚠️ (сессия 12)
+
+`If the party is defeated, allows an immediate second attempt at the quest with a +15% power bonus`: «power» в игре — интегральная оценка героя, что именно она усиливает, в данных не сказано. Трактовка: **множитель ATK отряда во второй попытке** (`SECOND_ATTEMPT_BONUS_STAT = 'atk'`). Реализация: `combat.ts → runAttempt(powerBonusPct)`.
+
+## A45 — «Equipped Shield's DEF is added to ATK» (Velite/Praetorian) · ⚠️ (сессия 12)
+
+Берём DEF-вклад щита из разбивки `calcStats` (`ItemContribution.total.def` — предмет с качеством, камнем, духом и бонусами предмета, включая `+N% bonus from all items with Shield`) и прибавляем к ATK **до** процентных модификаторов ATK. Реализация: `combat.ts → fighterFromHero` (`Fighter.atkFromShieldDef`), применение — в фазе отряда. Проверка: `classMechanics.test.ts`.
+
+## A46 — Дренаж Hemma · ⚠️ (сессия 12)
+
+`Each turn, drain 8% HP from all allies, healing herself for the total amount` + `Hemma's Attack increases by the [total] amount of HP drained plus N% for each drain` (N = 30/50/75/100 по ступеням). Трактовка: в конце каждого раунда каждый живой союзник (кроме самой Hemma) теряет 8% своего максимального HP, но **не может погибнуть** (минимум 1 HP); Hemma лечится на суммарный объём, а её ATK навсегда (в пределах боя) растёт на `слитое × (1 + N/100)`. Прибавка накапливается по раундам, входит в ATK до процентных множителей. Реализация: `combat.ts → runAttempt` (блок дренажа, `drainAtk`).
+
+## A47 — Душа Титана включает бонусы промоушена · ⚠️ (сессия 12)
+
+Переключатель «Душа Титана» (в UI: `as-is` / `on` / `off`) при `on` подменяет эффективный класс на промоушен (`stats.ts → effectiveClass`). Это даёт: базовые статы промоушена (в таблице у всех промоушенов HP/ATK/DEF примерно ×2 к базовому классу, у Ranger → Warden ещё EVA 20 → 25%), его списки типов предметов, его набор врождённых навыков и 4-ю ступень (`innateTitanSkill`, A24), а также стихию промоушена. Уже промоушенный герой (например Jarl) бонус дважды не получает — меняется только ступень врождённого навыка. Проверка: `classModel.test.ts` → «Душа Титана: бонусы промоушена». Что не проверено: как игра показывает класс и слоты у промотированного героя в экспорте (в фикстуре пробуждённых нет).
+
+## A48 — Эскалация условного эффекта по HP (Berserker/Jarl) · ⚠️ (сессия 12)
+
+`Effect is doubled when below 50% HP and tripled when below 25% HP` (у Jarl-Души: 55% / 30%). Трактовка: множитель ×2/×3 применяется к **условным эффектам того же навыка** (`+N% Attack and +N% Evasion when HP falls below 75%`), пороги проверяются по текущему HP владельца на момент расчёта модификаторов раунда (то есть до удара монстра в этом раунде). Пороги строгие (`ниже`, не `≤`). Реализация: `combat.ts → escalationMult`, `CondRef.esc`.
+
+## A49 — Даймё и Сенсей: уклонение в 1-м раунде и возврат бонусов · ⚠️ (сессия 12)
+
+- `Guaranteed evasion and critical hit on the first round` + `This attack ignores Elemental Barriers` (Daimyo): в 1-м раунде удары по герою не проходят вовсе (проверка до броска EVA), а его удар в 1-м раунде — крит, игнорирующий барьер (`firstRoundEva`, `firstRoundCrit`).
+- `Regain bonuses after 2 rounds` (Sensei, ступени 1–4): после двух подряд раундов без полученного урона снимается флаг «получил урон», и условные бонусы «until damaged» включаются снова. Реализация: `combat.ts → runAttempt` (счётчик `noDmgRun`, тот же, что у мана-щита).
+
+## A50 — «Upon striking, defeat any enemy below N% HP» (Dark Knight/Death Knight) · ⚠️ (сессия 12)
+
+После удара героя, если у монстра осталось меньше 10% максимального HP, бой немедленно завершается победой. Реализация: `combat.ts → runAttempt` (`executeBelowPct`). Проверка: `classMechanics.test.ts` (цель добивается на 10-м ударе вместо 11-го).
+
+## A51 — Вторая попытка квеста (Chronomancer/Fateweaver) · ⚠️ (сессия 12)
+
+`If the party is defeated, allows an immediate second attempt at the quest [with a +15% power bonus]`. Трактовка: при поражении бой **полностью повторяется один раз** с теми же бойцами, полными HP и новыми бросками; во второй попытке к ATK отряда применяется бонус (A44). Победа в любой из попыток — победа; в метрики идёт сумма раундов обеих попыток, выжившие и урон — по последней. Что не моделируется: экономика второй попытки (потеря лута/энергии) и то, что попытка доступна раз на квест, а не в каждом прогоне симуляции. Реализация: `combat.ts → runOnce` + `runAttempt`. При независимых попытках ожидаемый win rate = 1 − (1 − p)² — проверено тестом.
+
+## A52 — «+N% increased effect received from Champion skills» (Mercenary) · ⚠️ (сессия 12)
+
+Усиливаются эффекты навыков чемпиона (`Skill.type = 'Leader'`), получаемые **этим** героем: статические партийные баффы умножаются на `1 + N/100` (25% → ×1.25), условные — тоже (множитель хранится в `CondRef.champBoost`). Прочие навыки (свои, духов, артефактов) не усиливаются. Реализация: `combat.ts → prepare`. Проверка: `classMechanics.test.ts` (Aura of the Paladin у Mercenary даёт +50% ATK вместо +40%).
+
+## A53 — Flash Quests не моделируются · ⚠️ (сессия 12)
+
+Клаузы вида `Above bonuses are doubled during Flash Quests` (Bjorn) и `Grants an extra Flash Quest attempt` относятся к отдельному типу квестов, которого нет в модели (`Quest` = обычный/босс). Удвоение не учитывается: Bjorn в отчёте «смоделирован частично», в UI у его класса пометка «оценка приблизительная: не учтено — удвоение бонусов в Flash Quests».
+
+## A54 — Ninja/Sensei: врождённый бонус EVA/CRIT учитывается дважды · ⚠️ (известный дефект, сессия 12)
+
+В HEROES базовые EVA/CRIT класса уже включают врождённый навык (Ninja `30% (+20%)`, A26), а в бою движок дополнительно применяет условные эффекты навыка (`+15…25% EVA`, `+20…50% CRIT until damaged`). Значит, пока герой не получил урон, уклонение и крит завышены (в покое — совпадает с карточкой). Данные листов противоречивы: в HEROES бонус (+20/+20) не совпадает с текстом ступеней (+15/+20 у T1, +20/+40 у T3), поэтому «починка» не сделана — исправление требует эталона с экрана игры. В отчёте `modelingReport` Ninja и Sensei помечены «частично», в UI — пометка «не учтено».

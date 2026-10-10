@@ -150,6 +150,20 @@ export function isLcogItem(item: Item): boolean {
   return LCOG_CHESTS.some((c) => (item.unlock ?? '').toLowerCase() === c.toLowerCase())
 }
 
+/**
+ * Эффективный класс героя. При «Душе Титана» базовый класс заменяется промоушеном (A47):
+ * в HEROES у промоушена свои базовые статы (как правило ×2 к HP/ATK/DEF), свои слоты,
+ * свой набор врождённых навыков и 4-я ступень навыка (`innateTitanSkill`).
+ * Если герой уже промоушен или у класса нет промоушена — класс не меняется.
+ */
+export function effectiveClass(hero: HeroInstance, data: GameData): HeroClass | undefined {
+  const classes = lookup(data).classes
+  const cls = classes.get(hero.className)
+  if (!cls) return undefined
+  if (!hero.titanSoul || !cls.promotion) return cls
+  return classes.get(cls.promotion) ?? cls
+}
+
 function affinityMatches(item: Item, el: Element | null): boolean {
   if (!el) return false
   return item.elementAffinity === 'All' || item.elementAffinity.includes(el)
@@ -177,7 +191,7 @@ export interface ElementValue {
 /** Стихия героя: Σ камней его стихии (A21) + духи из SPIRIT_ELEMENT_BONUS (A29). Класс `Any` (Spellblade) — любые камни. */
 export function heroElementValue(hero: HeroInstance, data: GameData): ElementValue {
   const l = lookup(data)
-  const cls = l.classes.get(hero.className)
+  const cls = effectiveClass(hero, data)
   let elementStones = 0
   let elementAny = 0
   let spiritBonus = 0
@@ -212,8 +226,9 @@ export function skillTierFor(line: Skill[], element: number, promoted: boolean):
 
 /** Все навыки, действующие на героя: обычные (ступень по стихии), врождённый, духи, артефакты. */
 export function activeSkills(hero: HeroInstance, data: GameData, element: number): Skill[] {
-  const { skills, lines, classes, items, enchants } = lookup(data)
-  const cls = classes.get(hero.className)
+  const { skills, lines, items, enchants } = lookup(data)
+  // A47: при «Душе Титана» действуют врождённые навыки промоушена и разрешена 4-я ступень.
+  const cls = effectiveClass(hero, data)
   const promoted = cls?.baseClass != null
   const out: Skill[] = []
   for (const id of hero.skills) {
@@ -254,13 +269,21 @@ export function activeSkills(hero: HeroInstance, data: GameData, element: number
 
 /** Эффект действует на карточке героя (без боевых условий). */
 function isSheetEffect(e: SkillEffect): boolean {
-  return e.scope === 'self' && (!e.condition || e.condition.kind === 'itemType' || e.condition.kind === 'lcogItem')
+  return (
+    e.scope === 'self' &&
+    (!e.condition ||
+      e.condition.kind === 'itemType' ||
+      e.condition.kind === 'lcogItem' ||
+      e.condition.kind === 'innateElementItem')
+  )
 }
 
 function appliesToItem(e: SkillEffect, item: Item): boolean {
   if (!e.condition) return true
   if (e.condition.kind === 'itemType') return e.condition.types.includes(item.type)
   if (e.condition.kind === 'lcogItem') return isLcogItem(item)
+  // «+N% extra bonus from equipment with innate elements» (Spellknight): предмет со встроенной стихией.
+  if (e.condition.kind === 'innateElementItem') return item.builtInElement != null
   return false
 }
 
@@ -273,7 +296,7 @@ export interface CalcOptions {
 export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptions = {}): HeroStats {
   const model = options.model ?? DEFAULT_MODEL
   const l = lookup(data)
-  const cls = l.classes.get(hero.className)
+  const cls = effectiveClass(hero, data)
   if (!cls) throw new Error(`Неизвестный класс «${hero.className}»`)
 
   const { element, elementStones, elementAny } = heroElementValue(hero, data)

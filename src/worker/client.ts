@@ -11,6 +11,7 @@ import type { Fighter, SimMetrics } from '../engine/combat.ts'
 import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
 import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
 import type { GameData, HeroInstance, Quest } from '../data/types.ts'
+import { ENGINE_MODEL_VERSION } from '../engine/constants.ts'
 import { idbStore, KEYS, type KeyValueStore } from '../data/storage.ts'
 
 export interface Engine {
@@ -41,9 +42,9 @@ export interface Engine {
   dispose(): void
 }
 
-/** Хеш входа оптимизатора (FNV-1a): смена данных или настроек → другой ключ. */
+/** Хеш входа оптимизатора (FNV-1a): смена данных, настроек или модели боя → другой ключ. */
 export function optimizerInputHash(data: GameData, input: OptimizerInput): string {
-  const s = `${data.fetchedAt}|${JSON.stringify(input)}`
+  const s = `${ENGINE_MODEL_VERSION}|${data.fetchedAt}|${JSON.stringify(input)}`
   let h = 0x811c9dc5
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i)

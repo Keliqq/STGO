@@ -34,7 +34,7 @@ export function quickScore(fighters: Fighter[], quest: Quest, opts: ScoreOptions
   fighters.forEach((f, i) => {
     const m = p.selfStatic[i]
     const sp = p.specials[i]
-    const atk = (f.atk + m.atkFlat) * (1 + m.atkPct)
+    const atk = (f.atk + (f.atkFromShieldDef ?? 0) + m.atkFlat) * (1 + m.atkPct)
     const crit = Math.min(1, f.crit + m.crit)
     const dps = atk * (1 + crit * (f.critDmg + m.critDmg - 1)) * barrierK
     const eva = Math.min(1, (f.eva + m.eva) * (p.extreme ? 1 - EXTREME_EVA_PENALTY : 1))

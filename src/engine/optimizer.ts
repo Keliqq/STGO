@@ -34,6 +34,7 @@ import {
 } from './constants.ts'
 import { barrierBroken, fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
 import { quickScore } from './score.ts'
+import { effectiveClass } from './stats.ts'
 
 // ─────────────────────────── вход/выход ───────────────────────────
 
@@ -303,7 +304,8 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
   }
 
   const ctxs: HeroCtx[] = heroes.map((hero) => {
-    const cls = data.heroClasses.find((c) => c.name === hero.className)
+    // A47: при «Душе Титана» слоты и стихия берутся у промоушена (у него шире список типов).
+    const cls = effectiveClass(hero, data)
     if (!cls) throw new Error(`Неизвестный класс «${hero.className}»`)
     return {
       hero,

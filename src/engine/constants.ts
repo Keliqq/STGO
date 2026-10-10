@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Все магические числа движка. У каждого — источник; неподтверждённые помечены `// ASSUMPTION: A<n>`
  * и описаны в docs/ASSUMPTIONS.md. Сверка с экспортом героев — src/engine/stats.fixture.test.ts.
  */
@@ -164,7 +164,37 @@ export const EXTREME_EVA_PENALTY = 0.2
 // ASSUMPTION: A35 — формулировка неоднозначна, другой кандидатуры нет.
 export const THREAT_ATTACK_MULTIPLIER_DIVISOR = 100
 
+/**
+ * Предел уклонения в бою (доля): выше него EVA не поднимается. Нужен для навыков
+ * «+N% to max Evasion» (Pathfinder/Insubstantial) — они поднимают именно предел.
+ * Точный игровой предел неизвестен; взят 1.0 (100%) — для всех героев фикстуры (максимум 71%
+ * у Ирвина) поведение не меняется, а «+N% to max Evasion» поднимает предел выше 100%.
+ */
+// ASSUMPTION: A42 — величина предела в игре не наблюдалась.
+export const MAX_EVASION = 1
+
+/**
+ * «Highly random attack bonus for the party, up to +N%» (Tamas): берём математическое ожидание
+ * равномерного распределения на [0, N] → N/2. Точное распределение неизвестно.
+ */
+// ASSUMPTION: A43 — распределение случайного бонуса в данных не описано.
+export const RANDOM_BONUS_EXPECTED_FACTOR = 0.5
+
+/**
+ * «If the party is defeated, allows an immediate second attempt at the quest with a +N% power bonus»
+ * (Fateweaver): «power bonus» трактуем как множитель ATK отряда во второй попытке.
+ */
+// ASSUMPTION: A44 — что именно усиливает «power bonus», в данных не описано.
+export const SECOND_ATTEMPT_BONUS_STAT = 'atk' as const
+
 // ─────────────────────────── Оптимизатор ───────────────────────────
+
+/**
+ * Версия модели боя/навыков для кэша результатов подбора: входит в хеш входа, поэтому после
+ * изменения формул или спец-механик старые записи кэша не отдаются (данные при этом те же).
+ * Поднимать при любом изменении, влияющем на win rate (формулы, механики классов, ступени навыков).
+ */
+export const ENGINE_MODEL_VERSION = 12
 
 /**
  * Топ-K предметов на слот после отсева по quickScore. Ранжирование по Спирмену (0,92) надёжно,
@@ -236,9 +266,23 @@ export const WHATIF_WORTH_MIN_DELTA = 0.01
 // ASSUMPTION: A39 — порог выбран по шуму симуляции, данных нет.
 export const SKILL_REROLL_EPS = 0.005
 /**
+ * Кубики перекидки навыков. Подтверждено ST-Central, «Skill Rerolls: A Basic Breakdown»
+ * (https://st-central.net/skill-rerolls-roland/, 21–22.11.2025; независимо — японская вики по ToT):
+ *   Basic — «Used to reroll skill slot 1»; Super — «slot 1 & 2»; Mega — «slot 1, 2, & 3»;
+ *   Perfect — «slot 1, 2, 3 & 4». Стоимость: «A single T2 costs double that of a T1, T3 is 4x a T1,
+ *   and T4s are 8x» → супер = 2 базовых, мега = 4, идеальный = 8.
+ * Кубик k роллит слоты 1..k: чтобы перекинуть слот 3, нужен мегакубик, и он же перекинет слоты 1–2.
+ */
+export const CUBE_SLOTS: Record<1 | 2 | 3 | 4, number[]> = { 1: [1], 2: [1, 2], 3: [1, 2, 3], 4: [1, 2, 3, 4] }
+/** Стоимость кубика в базовых кубиках (ST-Central: T2 = 2× T1, T3 = 4×, T4 = 8×). */
+export const CUBE_BASIC_COST: Record<1 | 2 | 3 | 4, number> = { 1: 1, 2: 2, 3: 4, 4: 8 }
+/** Слот, на который обычно тратят Роланда (ST-Central: «slot 3 is usually the hardest slot to roll»). */
+export const ROLAND_PREFERRED_SLOT = 3
+/**
  * Максимальный тир навыка, который может выдать кубик (1 — базовый, 2 — супер, 3 — мега,
  * 4 — идеальный; Роланд — без ограничения, применяется последним).
  */
-// ASSUMPTION: A39 — соответствие кубиков тирам навыков в данных отсутствует.
+// ASSUMPTION: A39 — соответствие кубиков тирам навыков в данных отсутствует; в ST-Central
+// подтверждены слоты, стоимость и блокировки, про тиры навыков там ничего нет.
 export const CUBE_MAX_TIER: Record<1 | 2 | 3 | 4, number> = { 1: 10, 2: 15, 3: 20, 4: 25 }
 

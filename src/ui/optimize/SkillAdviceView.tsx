@@ -4,7 +4,7 @@ import { skillIconId } from '#/data/images.ts'
 import type { HeroInstance } from '#/data/types.ts'
 import { CUBE_LABELS, type SkillAdviceResult } from '#/engine/skills.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
-import { Section } from '#/ui/layout.tsx'
+import { Notice, Section } from '#/ui/layout.tsx'
 
 /** Секция «Навыки: вклад и перекидка». */
 export function SkillAdviceView({ team, advice }: { team: HeroInstance[]; advice: SkillAdviceResult }) {
@@ -13,15 +13,17 @@ export function SkillAdviceView({ team, advice }: { team: HeroInstance[]; advice
       title="Навыки: вклад и перекидка"
       description={
         <>
-          Вклад = win rate с навыком минус win rate без него (на подобранном наборе). Слабые навыки (<i>перекинуть</i>) советуем
-          перекинуть минимальным подходящим кубиком; Роланд — только когда навык уже выше тира идеального кубика.
+          Вклад = win rate с навыком минус win rate без него (на подобранном наборе). Кубик перекидывает слот 1 (базовый), 1–2
+          (супер), 1–3 (мега) или 1–4 (идеальный), поэтому советуем минимальный кубик, покрывающий нужный слот; Роланд — любой
+          навык в любой слот, но один раз на героя (тратить последним).
         </>
       }
     >
       <div className="grid gap-4 lg:grid-cols-2">
         {team.map((h, hi) => {
           const rows = advice.advice.filter((a) => a.heroIndex === hi)
-          if (rows.length === 0) return null
+          const plan = advice.plans.find((p) => p.heroIndex === hi)
+          if (rows.length === 0 && !plan) return null
           return (
             <div key={h.id} className="rounded-lg border p-3">
               <h3 className="mb-2 font-semibold">{h.name}</h3>
@@ -44,6 +46,12 @@ export function SkillAdviceView({ team, advice }: { team: HeroInstance[]; advice
                   </li>
                 ))}
               </ul>
+              {plan && plan.reasons.length > 0 ? <Notice tone="info" className="mt-2">{plan.reasons.join(' ')}</Notice> : null}
+              {plan?.roland ? (
+                <Notice tone="info" className="mt-2">
+                  {plan.roland.reason} → слот {plan.roland.slot}
+                </Notice>
+              ) : null}
             </div>
           )
         })}

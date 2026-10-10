@@ -4,7 +4,9 @@ import { Badge } from '#/components/ui/badge.tsx'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table.tsx'
 import { elementIconId, spiritIconId } from '#/data/images.ts'
 import type { GameData, HeroInstance } from '#/data/types.ts'
+import { modelWarning } from '#/engine/classModel.ts'
 import type { OptimizerResult } from '#/engine/optimizer.ts'
+import { effectiveClass } from '#/engine/stats.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { Notice, Section } from '#/ui/layout.tsx'
 import { pct, signedPp } from './format.ts'
@@ -15,6 +17,14 @@ interface ResultViewProps {
   result: { res: OptimizerResult; fromCache: boolean }
   /** Пояснение к цели: win rate / средневзвешенный / худшая локация. */
   objectiveLabel: string
+}
+
+/** Пометка о точности: класс героя смоделирован не полностью (src/engine/classModel.ts). */
+function ModelNote({ hero, data }: { hero?: HeroInstance; data: GameData }) {
+  if (!hero) return null
+  const note = modelWarning(data, effectiveClass(hero, data)?.name ?? hero.className)
+  if (!note) return null
+  return <p className={cn('mb-2 text-xs', note.level === 'partial' ? 'text-warning' : 'text-muted-foreground')}>{note.text}</p>
 }
 
 /** Секция «Результат»: цель, таблица по локациям и подобранные наборы героев. */
@@ -71,6 +81,7 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
         {res.configs.map((cfg, hi) => (
           <div key={team[hi]?.id ?? hi} className="rounded-lg border p-3">
             <h3 className="mb-2 font-semibold">{team[hi]?.name ?? `Герой ${hi + 1}`}</h3>
+            <ModelNote hero={team[hi]} data={data} />
             <ul className="space-y-1.5 text-sm">
               {cfg.map((sc, si) => {
                 const item = sc.item ? itemByName.get(sc.item) : null

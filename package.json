@@ -22,7 +22,8 @@
     "pretypecheck": "node scripts/build-snapshot.ts --if-missing --offline",
     "typecheck": "tsc --noEmit",
     "dump-sheets": "node scripts/dump-sheets.ts",
-    "inspect-sheet": "node scripts/inspect-sheet.ts"
+    "inspect-sheet": "node scripts/inspect-sheet.ts",
+    "model-report": "node scripts/model-report.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",

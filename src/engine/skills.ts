@@ -6,19 +6,33 @@
  * средзвешенный по целевым локациям. Навыки, встроенные в класс/духа/артефакт, не перекидываются —
  * рассматриваются только навыки из hero.skills (выданные предметами).
  *
- * Кубики (решение владельца, A39): 1 — базовый, 2 — супер, 3 — мега, 4 — идеальный, Роланд — последним.
- * ASSUMPTION: A39 — какие ступени навыков выпадают каким кубиком, в данных нет; считаем, что кубик k
- * может выдать навык до тира CUBE_MAX_TIER[k], Роланд — любой. Совет: минимальный кубик, способный
- * выдать навык тира выше текущего; Роланд — только когда текущий навык уже выше тира идеального кубика.
+ * Кубики — подтверждено ST-Central, «Skill Rerolls: A Basic Breakdown»
+ * (https://st-central.net/skill-rerolls-roland/, 21–22.11.2025):
+ *  · базовый роллит слот 1, супер — слоты 1–2, мега — 1–3, идеальный — 1–4;
+ *  · стоимость: супер = 2 базовых, мега = 4, идеальный = 8 (в статье: «T2 costs double that of a T1,
+ *    T3 is 4x a T1, and T4s are 8x»);
+ *  · кубик k перекидывает и все младшие слоты, поэтому для слота N берём минимальный кубик,
+ *    который его покрывает (`cubeForSlot`), а не «побольше»;
+ *  · блокировки: навыки с одинаковой иконкой блокируют друг друга; на оружие нельзя второй обычный
+ *    и нельзя второй эпический навык (обычный + эпический вместе — можно);
+ *  · Роланд: любой навык в любой слот, один раз на героя — тратить последним, обычно на слот 3;
+ *  · «проверка одним кубиком»: один базовый кубик в слот 1 для сомнительного героя.
  *
- * Блокировки (A40):
- *  · одна иконка — взаимоисключение: два навыка одной линейки (одной иконки) на герое не уживаются;
- *  · на оружие — не больше одного общего (Common/Rare) и одного эпического навыка.
+ * ASSUMPTION: A39 — какие тиры навыков выпадают каким кубиком, в данных нет (в ST-Central про тиры
+ * ничего нет): считаем, что кубик k может выдать навык до тира CUBE_MAX_TIER[k], Роланд — любой.
  */
 import type { GameData, HeroInstance, Skill } from '../data/types.ts'
 import type { QuestWeight } from './optimizer.ts'
 import { fighterFromChampion, fighterFromHero, simulateTeam } from './combat.ts'
-import { CUBE_MAX_TIER, OPTIMIZER_CRN_SEED, OPTIMIZER_SIM_RUNS, SKILL_REROLL_EPS } from './constants.ts'
+import {
+  CUBE_BASIC_COST,
+  CUBE_MAX_TIER,
+  CUBE_SLOTS,
+  OPTIMIZER_CRN_SEED,
+  OPTIMIZER_SIM_RUNS,
+  ROLAND_PREFERRED_SLOT,
+  SKILL_REROLL_EPS,
+} from './constants.ts'
 
 export type Cube = 1 | 2 | 3 | 4 | 'roland'
 export const CUBE_LABELS: Record<Cube, string> = {
@@ -63,6 +77,21 @@ export interface SkillAdvice {
 export interface SkillAdviceResult {
   contributions: SkillContribution[]
   advice: SkillAdvice[]
+  /** План по каждому герою: «проверка одним кубиком» и совет по Роланду. */
+  plans: HeroSkillPlan[]
+}
+
+/** Сводный план по герою (не по навыку). */
+export interface HeroSkillPlan {
+  heroIndex: number
+  /**
+   * «Проверка одним кубиком»: у героя нет ни одного навыка с полезным вкладом — стоит один раз
+   * бросить базовый кубик в слот 1; если и он пустой, вкладываться в героя не стоит.
+   */
+  oneDiceCheck: boolean
+  /** Роланд: любой навык в любой слот, один раз на героя — тратить последним, обычно на слот 3. */
+  roland: { slot: number; reason: string } | null
+  reasons: string[]
 }
 
 function weightedWinRate(heroes: HeroInstance[], data: GameData, champion: { name: string; rank: number } | null | undefined, quests: QuestWeight[], seed: number, runs: number): number {
@@ -109,11 +138,28 @@ export function skillContributions(
   return out
 }
 
-/** Минимальный кубик, способный выдать навык тира выше текущего (A39). */
+/** Минимальный кубик, способный выдать навык тира выше текущего (A39 — тиры в данных не подтверждены). */
 export function cubeForTier(tier: number | null): Cube {
   const t = tier ?? 0
   for (const c of [1, 2, 3, 4] as const) if (CUBE_MAX_TIER[c] > t) return c
   return 'roland'
+}
+
+/**
+ * Минимальный кубик, роллящий слот `slot` (1-based). Подтверждено ST-Central: базовый — слот 1,
+ * супер — 1–2, мега — 1–3, идеальный — 1–4. Кубик перекидывает все младшие слоты тоже.
+ */
+export function cubeForSlot(slot: number): Cube {
+  for (const c of [1, 2, 3, 4] as const) if (CUBE_SLOTS[c].includes(slot)) return c
+  return 'roland'
+}
+
+/** Человекочитаемое описание: какие слоты роллит кубик и сколько базовых кубиков стоит. */
+export function cubeDetails(cube: Cube): string {
+  if (cube === 'roland') return 'Роланд (любой навык в любой слот, один раз на героя)'
+  const slots = CUBE_SLOTS[cube]
+  const cost = CUBE_BASIC_COST[cube]
+  return `${CUBE_LABELS[cube]}: слоты ${slots.join('–')}, стоимость ${cost} базов.`
 }
 
 /**
@@ -144,13 +190,20 @@ export function rerollAdvice(
       })
       continue
     }
-    // Вклад ≈ 0 → перекидываем. Блокировки (A40).
+    // Вклад ≈ 0 → перекидываем. Кубик — минимальный, роллящий этот слот (подтверждено ST-Central).
+    const cube = cubeForSlot(c.skillIndex + 1)
+    const byTier = cubeForTier(c.tier)
     const sameLine = hero.skills.filter((id, j) => j !== c.skillIndex && data.skills.find((s) => s.id === id)?.line === c.line)
     if (sameLine.length > 0) reasons.push('на герое уже есть навык с такой иконкой — они взаимоисключающи, новый будет с другой иконкой')
     const epics = hero.skills.filter((id, j) => j !== c.skillIndex && data.skills.find((s) => s.id === id)?.rarity === 'Epic').length
     if (c.rarity === 'Epic' && epics > 0) reasons.push('эпический слот оружия уже занят — на оружие не больше одного эпического навыка')
     if (c.rarity !== 'Epic' && epics > 0 && hero.skills.length - epics <= 1) reasons.push('общий слот оружия этот — новый навык тоже будет общим')
-    const cube = cubeForTier(c.tier)
+    if (cube !== 'roland' && CUBE_SLOTS[cube].length > 1) {
+      reasons.push(`кубик роллит и младшие слоты (${CUBE_SLOTS[cube].join(', ')}) — следи, чтобы там не было нужных навыков`)
+    }
+    if (byTier !== 'roland' && cube !== 'roland' && CUBE_MAX_TIER[byTier] > 0 && CUBE_MAX_TIER[byTier] > CUBE_MAX_TIER[cube]) {
+      reasons.push(`навык T${c.tier ?? '?'}: чтобы выкинуть выше текущего тира, по допущению A39 нужен ${CUBE_LABELS[byTier]}`)
+    }
     advice.push({
       heroIndex: c.heroIndex,
       skillIndex: c.skillIndex,
@@ -159,12 +212,38 @@ export function rerollAdvice(
       action: 'reroll',
       cube,
       reasons: [
-        cube === 'roland'
-          ? `вклад ${(c.contribution * 100).toFixed(1)} п.п. — перекинуть; навык T${c.tier ?? '?'} выше тира идеального кубика, остаётся Роланд (он — последняя инстанция)`
-          : `вклад ${(c.contribution * 100).toFixed(1)} п.п. — перекинуть ${CUBE_LABELS[cube]} (может выдать навык до T${CUBE_MAX_TIER[cube]})`,
+        `вклад ${(c.contribution * 100).toFixed(1)} п.п. — перекинуть: ${cubeDetails(cube)}`,
         ...reasons,
       ],
     })
   }
-  return { contributions, advice }
+  return { contributions, advice, plans: heroPlans(heroes, advice) }
+}
+
+/** Планы по героям: «проверка одним кубиком» и «приберечь Роланда». */
+function heroPlans(heroes: HeroInstance[], advice: SkillAdvice[]): HeroSkillPlan[] {
+  return heroes.map((hero, heroIndex) => {
+    const mine = advice.filter((a) => a.heroIndex === heroIndex)
+    const rerolls = mine.filter((a) => a.action === 'reroll')
+    const keeps = mine.filter((a) => a.action === 'keep')
+    const reasons: string[] = []
+    // ODC (ST-Central): один базовый кубик в слот 1 для героя, у которого нет ни одного полезного навыка.
+    const oneDiceCheck = rerolls.length > 0 && keeps.length === 0 && hero.skills.length > 0
+    if (oneDiceCheck) {
+      reasons.push(
+        'проверка одним кубиком: ни один навык не даёт вклада — бросаем один базовый кубик в слот 1; если и он пустой, вкладываться в героя не стоит',
+      )
+    }
+    const slot = Math.min(ROLAND_PREFERRED_SLOT, hero.skills.length)
+    const roland =
+      rerolls.length > 0 && slot >= 1
+        ? {
+            slot,
+            reason:
+              `Роланд: любой навык в любой слот, но только один раз на героя — тратить последним, ` +
+              `когда остальные слоты уже перекинуты (обычно слот ${ROLAND_PREFERRED_SLOT} — его труднее всего выкинуть кубиком)`,
+          }
+        : null
+    return { heroIndex, oneDiceCheck, roland, reasons }
+  })
 }

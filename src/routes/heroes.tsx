@@ -12,7 +12,8 @@ import { exportHeroesJson, loadHeroes, mergeHeroes, parseHeroesJson, saveHeroes,
 import { classIconId, itemIconId, skillIconId, spiritIconId, elementIconId } from '#/data/images.ts'
 import { importTitansDb, type ImportIssue } from '#/data/titansdb.ts'
 import type { GameData, HeroInstance } from '#/data/types.ts'
-import { calcStats, MAIN_STATS } from '#/engine/stats.ts'
+import { modelWarning } from '#/engine/classModel.ts'
+import { calcStats, effectiveClass, MAIN_STATS } from '#/engine/stats.ts'
 import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { useGameData } from '#/ui/dataSync.ts'
@@ -50,6 +51,8 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
   const stats = calcStats(hero, data)
   const model = calcStats(hero, data, { useReference: false })
   const ref = hero.reference?.stats
+  // Пометка о точности: класс смоделирован не полностью (см. src/engine/classModel.ts).
+  const modelNote = modelWarning(data, effectiveClass(hero, data)?.name ?? hero.className)
   return (
     <article className="flex">
       <Card className="flex-1 gap-4">
@@ -63,6 +66,11 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
               {hero.className}, уровень {hero.level}
               {hero.titanSoul ? ', Душа Титана' : ''} · стихия {stats.element}
             </CardDescription>
+            {modelNote ? (
+              <p className={cn('mt-1 text-xs', modelNote.level === 'partial' ? 'text-warning' : 'text-muted-foreground')} title={modelNote.text}>
+                {modelNote.text}
+              </p>
+            ) : null}
           </div>
           <CardAction>
             <Button variant="ghost" size="sm" onClick={onDelete}>

@@ -12,7 +12,8 @@
  *   · Extreme: штраф уклонения (A34); мана-щит гасит урон и восстанавливается после
  *     MANA_SHIELD_RECHARGE_ROUNDS раундов без урона (A32).
  * Особые механики навыков (выжить смертельный удар, лечение за раунд, рипост после уклонения,
- * «щит» лорда, серия критов, угроза→ATK, лидерские ауры) — parseSpecials + общий движок эффектов.
+ * «щит» лорда, серия критов, угроза→ATK, лидерские ауры, эскалация по HP, казнь цели, вторая попытка,
+ * DEF щита в ATK, дренаж, случайный бонус, «+N% к эффектам чемпиона») — parseSpecials + общий движок эффектов.
  *
  * Детерминизм: свой mulberry32, seed на прогон = seed + номер прогона. Никакого Math.random.
  */
@@ -27,10 +28,12 @@ import {
   ENEMY_DMG_MAX_FACTOR,
   EXTREME_EVA_PENALTY,
   MANA_SHIELD_RECHARGE_ROUNDS,
+  MAX_EVASION,
   MAX_ROUNDS,
+  RANDOM_BONUS_EXPECTED_FACTOR,
   THREAT_ATTACK_MULTIPLIER_DIVISOR,
 } from './constants.ts'
-import { activeSkills, calcStats, heroElementValue, type CalcOptions } from './stats.ts'
+import { activeSkills, calcStats, effectiveClass, heroElementValue, type CalcOptions } from './stats.ts'
 
 /** Детерминированный PRNG (mulberry32). */
 export function mulberry32(seed: number): () => number {
@@ -99,6 +102,11 @@ export interface Fighter {
   elementAny: number
   /** «Can use any element, but only counts as N% against Elemental Barriers» (0 — не Any). */
   barrierAnyPct: number
+  /**
+   * «Equipped Shield's DEF is added to ATK» (Velite/Praetorian): DEF-вклад щита, прибавленный к ATK.
+   * Считается в fighterFromHero (нужна экипировка), в бою просто прибавляется к ATK.
+   */
+  atkFromShieldDef?: number
   group?: ClassGroup
   isChampion?: boolean
   skills: Skill[]
@@ -131,6 +139,31 @@ export interface CombatSpecials {
   evaSet: number | null
   /** «Critical Hit Chance is set to N% and cannot change». */
   critSet: number | null
+  /**
+   * «Effect is doubled when below X% HP and tripled when below Y% HP» (Berserker/Jarl):
+   * условные эффекты этого навыка усиливаются по HP владельца.
+   */
+  hpEscalation: { doubleBelow: number; tripleBelow: number } | null
+  /** «Regain bonuses after N rounds» (Sensei/Ninja-промоушен): снимает «until damaged» после N раундов без урона. */
+  regainAfterRounds: number
+  /** «Upon striking, defeat any enemy below N% HP» (Dark Knight/Death Knight). */
+  executeBelowPct: number
+  /** Есть ли «immediate second attempt at the quest» (Chronomancer/Fateweaver). */
+  secondAttempt: boolean
+  /** Бонус к ATK отряда во второй попытке, % (`+15% power bonus` у Fateweaver; 0 — без бонуса). */
+  secondAttemptPowerPct: number
+  /** «Equipped Shield's DEF is added to ATK» (Velite/Praetorian). */
+  shieldDefToAtk: boolean
+  /** «Each turn, drain N% HP from all allies, healing herself for the total amount» (Hemma). */
+  drain: { pct: number; atkBonusPct: number } | null
+  /** «Highly random attack bonus for the party, up to +N%» (Tamas) — берём матожидание (A43). */
+  randomPartyAtkUpToPct: number
+  /** «+N% increased effect received from Champion skills» (Mercenary). */
+  championSkillBoostPct: number
+  /** «Guaranteed evasion … on the first round» (Daimyo): в 1-м раунде удары не проходят. */
+  firstRoundEva: boolean
+  /** «+N% to max Evasion» (Pathfinder/Insubstantial) — поднимает предел уклонения (A42). */
+  maxEvaBonusPct: number
 }
 
 const SPECIAL_RE = {
@@ -144,9 +177,20 @@ const SPECIAL_RE = {
   elemBonus: /\+(\d+)% party element bonus vs elemental barriers/i,
   anyElement: /only counts as (\d+)% against elemental barriers/i,
   firstCrit: /first attack is always a critical hit|guaranteed evasion and critical hit on the first round/i,
+  firstRoundEva: /guaranteed evasion and critical hit on the first round/i,
   evaSet: /evasion is set to (\d+)%/i,
   critSet: /critical hit chance is set to (\d+)% and cannot change/i,
   doubledVsBoss: /bonuses are doubled against bosses/i,
+  hpEscalation: /effect is doubled when below (\d+)% hp and tripled when below (\d+)% hp/i,
+  regain: /regain bonuses after (\d+) rounds?/i,
+  execute: /upon striking, defeat any enemy below (\d+)% hp/i,
+  secondAttempt: /allows an immediate second attempt at the quest(?:,? with a \+(\d+)% power bonus)?/i,
+  shieldDefToAtk: /equipped shield's def is added to atk/i,
+  drainPct: /each turn, drain (\d+)% hp from all allies/i,
+  drainAtk: /attack increases by the (?:total )?amount of hp drained plus (\d+)%/i,
+  randomPartyAtk: /highly random attack bonus for the party, up to \+(\d+)%/i,
+  championBoost: /\+(\d+)% increased effect received from champion skills/i,
+  maxEva: /\+(\d+)% to max evasion/i,
 } as const
 
 export function parseSpecials(skills: Skill[]): CombatSpecials {
@@ -154,7 +198,12 @@ export function parseSpecials(skills: Skill[]): CombatSpecials {
     survivePct: 0, healSelf: 0, healParty: 0, riposte: false,
     consecCritPct: 0, consecCritMax: 0, lethalProtect: false, threatAtkPct: 0,
     elemBarrierBonusPct: 0, anyElementPct: 0, firstRoundCrit: false, evaSet: null, critSet: null,
+    hpEscalation: null, regainAfterRounds: 0, executeBelowPct: 0, secondAttempt: false,
+    secondAttemptPowerPct: 0, shieldDefToAtk: false, drain: null, randomPartyAtkUpToPct: 0,
+    championSkillBoostPct: 0, firstRoundEva: false, maxEvaBonusPct: 0,
   }
+  let drainPct = 0
+  let drainAtkPct = 0
   for (const sk of skills) {
     const t = sk.text
     s.survivePct = Math.max(s.survivePct, num(t, SPECIAL_RE.survive))
@@ -171,9 +220,33 @@ export function parseSpecials(skills: Skill[]): CombatSpecials {
     s.elemBarrierBonusPct = Math.max(s.elemBarrierBonusPct, num(t, SPECIAL_RE.elemBonus))
     s.anyElementPct = Math.max(s.anyElementPct, num(t, SPECIAL_RE.anyElement))
     if (SPECIAL_RE.firstCrit.test(t)) s.firstRoundCrit = true
+    if (SPECIAL_RE.firstRoundEva.test(t)) s.firstRoundEva = true
     if (SPECIAL_RE.evaSet.test(t)) s.evaSet = num(t, SPECIAL_RE.evaSet) / 100
     if (SPECIAL_RE.critSet.test(t)) s.critSet = num(t, SPECIAL_RE.critSet) / 100
+    // Эскалация по HP: «doubled below X%, tripled below Y%» — из двух порогов берём самые строгие.
+    const esc = t.match(SPECIAL_RE.hpEscalation)
+    if (esc) {
+      const doubleBelow = Number(esc[1])
+      const tripleBelow = Number(esc[2])
+      const prev = s.hpEscalation
+      s.hpEscalation = prev
+        ? { doubleBelow: Math.max(prev.doubleBelow, doubleBelow), tripleBelow: Math.max(prev.tripleBelow, tripleBelow) }
+        : { doubleBelow, tripleBelow }
+    }
+    s.regainAfterRounds = Math.max(s.regainAfterRounds, num(t, SPECIAL_RE.regain))
+    s.executeBelowPct = Math.max(s.executeBelowPct, num(t, SPECIAL_RE.execute))
+    if (SPECIAL_RE.secondAttempt.test(t)) {
+      s.secondAttempt = true
+      s.secondAttemptPowerPct = Math.max(s.secondAttemptPowerPct, num(t, SPECIAL_RE.secondAttempt))
+    }
+    if (SPECIAL_RE.shieldDefToAtk.test(t)) s.shieldDefToAtk = true
+    drainPct = Math.max(drainPct, num(t, SPECIAL_RE.drainPct))
+    drainAtkPct = Math.max(drainAtkPct, num(t, SPECIAL_RE.drainAtk))
+    s.randomPartyAtkUpToPct = Math.max(s.randomPartyAtkUpToPct, num(t, SPECIAL_RE.randomPartyAtk))
+    s.championSkillBoostPct = Math.max(s.championSkillBoostPct, num(t, SPECIAL_RE.championBoost))
+    s.maxEvaBonusPct = Math.max(s.maxEvaBonusPct, num(t, SPECIAL_RE.maxEva))
   }
+  if (drainPct > 0) s.drain = { pct: drainPct, atkBonusPct: drainAtkPct }
   return s
 }
 
@@ -187,17 +260,26 @@ export function isDoubledVsBoss(skill: Skill): boolean {
 export function fighterFromHero(hero: HeroInstance, data: GameData, options: CalcOptions = {}): Fighter {
   const stats = calcStats(hero, data, options)
   const ev = heroElementValue(hero, data)
-  const cls = data.heroClasses.find((c) => c.name === hero.className)
+  const cls = effectiveClass(hero, data)
   const skills = activeSkills(hero, data, ev.elementStones)
   const specials = parseSpecials(skills)
   const elements: Partial<Record<Element, number>> = {}
   if (cls && cls.element !== 'Any' && ev.element > 0) elements[cls.element] = ev.element
+  // ASSUMPTION: A45 — «Equipped Shield's DEF is added to ATK» (Velite/Praetorian): берём DEF-вклад
+  // щита из разбивки (с качеством, камнем, духом и бонусами предмета) и прибавляем к ATK.
+  let atkFromShieldDef = 0
+  if (specials.shieldDefToAtk) {
+    for (const c of stats.breakdown.items) {
+      const it = data.items.find((x) => x.name === c.item)
+      if (it?.type === 'Shield') atkFromShieldDef += c.total.def
+    }
+  }
   return {
     name: hero.name,
     atk: stats.atk, def: stats.def, hp: stats.hp, manaShield: stats.manaShield,
     crit: stats.crit, critDmg: stats.critDmg, eva: stats.eva, threat: stats.threat,
     elements, elementAny: ev.elementAny, barrierAnyPct: specials.anyElementPct,
-    group: cls?.group, skills,
+    atkFromShieldDef, group: cls?.group, skills,
   }
 }
 
@@ -301,6 +383,12 @@ interface EffectRef {
 interface CondRef extends EffectRef {
   /** Для perPartyMember — множитель значения. */
   perGroup?: ClassGroup
+  /** Эскалация по HP владельца (Berserker/Jarl): ×2/×3 при низком HP. */
+  esc?: { doubleBelow: number; tripleBelow: number }
+  /** Эффект пришёл от лидерского навыка чемпиона (для «+N% increased effect received from Champion skills»). */
+  fromChampion?: boolean
+  /** Усиление эффектов чемпиона у получателя (Mercenary, ×1.25 — уже как множитель). */
+  champBoost?: number
 }
 
 interface CondCtx {
@@ -335,6 +423,15 @@ function condOk(c: SkillEffect['condition'], ctx: CondCtx): boolean {
     case 'perPartyMember':
       return true
   }
+}
+
+/** Множитель эскалации по HP владельца: 0–X% → ×3, X–Y% → ×2, иначе ×1 (Berserker/Jarl). */
+function escalationMult(esc: CondRef['esc'], selfHpFrac: number): number {
+  if (!esc) return 1
+  const pct = selfHpFrac * 100
+  if (pct < esc.tripleBelow) return 3
+  if (pct < esc.doubleBelow) return 2
+  return 1
 }
 
 function applyEffect(m: Mods, ref: EffectRef, valueMult = 1): void {
@@ -383,6 +480,10 @@ export interface Prepared {
   enemyCritChance: number
   aoeChance: number
   groupCounts: Record<ClassGroup, number>
+  /** Предел уклонения отряда (A42): MAX_EVASION + «+N% to max Evasion» носителей. */
+  evaCap: number
+  /** Вторая попытка при поражении (Chronomancer/Fateweaver), null — её нет. */
+  secondAttempt: { powerBonusPct: number } | null
 }
 
 /** Состояние симуляции до прогонов — переиспользуется score.ts для аналитической оценки. */
@@ -398,8 +499,17 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   fighters.forEach((f, i) => {
     for (const sk of f.skills) {
       const dbl = isBoss && isDoubledVsBoss(sk)
+      const esc = specials[i].hpEscalation ?? undefined
+      const fromChampion = f.isChampion === true || sk.type === 'Leader'
       for (const e of sk.effects) {
-        const ref: CondRef = { e, dbl, perGroup: e.condition?.kind === 'perPartyMember' ? e.condition.group : undefined }
+        const ref: CondRef = {
+          e,
+          dbl,
+          perGroup: e.condition?.kind === 'perPartyMember' ? e.condition.group : undefined,
+          // Эскалация относится к условным эффектам навыка (Berserker/Jarl: «effect is doubled below 50% HP»).
+          esc: e.condition ? esc : undefined,
+          fromChampion,
+        }
         if (e.scope === 'party') partyRefs.push(ref)
         else selfRefs[i].push(ref)
       }
@@ -411,31 +521,40 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   const partyCond: CondRef[] = []
   const maxHp: number[] = []
   const manaMax: number[] = []
+  // «Highly random attack bonus for the party, up to +N%» (Tamas): матожидание, одинаково всем бойцам (A43).
+  const randomAtkPct = specials.reduce((a, s) => Math.max(a, s.randomPartyAtkUpToPct), 0) * RANDOM_BONUS_EXPECTED_FACTOR / 100
 
   fighters.forEach((f, i) => {
     const sm = emptyMods()
+    sm.atkPct += randomAtkPct
     const cond: CondRef[] = []
     let hpPct = 0
     let hpFlat = 0
     let manaPct = 0
     let manaFlat = 0
-    const acc = (ref: EffectRef, toCond: boolean): void => {
+    // «+N% increased effect received from Champion skills» (Mercenary): усиливает лидерские баффы у этого бойца.
+    const champBoost = 1 + specials[i].championSkillBoostPct / 100
+    const acc = (ref: EffectRef, mult = 1): void => {
       const e = ref.e
-      if (e.condition) {
-        if (toCond) cond.push(ref as CondRef)
-        else partyCond.push(ref as CondRef)
-        return
-      }
+      const k = (ref.dbl ? 2 : 1) * mult
       if (e.stat === 'hp') {
-        if (e.mode === 'pct') hpPct += (e.value * (ref.dbl ? 2 : 1)) / 100
-        else hpFlat += e.value * (ref.dbl ? 2 : 1)
+        if (e.mode === 'pct') hpPct += (e.value * k) / 100
+        else hpFlat += e.value * k
       } else if (e.stat === 'manaShield') {
-        if (e.mode === 'pct') manaPct += (e.value * (ref.dbl ? 2 : 1)) / 100
-        else manaFlat += e.value * (ref.dbl ? 2 : 1)
-      } else applyEffect(sm, ref)
+        if (e.mode === 'pct') manaPct += (e.value * k) / 100
+        else manaFlat += e.value * k
+      } else applyEffect(sm, ref, mult)
     }
-    for (const ref of selfRefs[i]) acc(ref, true)
-    for (const ref of partyRefs) acc(ref, false)
+    for (const ref of selfRefs[i]) {
+      if (ref.e.condition) cond.push(ref)
+      else acc(ref)
+    }
+    for (const ref of partyRefs) {
+      const mult = ref.fromChampion === true ? champBoost : 1
+      // Условный party-эффект: копия с усилением (объект ref общий для всех бойцов — мутировать нельзя).
+      if (ref.e.condition) partyCond.push(mult === 1 ? { ...ref } : { ...ref, champBoost: mult })
+      else acc(ref, mult)
+    }
     selfStatic.push(sm)
     selfCond.push(cond)
     maxHp.push(Math.max(1, Math.floor((f.hp + hpFlat) * (1 + hpPct))))
@@ -444,6 +563,7 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
 
   const partyHeal = specials.reduce((a, s) => a + s.healParty, 0)
   const elemBonus = specials.reduce((a, s) => Math.max(a, s.elemBarrierBonusPct), 0)
+  const retry = specials.find((s) => s.secondAttempt)
   return {
     fighters,
     specials,
@@ -460,6 +580,8 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     enemyCritChance: opts.enemyCritChance ?? ENEMY_CRIT_CHANCE,
     aoeChance: opts.aoeChance ?? AOE_CHANCE,
     groupCounts,
+    evaCap: MAX_EVASION + specials.reduce((a, s) => Math.max(a, s.maxEvaBonusPct), 0) / 100,
+    secondAttempt: retry ? { powerBonusPct: retry.secondAttemptPowerPct } : null,
   }
 }
 
@@ -472,8 +594,27 @@ interface RunResult {
   minSurvivorHpFrac: number
 }
 
+/**
+ * Один бой. При «immediate second attempt at the quest» (Chronomancer/Fateweaver) поражение
+ * автоматически повторяется один раз — с бонусом к ATK, если он указан (A44).
+ */
 function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
+  const first = runAttempt(p, quest, rng, 0)
+  if (first.win || !p.secondAttempt) return first
+  const second = runAttempt(p, quest, rng, p.secondAttempt.powerBonusPct)
+  return {
+    win: second.win,
+    rounds: first.rounds + second.rounds,
+    alive: second.alive,
+    dmgDealt: first.dmgDealt + second.dmgDealt,
+    minSurvivorHpFrac: second.minSurvivorHpFrac,
+  }
+}
+
+/** @param powerBonusPct бонус к ATK отряда во второй попытке, % (0 — первая попытка). */
+function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct: number): RunResult {
   const n = p.fighters.length
+  const atkBonus = 1 + powerBonusPct / 100
   const hp = p.maxHp.slice()
   const mana = p.manaMax.slice()
   const alive = new Array<boolean>(n).fill(true)
@@ -483,23 +624,28 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
   const riposteArmed = new Array<boolean>(n).fill(false)
   const consec = new Array<number>(n).fill(0)
   const surviveUsed = new Array<boolean>(n).fill(false)
+  /** Накопленная прибавка к ATK от дренажа (Hemma): в плоских единицах. */
+  const drainAtk = new Array<number>(n).fill(0)
   let protectLeft = p.specials.reduce((a, s) => a + (s.lethalProtect ? 1 : 0), 0)
   let monsterHp = quest.monsterHp
   let dmgDealt = 0
+  let round = 1
   const mods = new Array<Mods>(n)
 
-  const computeMods = (i: number, round: number, enemyHpFrac: number): Mods => {
+  const computeMods = (i: number, r: number, enemyHpFrac: number): Mods => {
     const m: Mods = { ...p.selfStatic[i] }
     const ctx: CondCtx = {
-      round,
+      round: r,
       selfHpFrac: hp[i] / p.maxHp[i],
       enemyHpFrac,
       isBoss: quest.variant === 'boss',
       damagedBefore: damagedBefore[i],
       groupCounts: p.groupCounts,
     }
-    for (const ref of p.selfCond[i]) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, ref.perGroup ? p.groupCounts[ref.perGroup] : 1)
-    for (const ref of p.partyCond) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, ref.perGroup ? p.groupCounts[ref.perGroup] : 1)
+    const mult = (ref: CondRef): number =>
+      (ref.perGroup ? p.groupCounts[ref.perGroup] : 1) * (ref.champBoost ?? 1) * escalationMult(ref.esc, ctx.selfHpFrac)
+    for (const ref of p.selfCond[i]) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, mult(ref))
+    for (const ref of p.partyCond) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, mult(ref))
     return m
   }
 
@@ -514,8 +660,15 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
     const f = p.fighters[i]
     const sp = p.specials[i]
     const m = mods[i]
+    // «Guaranteed evasion … on the first round» (Daimyo): в 1-м раунде удары не проходят вовсе.
+    if (sp.firstRoundEva && round === 1) {
+      if (sp.riposte) riposteArmed[i] = true
+      return
+    }
     let eva = sp.evaSet ?? f.eva + m.eva
     if (p.extreme) eva *= 1 - EXTREME_EVA_PENALTY
+    // ASSUMPTION: A42 — уклонение ограничено пределом; «+N% to max Evasion» его поднимает.
+    eva = Math.min(eva, p.evaCap + sp.maxEvaBonusPct / 100)
     if (eva >= 1 || rng() < eva) {
       if (sp.riposte) riposteArmed[i] = true
       return
@@ -545,7 +698,7 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
     }
   }
 
-  for (let round = 1; round <= p.maxRounds; round++) {
+  for (round = 1; round <= p.maxRounds; round++) {
     const enemyHpFrac = monsterHp / quest.monsterHp
     for (let i = 0; i < n; i++) mods[i] = computeMods(i, round, enemyHpFrac)
     hitThisRound.fill(false)
@@ -574,7 +727,8 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
       const f = p.fighters[i]
       const sp = p.specials[i]
       const m = mods[i]
-      let atk = (f.atk + m.atkFlat) * (1 + m.atkPct)
+      // «Equipped Shield's DEF is added to ATK» (A45) и прибавка от дренажа (Hemma) — плоские.
+      let atk = (f.atk + (f.atkFromShieldDef ?? 0) + drainAtk[i] + m.atkFlat) * (1 + m.atkPct) * atkBonus
       if (sp.threatAtkPct > 0) atk *= 1 + (sp.threatAtkPct / 100) * (f.threat / THREAT_ATTACK_MULTIPLIER_DIVISOR)
       const critChance = sp.critSet ?? f.crit + m.crit
       let isCrit = false
@@ -595,10 +749,30 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
       if (!p.barrierBroken && !ignoreBarrier) dmg *= BARRIER_UNBROKEN_DMG_FACTOR
       monsterHp -= dmg
       dmgDealt += dmg
+      // «Upon striking, defeat any enemy below N% HP» (Dark Knight/Death Knight).
+      if (monsterHp > 0 && sp.executeBelowPct > 0 && monsterHp < (quest.monsterHp * sp.executeBelowPct) / 100) monsterHp = 0
       if (monsterHp <= 0) return { win: true, rounds: round, alive, dmgDealt, minSurvivorHpFrac: minSurvivorHpFrac() }
     }
 
-    // — конец раунда: лечение и перезарядка мана-щита —
+    // — конец раунда: дренаж (Hemma), лечение и перезарядка мана-щита —
+    // ASSUMPTION: A46 — «Attack increases by the total amount drained plus N% for each drain»:
+    // прибавка = (слито за раунд) × (1 + N/100), накапливается по раундам. Дренаж не убивает (мин. 1 HP).
+    for (let c = 0; c < n; c++) {
+      const d = p.specials[c].drain
+      if (!d || !alive[c]) continue
+      let total = 0
+      for (let i = 0; i < n; i++) {
+        if (i === c || !alive[i]) continue
+        const amount = Math.min(hp[i] - 1, (p.maxHp[i] * d.pct) / 100)
+        if (amount <= 0) continue
+        hp[i] -= amount
+        total += amount
+      }
+      if (total > 0) {
+        hp[c] = Math.min(p.maxHp[c], hp[c] + total)
+        drainAtk[c] += total * (1 + d.atkBonusPct / 100)
+      }
+    }
     for (let i = 0; i < n; i++) {
       if (!alive[i]) continue
       const heal = p.specials[i].healSelf + p.partyHeal
@@ -606,6 +780,9 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
       if (hitThisRound[i]) noDmgRun[i] = 0
       else {
         noDmgRun[i]++
+        // «Regain bonuses after N rounds» (Sensei): «until damaged» включается снова.
+        const regain = p.specials[i].regainAfterRounds
+        if (regain > 0 && noDmgRun[i] >= regain) damagedBefore[i] = false
         if (noDmgRun[i] >= MANA_SHIELD_RECHARGE_ROUNDS) mana[i] = p.manaMax[i]
       }
     }
