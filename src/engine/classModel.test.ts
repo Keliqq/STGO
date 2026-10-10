@@ -120,16 +120,21 @@ describe('реестр моделирования классов и чемпио
       expect(e.level === 'partial', `${e.name}: missing=${e.missing.length}`).toBe(e.missing.length > 0)
     }
     const partial = report.filter((e) => e.level === 'partial').map((e) => e.name)
-    expect(partial.sort()).toEqual(['Bjorn', 'Ninja', 'Sensei'])
+    // Ninja/Sensei закрыты в сессии 15 (A54): бонус EVA/CRIT берётся из HEROES и снимается после урона.
+    expect(partial.sort()).toEqual(['Bjorn'])
   })
 
   it('пометка для UI: у частичных классов — «оценка приблизительная: не учтено …», у остальных — про допущения', () => {
-    const ninja = modelWarning(data, 'Ninja')
-    expect(ninja?.level).toBe('partial')
-    expect(ninja?.text).toContain('оценка приблизительная: не учтено')
+    const bjorn = modelWarning(data, 'Bjorn')
+    expect(bjorn?.level).toBe('partial')
+    expect(bjorn?.text).toContain('оценка приблизительная: не учтено')
     const berserker = modelWarning(data, 'Berserker')
     expect(berserker?.level).toBe('full')
     expect(berserker?.text).toContain('учтено с допущениями')
+    // Ninja закрыт (A54), но с оговоркой о величине бонуса — уровня «частично» больше нет.
+    const ninja = modelWarning(data, 'Ninja')
+    expect(ninja?.level).toBe('full')
+    expect(ninja?.text).toContain('учтено с допущениями')
     // Класс без пробелов и допущений — пометки нет вовсе.
     expect(modelWarning(data, 'Mage')).toBeNull()
   })

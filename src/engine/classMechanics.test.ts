@@ -6,10 +6,13 @@
  * предел уклонения (Pathfinder), бонус к предметам со встроенной стихией (Spellknight).
  */
 import { describe, expect, it } from 'vitest'
-import type { Quest, Skill } from '../data/types.ts'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type { HeroInstance, Quest, Skill } from '../data/types.ts'
+import { importTitansDb } from '../data/titansdb.ts'
 import { fixtureGameData } from '../test/fixtures.ts'
-import { syntheticHero } from '../test/synthetic.ts'
-import { fighterFromChampion, fighterFromHero, parseSpecials, prepare, simulateTeam, type Fighter } from './combat.ts'
+import { syntheticHero, withoutInnateSkills } from '../test/synthetic.ts'
+import { fighterFromChampion, fighterFromHero, innateBonusLoss, parseSpecials, prepare, simulateTeam, type Fighter } from './combat.ts'
 import { calcStats } from './stats.ts'
 
 const data = fixtureGameData()
@@ -107,6 +110,72 @@ describe('Sensei: возврат бонусов после 2 раундов бе
     const withRegain = fighter({ ...base, skills: [it_] })
     const noRegain = fighter({ ...base, skills: [withoutClause(it_, /regain bonuses after \d+ rounds?/i)] })
     expect(simulateTeam([withRegain], q, opts).avgRounds).toBeGreaterThan(simulateTeam([noRegain], q, opts).avgRounds)
+  })
+
+  it('снятый после урона врождённый бонус возвращается через 2 раунда (A54)', () => {
+    // Бонус уже в статах (innateBonus): бой его не добавляет, а снимает после первого урона —
+    // «Regain bonuses after 2 rounds» возвращает его, поэтому герой живёт дольше, чем без клаузы.
+    const q = quest({ monsterHp: 1_000_000, monsterDmg: 100, defCaps: null })
+    const opts = { runs: 300, seed: 5, enemyCritChance: 0, aoeChance: 0 } as const
+    const base = { hp: 1000, eva: 0.5, atk: 0, innateSkillId: it_.id, innateBonus: { eva: 0.2, crit: 0.2 } }
+    const withRegain = fighter({ ...base, skills: [it_] })
+    const noRegain = fighter({ ...base, skills: [withoutClause(it_, /regain bonuses after \d+ rounds?/i)] })
+    expect(simulateTeam([withRegain], q, opts).avgRounds).toBeGreaterThan(simulateTeam([noRegain], q, opts).avgRounds)
+  })
+})
+
+describe('Ninja/Sensei: врождённый бонус EVA/CRIT (A54)', () => {
+  const text = readFileSync(join(import.meta.dirname, '..', '..', 'fixtures', 'heroes.txt'), 'utf8')
+  const heroes = importTitansDb(text, data).heroes
+  const irwin = (): HeroInstance => {
+    const h = heroes.find((x) => x.name === 'Ирвин')
+    if (!h) throw new Error('нет Ирвина')
+    return h
+  }
+
+  it('величина бонуса — из HEROES (`30% (+20%)`), а не из текста ступеней (+15% EVA у 1-й)', () => {
+    const f = fighterFromHero(irwin(), data)
+    expect(f.innateBonus).toEqual({ eva: 0.2, crit: 0.2 })
+    // У промоушена скобки в HEROES не заполнены — берём значение базового класса.
+    expect(fighterFromHero(syntheticHero(data, 'Sensei'), data).innateBonus).toEqual({ eva: 0.2, crit: 0.2 })
+  })
+
+  it('Ниндзя без урона имеет статы из экспорта: бонус не добавлен второй раз', () => {
+    const h = irwin()
+    const s = calcStats(h, data)
+    // Сверка: EVA/CRIT расчёта совпадают с экспортом (Ирвин 71/20 — stats.fixture.test.ts).
+    expect(s.eva).toBeCloseTo(h.reference!.stats.eva, 6)
+    expect(s.crit).toBeCloseTo(h.reference!.stats.crit, 6)
+    // В бою старт — те же статы: «until damaged» эффект врождённого навыка не попадает в модификаторы,
+    // а сами модификаторы совпадают с версией, где врождённых навыков нет вовсе (вклад врождённого — ноль).
+    const f = fighterFromHero(h, data)
+    const p = prepare([f], quest(), { runs: 1, seed: 1 })
+    expect(p.selfCond[0].filter((r) => r.e.condition?.kind === 'untilDamaged')).toEqual([])
+    const off = prepare([fighterFromHero(h, withoutInnateSkills(data, 'Ninja'))], quest(), { runs: 1, seed: 1 })
+    expect(p.selfStatic[0]).toEqual(off.selfStatic[0])
+    expect(innateBonusLoss(f, false)).toEqual({ eva: 0, crit: 0 })
+  })
+
+  it('после удара статы меньше ровно на величину бонуса, и бой это учитывает', () => {
+    const f = fighterFromHero(irwin(), data)
+    expect(innateBonusLoss(f, true)).toEqual({ eva: -0.2, crit: -0.2 })
+
+    // Интеграционная проверка на бойце с врождённым бонусом в статах (как у Ninja/Sensei): вариант «lost»
+    // теряет бонус после первого урона, вариант «kept» (innateBonus = 0) — не теряет его никогда.
+    const ninja = skill('One With the Dark')
+    const base = { hp: 1000, atk: 100, crit: 0.5, critDmg: 2, eva: 0.5, innateSkillId: ninja.id, innateBonus: { eva: 0.2, crit: 0.2 } }
+    const lost = fighter({ ...base, skills: [ninja] })
+    const kept = fighter({ ...base, innateBonus: { eva: 0, crit: 0 }, skills: [ninja] })
+    const opts = { runs: 300, seed: 11, enemyCritChance: 0, aoeChance: 0 } as const
+    // Уклонение: без бонуса больше ударов доходит — герой гибнет раньше.
+    const evaQuest = quest({ monsterHp: 10_000_000, monsterDmg: 50 })
+    expect(simulateTeam([lost], evaQuest, opts).avgRounds).toBeLessThan(simulateTeam([kept], evaQuest, opts).avgRounds)
+    // Крит: после первого удара крит падает на бонус, поэтому урон за раунд ниже (бой идёт 50 раундов у обоих).
+    const critQuest = quest({ monsterHp: 10_000_000, monsterDmg: 0 })
+    const a = simulateTeam([lost], critQuest, opts)
+    const b = simulateTeam([kept], critQuest, opts)
+    expect(a.avgRounds).toBe(b.avgRounds)
+    expect(a.avgDamagePerRound).toBeLessThan(b.avgDamagePerRound)
   })
 })
 

@@ -194,7 +194,7 @@ export const SECOND_ATTEMPT_BONUS_STAT = 'atk' as const
  * изменения формул или спец-механик старые записи кэша не отдаются (данные при этом те же).
  * Поднимать при любом изменении, влияющем на win rate (формулы, механики классов, ступени навыков).
  */
-export const ENGINE_MODEL_VERSION = 13
+export const ENGINE_MODEL_VERSION = 14
 
 /**
  * Топ-K предметов на слот после отсева по quickScore. Ранжирование по Спирмену (0,92) надёжно,

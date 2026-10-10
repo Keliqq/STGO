@@ -33,7 +33,7 @@ import {
   RANDOM_BONUS_EXPECTED_FACTOR,
   THREAT_ATTACK_MULTIPLIER_DIVISOR,
 } from './constants.ts'
-import { activeSkills, calcStats, effectiveClass, heroElementValue, type CalcOptions } from './stats.ts'
+import { activeInnateSkill, activeSkills, calcStats, effectiveClass, heroElementValue, innateBonusOf, type CalcOptions } from './stats.ts'
 
 /** Детерминированный PRNG (mulberry32). */
 export function mulberry32(seed: number): () => number {
@@ -149,6 +149,16 @@ export interface Fighter {
   group?: ClassGroup
   isChampion?: boolean
   skills: Skill[]
+  /**
+   * id действующего врождённого навыка класса (ступень по стихии, с учётом Души Титана). Нужен,
+   * чтобы отличить его «until damaged» эффекты от таких же эффектов других навыков (A54).
+   */
+  innateSkillId?: string | null
+  /**
+   * Врождённый бонус EVA/CRIT из скобок HEROES («30% (+20%)»), УЖЕ входящий в поля eva/crit выше (A26/A54).
+   * В бою он не добавляется, а снимается, когда «until damaged» перестаёт действовать: см. innateBonusLoss.
+   */
+  innateBonus?: { eva: number; crit: number }
   /**
    * Внешняя правка статов (веса статов, семена силы) — уже применена к полям выше,
    * здесь хранится только её «хвост», который бой читает отдельно: прибавка к максимуму HP
@@ -356,6 +366,21 @@ export function fighterFromHero(hero: HeroInstance, data: GameData, options: Cal
   const cls = effectiveClass(hero, data)
   const skills = activeSkills(hero, data, ev.elementStones)
   const specials = parseSpecials(skills)
+  // ASSUMPTION: A54 — врождённый бонус EVA/CRIT уже входит в базовые статы класса (HEROES «30% (+20%)», A26),
+  // поэтому в бою он НЕ добавляется: пока урон не получен, статы такие же, как в карточке/экспорте, а после
+  // первого урона бонус снимается (innateBonusLoss). Величину берём из HEROES, а не из текста ступеней:
+  // у Ninja скобки (+20/+20) не совпадают с текстом ступеней (+15% EVA у 1-й, +40% CRIT у 3-й).
+  const innate = activeInnateSkill(hero, data, ev.elementStones, cls)
+  const declared = cls ? innateBonusOf(cls, data) : { eva: 0, crit: 0 }
+  const innateBonus = { eva: 0, crit: 0 }
+  if (innate) {
+    // Снимаем ровно те статы, которые у врождённого навыка действительно «until damaged».
+    for (const e of innate.effects) {
+      if (e.condition?.kind !== 'untilDamaged') continue
+      if (e.stat === 'eva') innateBonus.eva = declared.eva
+      else if (e.stat === 'crit') innateBonus.crit = declared.crit
+    }
+  }
   const elements: Partial<Record<Element, number>> = {}
   if (cls && cls.element !== 'Any' && ev.element > 0) elements[cls.element] = ev.element
   // ASSUMPTION: A45 — «Equipped Shield's DEF is added to ATK» (Velite/Praetorian): берём DEF-вклад
@@ -373,6 +398,7 @@ export function fighterFromHero(hero: HeroInstance, data: GameData, options: Cal
     crit: stats.crit, critDmg: stats.critDmg, eva: stats.eva, threat: stats.threat,
     elements, elementAny: ev.elementAny, barrierAnyPct: specials.anyElementPct,
     atkFromShieldDef, group: cls?.group, skills,
+    innateSkillId: innate?.id ?? null, innateBonus,
   }
 }
 
@@ -583,6 +609,28 @@ export interface Prepared {
   secondAttempt: { powerBonusPct: number } | null
 }
 
+/**
+ * «until damaged» эффект EVA/CRIT врождённого навыка класса — тот бонус, который уже включён
+ * в базовые статы бойца из HEROES (A26/A54) и потому в бою добавляться не должен.
+ */
+function isInnateBakedIn(f: Fighter, sk: Skill, e: SkillEffect): boolean {
+  if (f.innateSkillId == null || f.innateSkillId !== sk.id) return false
+  if (e.condition?.kind !== 'untilDamaged') return false
+  return e.stat === 'eva' || e.stat === 'crit'
+}
+
+/**
+ * A54: врождённый бонус EVA/CRIT класса уже входит в статы (`Fighter.innateBonus`, из скобок HEROES),
+ * поэтому в бою он не добавляется, а после первого полученного урона снимается — «until damaged»
+ * перестал действовать. У Sensei бонус возвращается после `regainAfterRounds` раундов без урона (A49):
+ * там `damagedBefore` сбрасывается, и функция снова вернёт нули. Величина — из HEROES («+20/+20»),
+ * даже если текст ступени говорит другое (у Ninja 1-я ступень обещает +15% EVA).
+ */
+export function innateBonusLoss(f: Fighter, damagedBefore: boolean): { eva: number; crit: number } {
+  if (!damagedBefore || !f.innateBonus) return { eva: 0, crit: 0 }
+  return { eva: -f.innateBonus.eva, crit: -f.innateBonus.crit }
+}
+
 /** Состояние симуляции до прогонов — переиспользуется score.ts для аналитической оценки. */
 export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Prepared {
   const isBoss = quest.variant === 'boss'
@@ -599,6 +647,9 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
       const esc = specials[i].hpEscalation ?? undefined
       const fromChampion = f.isChampion === true || sk.type === 'Leader'
       for (const e of sk.effects) {
+        // ASSUMPTION: A54 — «until damaged» бонус врождённого навыка класса уже входит в статы бойца
+        // (HEROES «30% (+20%)»), поэтому в бою он не добавляется: боец теряет его сам при получении урона.
+        if (isInnateBakedIn(f, sk, e)) continue
         const ref: CondRef = {
           e,
           dbl,
@@ -747,6 +798,11 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       (ref.perGroup ? p.groupCounts[ref.perGroup] : 1) * (ref.champBoost ?? 1) * escalationMult(ref.esc, ctx.selfHpFrac)
     for (const ref of p.selfCond[i]) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, mult(ref))
     for (const ref of p.partyCond) if (condOk(ref.e.condition, ctx)) applyEffect(m, ref, mult(ref))
+    // A54: врождённый бонус EVA/CRIT уже сидит в статах бойца — после первого урона снимаем его
+    // (у Sensei возвращается через regainAfterRounds раундов без урона: damagedBefore сбрасывается, A49).
+    const innateLoss = innateBonusLoss(p.fighters[i], ctx.damagedBefore)
+    m.eva += innateLoss.eva
+    m.crit += innateLoss.crit
     return m
   }
 
@@ -884,7 +940,8 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       if (hitThisRound[i]) noDmgRun[i] = 0
       else {
         noDmgRun[i]++
-        // «Regain bonuses after N rounds» (Sensei): «until damaged» включается снова.
+        // «Regain bonuses after N rounds» (Sensei): «until damaged» включается снова, и снятый
+        // после урона врождённый бонус EVA/CRIT возвращается (A49/A54).
         const regain = p.specials[i].regainAfterRounds
         if (regain > 0 && noDmgRun[i] >= regain) damagedBefore[i] = false
         if (noDmgRun[i] >= MANA_SHIELD_RECHARGE_ROUNDS) mana[i] = p.manaMax[i]

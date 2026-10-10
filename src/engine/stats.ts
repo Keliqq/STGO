@@ -233,6 +233,35 @@ export function skillTierFor(line: Skill[], element: number, promoted: boolean):
   return best
 }
 
+/**
+ * Действующий врождённый навык класса: ступень по стихии, с учётом Души Титана (A24/A47).
+ * Отдельная функция нужна бою: он должен знать, какой из навыков бойца — врождённый,
+ * чтобы не добавлять второй раз бонус, уже вошедший в базовые статы класса (A54).
+ */
+export function activeInnateSkill(hero: HeroInstance, data: GameData, element: number, cls = effectiveClass(hero, data)): Skill | undefined {
+  if (!cls) return undefined
+  const { skills } = lookup(data)
+  const innate = cls.innateSkills.map((id) => skills.get(id)).filter((s): s is Skill => !!s)
+  let innateSkill = innate.length > 0 ? skillTierFor(innate, element, cls.baseClass != null) : undefined
+  // ASSUMPTION: A24 — ступень за Душу Титана заменяет врождённый навык и не требует порога стихии.
+  const titan = cls.innateTitanSkill ? skills.get(cls.innateTitanSkill) : undefined
+  if (hero.titanSoul && titan) innateSkill = titan
+  return innateSkill
+}
+
+/**
+ * Часть EVA/CRIT класса из скобок HEROES («30% (+20%)») — она уже входит в базовые статы (A26/A4).
+ * У промоушенов скобки в листе не заполнены (Sensei: `EVA 30%`, `Crit 20%` — те же числа, что у Ninja
+ * со скобками), поэтому при нулях берём значение базового класса: карточка промоушена показывает
+ * ту же величину, а «until damaged» у его навыка есть (иначе возврат бонусов у Sensei не имел бы смысла).
+ */
+// ASSUMPTION: A54 — величины бонуса промоушена в HEROES нет.
+export function innateBonusOf(cls: HeroClass, data: GameData): { eva: number; crit: number } {
+  if (cls.innateBonus.eva > 0 || cls.innateBonus.crit > 0) return cls.innateBonus
+  const base = cls.baseClass ? data.heroClasses.find((c) => c.name === cls.baseClass) : undefined
+  return base?.innateBonus ?? { eva: 0, crit: 0 }
+}
+
 /** Все навыки, действующие на героя: обычные (ступень по стихии), врождённый, духи, артефакты. */
 export function activeSkills(hero: HeroInstance, data: GameData, element: number): Skill[] {
   const { skills, lines, items, enchants } = lookup(data)
@@ -247,11 +276,7 @@ export function activeSkills(hero: HeroInstance, data: GameData, element: number
     out.push(line ? skillTierFor(line, element, promoted) : root)
   }
   if (cls) {
-    const innate = cls.innateSkills.map((id) => skills.get(id)).filter((s): s is Skill => !!s)
-    let innateSkill = innate.length > 0 ? skillTierFor(innate, element, promoted) : undefined
-    // ASSUMPTION: A24 — ступень за Душу Титана заменяет врождённый навык и не требует порога стихии.
-    const titan = cls.innateTitanSkill ? skills.get(cls.innateTitanSkill) : undefined
-    if (hero.titanSoul && titan) innateSkill = titan
+    const innateSkill = activeInnateSkill(hero, data, element, cls)
     if (innateSkill) out.push(innateSkill)
   }
   for (const s of hero.slots) {
