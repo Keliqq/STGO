@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Все магические числа движка. У каждого — источник; неподтверждённые помечены `// ASSUMPTION: A<n>`
  * и описаны в docs/ASSUMPTIONS.md. Сверка с экспортом героев — src/engine/stats.fixture.test.ts.
  */
@@ -199,6 +199,8 @@ export const OPTIMIZER_SIM_RUNS = 2000
  */
 export const OPTIMIZER_CRN_SEED = 42
 /** Сколько наборов-кандидатов (beam по quickScore) доходит до симуляции. */
+// Период уступки событийному циклу воркера (обработка cancel()); меньше — лишние ~мс на симуляцию.
+export const OPTIMIZER_YIELD_INTERVAL_MS = 25
 export const OPTIMIZER_BEAM = 10
 
 // ─────────────────────────── Рекомендации по навыкам ───────────────────────────

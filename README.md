@@ -8,6 +8,9 @@
 Всё считается в браузере: сервера, API-ключей и прокси нет. Результат сборки — статичные файлы в `dist/` (GitHub Pages).
 Данные пользователя (герои, инвентарь, отметки) живут только в его браузере (IndexedDB) + экспорт/импорт JSON.
 
+**Сайт:** будет опубликован на GitHub Pages после первого пуша в `master` (workflow уже настроен;
+URL появится в окружении `github-pages` в разделе Deploy репозитория).
+
 ## Что умеет
 
 - **«Данные»** — статус кэша (дата, источник), кнопка «Обновить данные сейчас», diff последнего обновления,
@@ -28,6 +31,22 @@
   экспорт/импорт всего состояния приложения в JSON.
 - **Офлайн** — приложение открывается без сети: в бандл кладётся снапшот данных (`snapshot.json`),
   плюс PWA (манифест + service worker кэширует статику после первого визита).
+
+## Скриншоты
+
+| Главная | Подбор (результат) |
+|---|---|
+| ![Главная](docs/screens/home.png) | ![Подбор](docs/screens/optimize-result.png) |
+
+| Герои (импорт фикстуры) | Инвентарь |
+|---|---|
+| ![Герои](docs/screens/heroes-imported.png) | ![Инвентарь](docs/screens/inventory.png) |
+
+| Мобильная вёрстка (390 px) | Тёмная тема |
+|---|---|
+| ![Мобильная](docs/screens/mobile-home.png) | ![Тёмная тема](docs/screens/home-dark.png) |
+
+Полный набор — в `docs/screens/` (генерируются e2e-тестами: `npm run test:e2e`).
 
 ## Как пользоваться
 
@@ -68,6 +87,7 @@
 npm install
 npm run dev              # dev-сервер (снапшот данных создаётся из фикстур, если его нет)
 npm test                 # Vitest (движок, парсеры, хранилища)
+npm run test:e2e         # Playwright: собранный dist в живом Chromium (скриншоты в docs/screens)
 npm run lint && npm run typecheck
 npm run build            # карта картинок (если старше 7 дн.) → снапшот из живой таблицы → vite build
 npm run build-snapshot   # src/data/snapshot.json (флаг --offline — из fixtures/sheets)

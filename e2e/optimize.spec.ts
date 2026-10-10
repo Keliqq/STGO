@@ -20,7 +20,7 @@ test('подбор для одного героя под квест + совет
   await expect(page.getByRole('heading', { name: 'Навыки: вклад и перекидка' })).toBeVisible()
   await shot(page, 'optimize-skills.png')
 
-  await section(page, 'Проверка на реальности').getByRole('button', { name: 'проходит' }).click()
+  await section(page, 'Проверка на реальности').getByRole('button', { name: 'проходит', exact: true }).click()
   await expect(section(page, 'Проверка на реальности').getByText(/· проходит ·/)).toBeVisible()
   expect(errors).toEqual([])
 })

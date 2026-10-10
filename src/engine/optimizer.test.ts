@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Тесты оптимизатора: ограничения слотов/артефактов, пул owned, детерминизм,
  * и проверка отсева — «отсев (top-K + разнообразные + адаптивный K) не выбрасывает лучший
  * по симуляции вариант слота» на 20 случаях (доля промахов фиксируется в PROGRESS.md).
@@ -62,8 +62,8 @@ const slotFeats = (heroEl: string) => (sc: SlotConfig): SlotFeatures => {
 }
 
 describe('оптимизатор: ограничения', () => {
-  it('типы по слотам, тир, качество, один артефакт, стихия камня', () => {
-    const res = runOptimizer(data, baseInput(heroes[0]))
+  it('типы по слотам, тир, качество, один артефакт, стихия камня', async () => {
+    const res = await runOptimizer(data, baseInput(heroes[0]))
     const hero = heroes[0]
     const cls = clsOf(hero)
     const cfg = res.configs[0]
@@ -88,7 +88,7 @@ describe('оптимизатор: ограничения', () => {
     expect(artifacts).toBeLessThanOrEqual(1)
   })
 
-  it('не больше одного артефакта на героя (пул с артефактами)', () => {
+  it('не больше одного артефакта на героя (пул с артефактами)', async () => {
     const artifactItems = data.items.filter((i) => i.artifactSkill && i.isEquipment && i.tier <= 15)
     if (artifactItems.length < 2) return
     const pool: ItemPool = {
@@ -97,14 +97,14 @@ describe('оптимизатор: ограничения', () => {
       stones: [],
       spirits: [],
     }
-    const res = runOptimizer(data, baseInput(heroes[0], { pool }))
+    const res = await runOptimizer(data, baseInput(heroes[0], { pool }))
     const n = res.configs[0].filter((s) => s.item && itemByName(s.item).artifactSkill).length
     expect(n).toBeLessThanOrEqual(1)
   })
 })
 
 describe('оптимизатор: пул owned', () => {
-  it('предлагаются только предметы из инвентаря (или текущая экипировка)', () => {
+  it('предлагаются только предметы из инвентаря (или текущая экипировка)', async () => {
     const hero = heroes[0]
     const ownedNames = new Set(hero.slots.map((s) => s.item).filter((x): x is string => !!x))
     // Добавим по одному предмету на слот из допустимых типов.
@@ -119,20 +119,20 @@ describe('оптимизатор: пул owned', () => {
       stones: [],
       spirits: [],
     }
-    const res = runOptimizer(data, baseInput(hero, { pool }))
+    const res = await runOptimizer(data, baseInput(hero, { pool }))
     for (const sc of res.configs[0]) {
       if (sc.item) expect(ownedNames.has(sc.item), `чужой предмет ${sc.item}`).toBe(true)
     }
   })
 
-  it('owned: камни и духи только из инвентаря', () => {
+  it('owned: камни и духи только из инвентаря', async () => {
     // Герой без текущей экипировки — чтобы базовые камни не смешивали проверку.
     const bare: HeroInstance = {
       ...heroes[0],
       slots: Array.from({ length: 6 }, () => ({ item: null, quality: 'Normal' as Quality, element: null, spirit: null })),
     }
     const pool: ItemPool = { kind: 'owned', items: [], stones: ['Tide Element'], spirits: ['Bear Spirit'] }
-    const res = runOptimizer(data, baseInput(bare, { pool }))
+    const res = await runOptimizer(data, baseInput(bare, { pool }))
     for (const sc of res.configs[0]) {
       if (sc.element) expect(sc.element).toBe('Tide Element')
       if (sc.spirit) expect(sc.spirit).toBe('Bear Spirit')
@@ -141,17 +141,17 @@ describe('оптимизатор: пул owned', () => {
 })
 
 describe('оптимизатор: детерминизм и режимы', () => {
-  it('один seed → идентичный результат', () => {
-    const a = runOptimizer(data, baseInput(heroes[0], { seed: 123 }))
-    const b = runOptimizer(data, baseInput(heroes[0], { seed: 123 }))
+  it('один seed → идентичный результат', async () => {
+    const a = await runOptimizer(data, baseInput(heroes[0], { seed: 123 }))
+    const b = await runOptimizer(data, baseInput(heroes[0], { seed: 123 }))
     expect(JSON.stringify(a.configs)).toBe(JSON.stringify(b.configs))
     expect(a.objective).toBe(b.objective)
   })
 
-  it('universal: взвешенная цель и худшая локация', () => {
+  it('universal: взвешенная цель и худшая локация', async () => {
     const q1 = quest({ id: 'a|normal|Hard', monsterHp: 40000 })
     const q2 = quest({ id: 'b|normal|Hard', monsterHp: 400000, monsterDmg: 1500 })
-    const res = runOptimizer(data, baseInput(heroes[0], { mode: 'universal', quests: [{ quest: q1, weight: 2 }, { quest: q2, weight: 1 }] }))
+    const res = await runOptimizer(data, baseInput(heroes[0], { mode: 'universal', quests: [{ quest: q1, weight: 2 }, { quest: q2, weight: 1 }] }))
     expect(res.perQuest).toHaveLength(2)
     expect(res.worstQuest).not.toBeNull()
     const mean = (res.perQuest[0].winRate * 2 + res.perQuest[1].winRate) / 3
@@ -159,22 +159,22 @@ describe('оптимизатор: детерминизм и режимы', () =>
     expect(res.worstQuest!.winRate).toBe(Math.min(res.perQuest[0].winRate, res.perQuest[1].winRate))
   })
 
-  it('robust: цель — минимум по локациям', () => {
+  it('robust: цель — минимум по локациям', async () => {
     const q1 = quest({ id: 'a|normal|Hard', monsterHp: 40000 })
     const q2 = quest({ id: 'b|normal|Hard', monsterHp: 400000, monsterDmg: 1500 })
-    const res = runOptimizer(data, baseInput(heroes[0], { mode: 'universal', robust: true, quests: [{ quest: q1, weight: 1 }, { quest: q2, weight: 1 }] }))
+    const res = await runOptimizer(data, baseInput(heroes[0], { mode: 'universal', robust: true, quests: [{ quest: q1, weight: 1 }, { quest: q2, weight: 1 }] }))
     expect(res.objective).toBe(Math.min(...res.perQuest.map((p) => p.winRate)))
   })
 
-  it('отмена возвращает частичный результат с флагом', () => {
-    const res = runOptimizer(data, baseInput(heroes[0]), { shouldCancel: () => true })
+  it('отмена возвращает частичный результат с флагом', async () => {
+    const res = await runOptimizer(data, baseInput(heroes[0]), { shouldCancel: () => true })
     expect(res.cancelled).toBe(true)
     expect(res.configs).toHaveLength(1)
   })
 })
 
 describe('отсев против симуляции (top-K + разнообразие + адаптивный K)', () => {
-  it('на 20 случаях лучший по симуляции вариант слота не отсекается (промахов < 5%)', () => {
+  it('на 20 случаях лучший по симуляции вариант слота не отсекается (промахов < 5%)', async () => {
     const rng = mulberry32(20261009)
     const K = OPTIMIZER_TOP_K
     let total = 0

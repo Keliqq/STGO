@@ -32,15 +32,17 @@ const api = {
    * Оптимизатор экипировки (отсев → координатный спуск → финальная симуляция).
    * Прогресс — использованные симуляции из бюджета; отмена — cancel() (частичный результат).
    */
-  optimize(
+  async optimize(
     data: GameData,
     input: OptimizerInput,
     onProgress?: (done: number, total: number) => void,
-  ): OptimizerResult {
+  ): Promise<OptimizerResult> {
     cancelled = false
     return runOptimizer(data, input, {
       onProgress: onProgress ? (done, total) => void onProgress(done, total) : undefined,
       shouldCancel: () => cancelled,
+      // Без уступки событийному циклу воркер не обработал бы входящий cancel() до конца расчёта.
+      yieldControl: () => new Promise<void>((r) => setTimeout(r, 0)),
     })
   },
   /** Вклад навыков в win rate и советы по перекидке (кубики). */

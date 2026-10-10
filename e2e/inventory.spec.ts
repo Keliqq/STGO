@@ -16,7 +16,7 @@ test('инвентарь: CSV-строки и CSV-файл, запуск «то�
 
   const csvFile = test.info().outputPath('inv.csv')
   await import('node:fs').then((fs) => fs.writeFileSync(csvFile, 'item,Neku Shield,Normal\n'))
-  await page.setInputFiles('input[type="file"][accept=".csv"]', csvFile)
+  await page.setInputFiles('input[type="file"][accept*=".csv"]', csvFile)
   await expect(page.getByText(/добавлено: предметов 1/)).toBeVisible()
   await shot(page, 'inventory.png')
 
@@ -55,11 +55,11 @@ test('экспорт состояния → очистка → импорт', as
   await expect(page.getByText('Пока нет героев')).toBeVisible()
 
   await page.goto('/#/inventory')
-  await page.setInputFiles('input[type="file"][accept=".json"]', stateFile)
+  await page.setInputFiles('input[type="file"][accept*=".json"]', stateFile)
   await expect(page.getByText(/Импортировано: героев добавлено 18/)).toBeVisible()
   await page.goto('/#/heroes')
   await expect(page.getByRole('heading', { name: /Мои герои \(18\)/ })).toBeVisible()
   await page.goto('/#/inventory')
-  await expect(page.getByRole('heading', { name: 'Предметы (3)' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Предметы (2)' })).toBeVisible()
   expect(errors).toEqual([])
 })

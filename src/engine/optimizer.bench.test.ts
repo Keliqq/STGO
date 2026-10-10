@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Бенчмарк полного прогона оптимизатора (тот же код, что в Web Worker): 3 героя + чемпион,
  * пул all T20 Legendary, квест-босс с барьером. Результат фиксируется в docs/PROGRESS.md.
  * Запуск: npx vitest run src/engine/optimizer.bench.test.ts --silent=false
@@ -31,7 +31,7 @@ const quest: Quest = {
 }
 
 describe('бенчмарк оптимизатора', () => {
-  it('полный прогон (3 героя + Argon, all T20 Legendary, босс с барьером) ≤ 10 с', { timeout: 60000 }, () => {
+  it('полный прогон (3 героя + Argon, all T20 Legendary, босс с барьером) ≤ 10 с', { timeout: 60000 }, async () => {
     const team = ['Денам', 'Джорди', 'Вестия'].map((name) => {
       const h = heroes.find((x) => x.name === name)
       if (!h) throw new Error(`нет героя ${name}`)
@@ -46,7 +46,7 @@ describe('бенчмарк оптимизатора', () => {
       constraints: { maxItemTier: 20, maxQuality: 'Legendary' as Quality, maxStoneTier: 5, spirits: null },
     }
     const t0 = performance.now()
-    const res = runOptimizer(data, input)
+    const res = await runOptimizer(data, input)
     const ms = performance.now() - t0
     console.log(`Прогон оптимизатора: ${ms.toFixed(0)} мс, ${res.simsUsed} симуляций, win rate ${(res.winRate * 100).toFixed(1)}%`)
     expect(res.cancelled).toBe(false)

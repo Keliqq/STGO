@@ -1,14 +1,17 @@
-/**
- * Финальная проверка оптимизатора на fixtures/heroes.txt: 2–3 типовые локации + универсальный режим.
+﻿/**
+ * Финальная проверка оптимизатора на fixtures/heroes.txt: типовые локации + универсальный режим,
+ * каждый случай в трёх пулах: «all до T20» (эталонный верх), «all до T(макс. тир героев + 1)»
+ * и «только мои вещи» (инвентарь = то, что надето на героях фикстуры).
  * Результат — docs/REPORT.md. Запуск: node scripts/final-report.ts
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fixtureGameData } from '../src/test/fixtures.ts'
 import { importTitansDb } from '../src/data/titansdb.ts'
-import type { Quest } from '../src/data/types.ts'
+import type { ItemPool, OptimizerConstraints, OptimizerInput, OptimizerResult } from '../src/engine/optimizer.ts'
+import type { Quality, Quest } from '../src/data/types.ts'
 import { fighterFromChampion, fighterFromHero, simulateTeam } from '../src/engine/combat.ts'
-import { applyHeroConfig, questLabel, runOptimizer, type OptimizerInput, type OptimizerResult } from '../src/engine/optimizer.ts'
+import { applyHeroConfig, questLabel, runOptimizer } from '../src/engine/optimizer.ts'
 import { rerollAdvice } from '../src/engine/skills.ts'
 
 const ROOT = join(import.meta.dirname, '..')
@@ -27,9 +30,58 @@ const allNormal = [...data.quests.filter((q) => q.variant === 'normal')].sort(by
 const bossPlain = allBoss.find((q) => !q.barrier)
 const withBarrier = allBoss.find((q) => q.barrier)
 const normal = allNormal[0]
-const chosen: Quest[] = [bossPlain, withBarrier, normal].filter((q): q is Quest => !!q)
+// Cinderlake Volcano Extreme (босс) — локация из sanity-вопроса: 0 % → 100 % только на пуле all до T20.
+const cinderlake = data.quests.find((q) => q.area === 'Cinderlake Volcano' && q.variant === 'boss' && q.difficulty === 'Extreme')
+const chosen: Quest[] = [bossPlain, withBarrier, normal, cinderlake].filter((q): q is Quest => !!q)
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
+
+// Максимальный тир предметов по HERO LEVELS для уровня каждого героя отряда + 1 — «достижимый» потолок.
+const heroMaxTier = (level: number): number => data.heroLevels.find((l) => l.level === level)?.maxItemTier ?? 0
+const realTier = Math.max(...team.map((h) => heroMaxTier(h.level))) + 1
+
+/** Инвентарь «как надето»: предметы/камни/духи из текущих слотов героев фикстуры. */
+function ownedFromTeam(): { items: { name: string; quality: Quality }[]; stones: string[]; spirits: string[] } {
+  const items = new Map<string, Quality>()
+  const stones = new Set<string>()
+  const spirits = new Set<string>()
+  const order: Quality[] = ['Normal', 'Superior', 'Flawless', 'Epic', 'Legendary']
+  for (const h of team) {
+    for (const s of h.slots) {
+      if (s.item) {
+        const cur = items.get(s.item)
+        if (!cur || order.indexOf(s.quality) > order.indexOf(cur)) items.set(s.item, s.quality)
+      }
+      if (s.element) stones.add(s.element)
+      if (s.spirit) spirits.add(s.spirit)
+    }
+  }
+  return { items: [...items.entries()].map(([name, quality]) => ({ name, quality })), stones: [...stones], spirits: [...spirits] }
+}
+const owned = ownedFromTeam()
+
+interface PoolCase {
+  title: string
+  pool: ItemPool
+  constraints: OptimizerConstraints
+}
+const pools: PoolCase[] = [
+  {
+    title: 'пул all: любые предметы до T20, Legendary (эталонный верх, для этих героев недостижим)',
+    pool: { kind: 'all' },
+    constraints: { maxItemTier: 20, maxQuality: 'Legendary', maxStoneTier: null, spirits: null },
+  },
+  {
+    title: `пул all: любые предметы и камни до T${realTier} (макс. тир героев ${realTier - 1} + 1), Legendary`,
+    pool: { kind: 'all' },
+    constraints: { maxItemTier: realTier, maxQuality: 'Legendary', maxStoneTier: realTier, spirits: null },
+  },
+  {
+    title: `пул owned «только мои вещи»: инвентарь = надетое на героях фикстуры (${owned.items.length} предметов, ${owned.stones.length} камней, ${owned.spirits.length} духов)`,
+    pool: { kind: 'owned', items: owned.items, stones: owned.stones, spirits: owned.spirits },
+    constraints: { maxItemTier: 30, maxQuality: 'Legendary', maxStoneTier: null, spirits: null },
+  },
+]
 
 function baseWinRate(qs: Quest[], weights: number[]): number {
   const fighters = team.map((h) => fighterFromHero(h, data))
@@ -72,38 +124,49 @@ out.push('')
 out.push(`Отряд: ${team.map((h) => `${h.name} (${h.className} ${h.level})`).join(', ')} + чемпион ${champion.name} ранг ${champion.rank}.`)
 out.push('Данные — фикстуры листов (fixtures/sheets), пороги защиты — из фикстур (без stcentral-hub).')
 out.push('')
+out.push('Каждая локация посчитана в трёх пулах (см. «Пулы» ниже). Sanity-вывод по «Cinderlake Volcano Extreme 0 % → 100 %»:')
+out.push(`это достигается только на пуле all до T20 с качеством Legendary (раздел с пометкой «эталонный верх»);`)
+out.push(`для героев 25–26 уровней (макс. тир ${realTier - 1} по HERO LEVELS) T20-набор недостижим — см. разделы «достижимый пул» и «только мои вещи».`)
+out.push('')
 
 for (const q of chosen) {
-  const input: OptimizerInput = {
-    heroes: team,
-    champion,
-    mode: 'quest',
-    quests: [{ quest: q, weight: 1 }],
-    pool: { kind: 'all' },
-    constraints: { maxItemTier: 20, maxQuality: 'Legendary', maxStoneTier: null, spirits: null },
+  for (const p of pools) {
+    const input: OptimizerInput = {
+      heroes: team,
+      champion,
+      mode: 'quest',
+      quests: [{ quest: q, weight: 1 }],
+      pool: p.pool,
+      constraints: p.constraints,
+    }
+    const before = baseWinRate([q], [1])
+    const t0 = Date.now()
+    const res = await runOptimizer(data, input)
+    const ms = Date.now() - t0
+    let adviceText: string[] = []
+    if (p.constraints.maxItemTier === 20) {
+      const adv = rerollAdvice(data, input.heroes.map((h, i) => applyHeroConfig(h, res.configs[i])), champion, [{ quest: q, weight: 1 }], { runs: 500 })
+      adviceText = adv.advice.filter((a) => a.action === 'reroll').map((a) => `${a.skillName} (слот ${a.skillIndex + 1}): ${(a.contribution * 100).toFixed(1)} п.п. — ${a.reasons[0]}`)
+    }
+    out.push(...renderCase(`Локация: ${questLabel(q)} — ${p.title}`, res, ms, before, adviceText))
   }
-  const before = baseWinRate([q], [1])
-  const t0 = Date.now()
-  const res = runOptimizer(data, input)
-  const ms = Date.now() - t0
-  const adv = rerollAdvice(data, input.heroes.map((h, i) => applyHeroConfig(h, res.configs[i])), champion, [{ quest: q, weight: 1 }], { runs: 500 })
-  const adviceText = adv.advice.filter((a) => a.action === 'reroll').map((a) => `${a.skillName} (слот ${a.skillIndex + 1}): ${(a.contribution * 100).toFixed(1)} п.п. — ${a.reasons[0]}`)
-  out.push(...renderCase(`Локация: ${questLabel(q)}`, res, ms, before, adviceText))
 }
 
 const uniQuests = allBoss.slice(0, 4)
-const uniInput: OptimizerInput = {
-  heroes: team,
-  champion,
-  mode: 'universal',
-  quests: uniQuests.map((q) => ({ quest: q, weight: 1 })),
-  pool: { kind: 'all' },
-  constraints: { maxItemTier: 20, maxQuality: 'Legendary', maxStoneTier: null, spirits: null },
+for (const p of pools) {
+  const uniInput: OptimizerInput = {
+    heroes: team,
+    champion,
+    mode: 'universal',
+    quests: uniQuests.map((q) => ({ quest: q, weight: 1 })),
+    pool: p.pool,
+    constraints: p.constraints,
+  }
+  const beforeUni = baseWinRate(uniQuests, uniQuests.map(() => 1))
+  const t0 = Date.now()
+  const uniRes = await runOptimizer(data, uniInput)
+  out.push(...renderCase(`Универсальный режим: ${uniQuests.map((q) => q.area).join(', ')} (Hard, боссы) — ${p.title}`, uniRes, Date.now() - t0, beforeUni, []))
 }
-const beforeUni = baseWinRate(uniQuests, uniQuests.map(() => 1))
-const t0 = Date.now()
-const uniRes = runOptimizer(data, uniInput)
-out.push(...renderCase(`Универсальный режим: ${uniQuests.map((q) => q.area).join(', ')} (Hard, боссы)`, uniRes, Date.now() - t0, beforeUni, []))
 
 writeFileSync(join(ROOT, 'docs', 'REPORT.md'), out.join('\n') + '\n', 'utf8')
 console.log(`docs/REPORT.md записан (${out.length} строк)`)

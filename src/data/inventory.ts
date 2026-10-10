@@ -1,7 +1,8 @@
 /**
  * Инвентарь пользователя: какие предметы/камни/духи у него есть (пул `owned` в оптимизаторе).
  * Ручной ввод или CSV; хранится только в его браузере (IndexedDB).
- * Формат CSV: колонки `type,name,quality`, type = item | stone | spirit (quality обязателен для item).
+ * Формат строк: `type,name[,quality]`, type = item | stone | spirit (quality обязателен для item);
+ * строка заголовка `type,name,quality` необязательна.
  */
 import Papa from 'papaparse'
 import { z } from 'zod'
@@ -54,15 +55,12 @@ export interface InventoryParseResult {
 }
 
 /**
- * Разбор CSV/ручного ввода. Строки вида `type,name[,quality]`; пустые и заголовок пропускаются.
+ * Разбор CSV/ручного ввода. Строки вида `type,name[,quality]`; пустые пропускаются,
+ * строка заголовка `type,name,...` в начале необязательна и игнорируется.
  * Имена сверяются с GameData: неизвестные собираются в `unknown` и не попадают в инвентарь.
  */
 export function parseInventoryCsv(text: string, data: GameData): InventoryParseResult {
-  const parsed = Papa.parse<Record<string, string>>(text, {
-    header: true,
-    skipEmptyLines: 'greedy',
-    transformHeader: (h) => h.trim().toLowerCase(),
-  })
+  const parsed = Papa.parse<string[]>(text, { skipEmptyLines: 'greedy' })
   const errors = parsed.errors.map((e) => `Строка ${(e.row ?? 0) + 1}: ${e.message}`)
   const itemNames = new Set(data.items.filter((i) => i.isEquipment).map((i) => i.name))
   const stoneNames = new Set(data.enchants.filter((e) => e.kind === 'element').map((e) => e.name))
@@ -71,16 +69,17 @@ export function parseInventoryCsv(text: string, data: GameData): InventoryParseR
   const stones = new Set<string>()
   const spirits = new Set<string>()
   const unknown: string[] = []
-  for (const row of parsed.data) {
-    const type = (row.type ?? '').trim().toLowerCase()
-    const name = (row.name ?? '').trim()
-    if (!name) continue
+  parsed.data.forEach((row, i) => {
+    const type = (row[0] ?? '').trim().toLowerCase()
+    const name = (row[1] ?? '').trim()
+    if (i === 0 && type === 'type') return
+    if (!name) return
     if (type === 'item') {
       if (!itemNames.has(name)) {
         unknown.push(name)
-        continue
+        return
       }
-      const q = QualitySchema.safeParse((row.quality ?? 'Normal').trim())
+      const q = QualitySchema.safeParse((row[2] ?? 'Normal').trim())
       const quality = q.success ? q.data : 'Normal'
       const cur = items.get(name)
       const order = ['Normal', 'Superior', 'Flawless', 'Epic', 'Legendary']
@@ -92,9 +91,9 @@ export function parseInventoryCsv(text: string, data: GameData): InventoryParseR
       if (!spiritNames.has(name)) unknown.push(name)
       else spirits.add(name)
     } else {
-      errors.push(`Неизвестный тип «${row.type ?? ''}» у «${name}» — строка пропущена (ожидается item/stone/spirit).`)
+      errors.push(`Неизвестный тип «${row[0] ?? ''}» у «${name}» — строка пропущена (ожидается item/stone/spirit).`)
     }
-  }
+  })
   return {
     inventory: {
       version: INVENTORY_VERSION,

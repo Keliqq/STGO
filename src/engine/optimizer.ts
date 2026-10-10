@@ -31,6 +31,7 @@ import {
   OPTIMIZER_SIM_BUDGET,
   OPTIMIZER_SIM_RUNS,
   OPTIMIZER_TOP_K,
+  OPTIMIZER_YIELD_INTERVAL_MS,
 } from './constants.ts'
 import { QUALITY_ORDER } from './quality.ts'
 import { barrierBroken, fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
@@ -133,6 +134,11 @@ export interface OptimizerResult {
 export interface OptimizerHooks {
   onProgress?: (done: number, total: number) => void
   shouldCancel?: () => boolean
+  /**
+   * Отдать управление событийному циклу (в Web Worker — чтобы обработать входящий cancel():
+   * синхронный код воркера сообщения не читает). По умолчанию — no-op, тесты остаются синхронными.
+   */
+  yieldControl?: () => Promise<void>
 }
 
 // ─────────────────────────── вспомогательное ───────────────────────────
@@ -288,7 +294,7 @@ interface CandEval {
   wr: number
 }
 
-export function runOptimizer(data: GameData, input: OptimizerInput, hooks: OptimizerHooks = {}): OptimizerResult {
+export async function runOptimizer(data: GameData, input: OptimizerInput, hooks: OptimizerHooks = {}): Promise<OptimizerResult> {
   const warnings: string[] = []
   const topK = input.topK ?? OPTIMIZER_TOP_K
   const budget = input.simBudget ?? OPTIMIZER_SIM_BUDGET
@@ -299,6 +305,16 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   if (input.heroes.length === 0) throw new Error('Не выбран ни один герой')
   const cancel = () => hooks.shouldCancel?.() === true
   const progress = (done: number): void => hooks.onProgress?.(done, budget)
+  // Уступка не чаще OPTIMIZER_YIELD_INTERVAL_MS — иначе setTimeout(0) в воркере добавляет ~1–4 мс на симуляцию.
+  const rawYield = hooks.yieldControl
+  let lastYield = Date.now()
+  const yieldC = async (): Promise<void> => {
+    if (!rawYield) return
+    const now = Date.now()
+    if (now - lastYield < OPTIMIZER_YIELD_INTERVAL_MS) return
+    lastYield = now
+    await rawYield()
+  }
 
   const heroes = input.heroes.map((h) =>
     input.titanSoul && input.titanSoul !== 'as-is' ? { ...h, titanSoul: input.titanSoul === 'on' } : h,
@@ -382,10 +398,11 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
     const worst = Math.min(...per.map((m) => m.winRate))
     return input.robust ? { obj: worst, tie: [mean, ...tieRest], wr: mean } : { obj: mean, tie: tieRest, wr: mean }
   }
-  const evaluate = (cfg: HeroConfig[]): CandEval => {
+  const evaluate = async (cfg: HeroConfig[]): Promise<CandEval> => {
     const k = configKey(cfg)
     const hit = simCache.get(k)
     if (hit) return hit
+    await yieldC()
     const fs = teamOf(cfg)
     const per = quests.map((qw) => simulateTeam(fs, qw.quest, { runs, seed }))
     const ev: CandEval = { per, ...objectiveOf(per) }
@@ -442,6 +459,7 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   }
 
   const options: SlotConfig[][][] = ctxs.map((_, hi) => ctxs[hi].items.map((_, si) => pruneSlot(hi, si, baseline)))
+  await yieldC()
   if (cancel()) return finish(cloneTeam(baseline), [], 'Отменено на этапе отсева')
 
   // ── 2. Координатный спуск по quickScore: сначала по ролям (танк → ДД), затем совместная доводка ──
@@ -493,12 +511,14 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
 
   const roleOrder = [...ctxs.keys()].sort((a, b) => Number(ctxs[b].tank) - Number(ctxs[a].tank))
   for (const hi of roleOrder) {
+    await yieldC()
     if (cancel()) return finish(best, [], 'Отменено во время подбора по ролям')
     for (let si = 0; si < ctxs[hi].items.length; si++) {
       for (const opt of options[hi][si]) tryOption(hi, si, opt, true)
     }
   }
   for (let pass = 0; pass < 3; pass++) {
+    await yieldC()
     if (cancel()) return finish(best, [], 'Отменено во время совместной доводки')
     let changed = false
     for (let hi = 0; hi < ctxs.length; hi++) {
@@ -510,7 +530,7 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   }
 
   // ── 3. Финальный выбор симуляцией (CRN: один seed на всех кандидатов) ──
-  let bestEv = evaluate(best)
+  let bestEv = await evaluate(best)
   const changedCount = best.reduce((n, cfg, hi) => n + cfg.filter((sc, si) => slotKey(sc) !== slotKey(baseline[hi][si])).length, 0)
   const explCost = changedCount * quests.length
 
@@ -526,11 +546,12 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
           const opt = opts[cur + j]
           if (!opt) break
           if (!allowed(best, hi, si, opt)) continue
+          await yieldC()
           if (cancel()) return finish(best, [], 'Отменено при локальном поиске', simsUsed, bestEv)
           if (simsUsed + quests.length > budget - explCost) break local
           const trial = cloneTeam(best)
           trial[hi][si] = opt
-          const ev = evaluate(trial)
+          const ev = await evaluate(trial)
           if (betterEval(ev, bestEv)) {
             bestEv = ev
             best = trial
@@ -545,8 +566,9 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
 
   const cands = [...beam.values()].sort((a, b) => b.score - a.score || (configKey(a.cfg) < configKey(b.cfg) ? -1 : 1)).slice(0, OPTIMIZER_BEAM)
   for (const c of cands) {
+    await yieldC()
     if (cancel()) return finish(best, [], 'Отменено при сравнении кандидатов', simsUsed, bestEv)
-    const ev = evaluate(c.cfg)
+    const ev = await evaluate(c.cfg)
     if (betterEval(ev, bestEv)) {
       bestEv = ev
       best = c.cfg
@@ -562,11 +584,12 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
         for (const opt of options[hi][si]) {
           if (slotKey(best[hi][si]) === slotKey(opt)) continue
           if (!allowed(best, hi, si, opt)) continue
+          await yieldC()
           if (cancel()) return finish(best, [], 'Отменено при симуляционной доводке', simsUsed, bestEv)
           if (simsUsed + quests.length > budget - explCost) break outer
           const trial = cloneTeam(best)
           trial[hi][si] = opt
-          const ev = evaluate(trial)
+          const ev = await evaluate(trial)
           if (betterEval(ev, bestEv)) {
             bestEv = ev
             best = trial
@@ -580,21 +603,23 @@ export function runOptimizer(data: GameData, input: OptimizerInput, hooks: Optim
   }
 
   // ── 4. Объяснения: отдача каждого изменённого слота (win rate с заменой − без неё) ──
-  const explanations: SlotExplanation[][] = best.map((cfg, hi) => {
+  const explanations: SlotExplanation[][] = []
+  for (let hi = 0; hi < best.length; hi++) {
     const out: SlotExplanation[] = []
-    cfg.forEach((sc, si) => {
+    for (let si = 0; si < best[hi].length; si++) {
+      const sc = best[hi][si]
       const b = baseline[hi][si]
-      if (slotKey(sc) === slotKey(b)) return
+      if (slotKey(sc) === slotKey(b)) continue
       let delta = 0
       if (simsUsed + quests.length <= budget) {
         const trial = cloneTeam(best)
         trial[hi][si] = b
-        delta = bestEv.wr - evaluate(trial).wr
+        delta = bestEv.wr - (await evaluate(trial)).wr
       }
       out.push({ slot: si, from: itemLabel(b), to: itemLabel(sc), winRateDelta: delta })
-    })
-    return out
-  })
+    }
+    explanations.push(out)
+  }
 
   return finish(best, explanations, null, simsUsed, bestEv)
 
