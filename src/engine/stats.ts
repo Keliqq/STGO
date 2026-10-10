@@ -38,12 +38,22 @@ export interface StatModel {
   typedBonusStats: readonly MainStat[]
   /** Базовые ATK/DEF/HP класса на уровне. */
   baseAt: (cls: HeroClass, level: number) => Record<MainStat, number>
+  /**
+   * Множитель роста базы HP по уровню (1 — как в constants.ts). Параметр калибровки (A57):
+   * кривая HP (A8) — главная нерешённая задача сверки, её крутим в анализе чувствительности.
+   */
+  hpGrowthMult?: number
 }
 
 /** База класса на уровне: база₁ × (1 + k·(L−1)) + c·(L−1), база₁ — статы из HEROES (A8). */
-export function baseStatsAt(cls: HeroClass, level: number): Record<MainStat, number> {
+export function baseStatsAt(cls: HeroClass, level: number, model?: Pick<StatModel, 'hpGrowthMult'>): Record<MainStat, number> {
   const l = Math.max(1, level) - 1
-  const at = (st: MainStat): number => cls.base[st] * (1 + HERO_LEVEL_STAT_GROWTH[st].k * l) + HERO_LEVEL_STAT_GROWTH[st].c * l
+  const hpGrowth = HERO_LEVEL_STAT_GROWTH.hp
+  const hpMult = model?.hpGrowthMult ?? 1
+  const at = (st: MainStat): number => {
+    const g = st === 'hp' ? { k: hpGrowth.k * hpMult, c: hpGrowth.c * hpMult } : HERO_LEVEL_STAT_GROWTH[st]
+    return cls.base[st] * (1 + g.k * l) + g.c * l
+  }
   return { atk: at('atk'), def: at('def'), hp: at('hp') }
 }
 
@@ -55,7 +65,6 @@ export const DEFAULT_MODEL: StatModel = {
   typedBonusStats: TYPED_ITEM_BONUS_STATS,
   baseAt: baseStatsAt,
 }
-
 export interface ItemContribution {
   slot: number
   item: string
@@ -384,8 +393,10 @@ export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptio
   })
 
   const seeds = { atk: hero.seeds.atk, def: hero.seeds.def, hp: hero.seeds.hp }
+  // Модель роста по умолчанию подхватывает hpGrowthMult (A57); своя baseAt — как задана вызывающим.
   const ref = options.useReference === false ? null : referenceBase(hero, data, model)
-  const base = ref ?? model.baseAt(cls, hero.level)
+  const modelBase = model.baseAt === baseStatsAt ? baseStatsAt(cls, hero.level, model) : model.baseAt(cls, hero.level)
+  const base = ref ?? modelBase
 
   const out = zero()
   for (const st of MAIN_STATS) {

@@ -14,6 +14,7 @@ import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { type Settings, loadSettings, refreshNow, saveSettings, useDataStatus, useGameData } from '#/ui/dataSync.ts'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
+import { ModelAccuracyView } from '#/ui/ModelAccuracyView.tsx'
 
 export const Route = createFileRoute('/data')({ component: DataPage })
 
@@ -146,6 +147,8 @@ function DataPage() {
       </Section>
 
       <BackupSection />
+
+      <ModelAccuracyView />
 
       <Section title="Пороги защиты квестов">
         <p className="mb-2 text-sm">

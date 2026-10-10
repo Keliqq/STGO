@@ -47,26 +47,65 @@ export function mulberry32(seed: number): () => number {
 }
 
 /**
+ * Параметры боя, которые в игре не подтверждены напрямую и потому переопределяемы:
+ * анализ чувствительности и калибровка по отметкам «проходит / не проходит» (src/engine/calibration.ts).
+ * По умолчанию — константы из constants.ts; тесты и скрипт калибровки передают свои значения.
+ */
+export interface CombatModel {
+  /** Снижение урона врага на порогах 50/70/75% DEF (A30). */
+  mitigation?: { at50: number; at70: number; at75: number }
+  /** Максимальный множитель урона врага при DEF = 0 (A30). */
+  enemyDmgMaxFactor?: number
+  /** Шанс крита врага (A30). */
+  enemyCritChance?: number
+  /** Шанс AoE-атаки врага (A31). */
+  aoeChance?: number
+  /** Множитель урона отряда при непробитом барьере (A9). */
+  barrierUnbrokenFactor?: number
+}
+
+/** Параметры боя с подставленными значениями по умолчанию. */
+export interface ResolvedCombatModel {
+  mitigation: { at50: number; at70: number; at75: number }
+  enemyDmgMaxFactor: number
+  enemyCritChance: number
+  aoeChance: number
+  barrierUnbrokenFactor: number
+}
+
+export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
+  return {
+    mitigation: m.mitigation ?? DEF_MITIGATION,
+    enemyDmgMaxFactor: m.enemyDmgMaxFactor ?? ENEMY_DMG_MAX_FACTOR,
+    enemyCritChance: m.enemyCritChance ?? ENEMY_CRIT_CHANCE,
+    aoeChance: m.aoeChance ?? AOE_CHANCE,
+    barrierUnbrokenFactor: m.barrierUnbrokenFactor ?? BARRIER_UNBROKEN_DMG_FACTOR,
+  }
+}
+
+/**
  * Множитель урона врага по DEF цели (A30): 1.5× при DEF=0, 1.0× на половине порога 50%,
  * 0.5× / 0.3× / 0.25× на порогах 50/70/75%, между ними линейно; выше порога 75% — 0.25×.
  * Без порогов (defCaps = null, A10) — 1.0 (никакого снижения).
+ * `model` — переопределение кривой (анализ чувствительности A57), по умолчанию константы.
  */
-export function damageFactor(def: number, caps: DefCaps | null): number {
+export function damageFactor(def: number, caps: DefCaps | null, model: ResolvedCombatModel = resolveCombatModel()): number {
   if (!caps || caps.p50 <= 0) return 1
+  const mit = model.mitigation
   const pts: [number, number][] = [
-    [0, ENEMY_DMG_MAX_FACTOR],
+    [0, model.enemyDmgMaxFactor],
     [caps.p50 / 2, 1],
-    [caps.p50, DEF_MITIGATION.at50],
-    [caps.p70, DEF_MITIGATION.at70],
-    [caps.p75, DEF_MITIGATION.at75],
+    [caps.p50, mit.at50],
+    [caps.p70, mit.at70],
+    [caps.p75, mit.at75],
   ]
-  if (def >= caps.p75) return DEF_MITIGATION.at75
+  if (def >= caps.p75) return mit.at75
   for (let i = 1; i < pts.length; i++) {
     const [x0, y0] = pts[i - 1]
     const [x1, y1] = pts[i]
     if (def <= x1) return x1 === x0 ? y1 : y0 + ((def - x0) * (y1 - y0)) / (x1 - x0)
   }
-  return DEF_MITIGATION.at75
+  return mit.at75
 }
 
 /** Порядок ходов отряда (Compendium): 3 — средний→левый→правый; 4 — ср-левый→крайний левый→крайний правый→ср-правый. */
@@ -394,6 +433,8 @@ export interface SimOptions {
   extreme?: boolean
   enemyCritChance?: number
   aoeChance?: number
+  /** Переопределение кривой защиты и барьера (анализ чувствительности A57). */
+  model?: CombatModel
   onProgress?: (done: number, total: number) => void
   shouldCancel?: () => boolean
 }
@@ -533,6 +574,8 @@ export interface Prepared {
   maxRounds: number
   enemyCritChance: number
   aoeChance: number
+  /** Кривая защиты, множитель при DEF=0 и урон непробитого барьера (параметры калибровки A57). */
+  combat: ResolvedCombatModel
   groupCounts: Record<ClassGroup, number>
   /** Предел уклонения отряда (A42): MAX_EVASION + «+N% to max Evasion» носителей. */
   evaCap: number
@@ -620,6 +663,7 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   const partyHeal = specials.reduce((a, s) => a + s.healParty, 0)
   const elemBonus = specials.reduce((a, s) => Math.max(a, s.elemBarrierBonusPct), 0)
   const retry = specials.find((s) => s.secondAttempt)
+  const combat = resolveCombatModel(opts.model)
   return {
     fighters,
     specials,
@@ -633,8 +677,9 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     partyHeal,
     extreme: opts.extreme ?? quest.difficulty === 'Extreme',
     maxRounds: opts.maxRounds ?? MAX_ROUNDS,
-    enemyCritChance: opts.enemyCritChance ?? ENEMY_CRIT_CHANCE,
-    aoeChance: opts.aoeChance ?? AOE_CHANCE,
+    enemyCritChance: opts.enemyCritChance ?? combat.enemyCritChance,
+    aoeChance: opts.aoeChance ?? combat.aoeChance,
+    combat,
     groupCounts,
     evaCap: MAX_EVASION + specials.reduce((a, s) => Math.max(a, s.maxEvaBonusPct), 0) / 100,
     secondAttempt: retry ? { powerBonusPct: retry.secondAttemptPowerPct } : null,
@@ -732,7 +777,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       return
     }
     const defEff = (f.def + m.defFlat) * (1 + m.defPct)
-    let dmg = baseDmg * damageFactor(defEff, quest.defCaps)
+    let dmg = baseDmg * damageFactor(defEff, quest.defCaps, p.combat)
     if (rng() < p.enemyCritChance) dmg = Math.max(dmg, baseDmg) * ENEMY_CRIT_MULT
     if (mana[i] > 0) {
       const absorbed = Math.min(mana[i], dmg)
@@ -805,7 +850,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
         consec[i] = Math.min(consec[i] + 1, sp.consecCritMax)
       } else consec[i] = 0
       const ignoreBarrier = sp.firstRoundCrit && round === 1 && isCrit // Iaido: крит игнорирует барьер
-      if (!p.barrierBroken && !ignoreBarrier) dmg *= BARRIER_UNBROKEN_DMG_FACTOR
+      if (!p.barrierBroken && !ignoreBarrier) dmg *= p.combat.barrierUnbrokenFactor
       monsterHp -= dmg
       dmgDealt += dmg
       // «Upon striking, defeat any enemy below N% HP» (Dark Knight/Death Knight).

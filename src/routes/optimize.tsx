@@ -23,7 +23,7 @@ import {
   type ConstraintOverrides,
 } from '#/engine/constraints.ts'
 import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
-import { SEED_STAT_PER_SEED } from '#/engine/constants.ts'
+import { ENGINE_MODEL_VERSION, SEED_STAT_PER_SEED } from '#/engine/constants.ts'
 import type { SkillAdviceResult } from '#/engine/skills.ts'
 import { seedAdviceFromWeights, type SeedAdvice } from '#/engine/statWeights.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
@@ -256,6 +256,8 @@ function OptimizePage() {
       passed,
       simWinRate: result.res.winRate,
       createdAt: new Date().toISOString(),
+      // Версия модели боя: по ней «Данные» показывают, какие отметки сделаны до правки формул.
+      modelVersion: ENGINE_MODEL_VERSION,
     })
     setChecks(next)
   }

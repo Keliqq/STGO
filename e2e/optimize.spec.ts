@@ -31,6 +31,20 @@ test('подбор для одного героя под квест + совет
 
   await section(page, 'Проверка на реальности').getByRole('button', { name: 'проходит', exact: true }).click()
   await expect(section(page, 'Проверка на реальности').getByText(/· проходит ·/)).toBeVisible()
+
+  // Отметка доезжает до «Данных»: блок «Точность модели» показывает сводку (N боёв, совпадение, дата).
+  // Совпадение может быть и «0 из 1» — экипировка героя фикстуры может не пройти эту локацию,
+  // и тогда это честный промах модели, а не баг отображения.
+  await page.goto('/#/data')
+  const accuracy = section(page, 'Точность модели')
+  await expect(accuracy.getByText('Отмечено боёв')).toBeVisible()
+  const summary = await accuracy.locator('dl').first().innerText()
+  expect(summary).toMatch(/Отмечено боёв\s+1\s/)
+  expect(summary).toMatch(/Совпало с предсказанием\s+[01] из 1 \((0[.,]0|100[.,]0)%\)/)
+  expect(summary).toMatch(/Дата калибровки\s+\d{2}\.\d{2}\.\d{4}/)
+  await expect(accuracy.getByText(/Lost City of Gold · босс · 13 · Антуан · проходит · симуляция/)).toBeVisible()
+  await accuracy.scrollIntoViewIfNeeded()
+  await shot(page, 'data-accuracy.png')
   expect(errors).toEqual([])
 })
 
