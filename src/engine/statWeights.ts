@@ -423,18 +423,17 @@ function bestStat(weights: StatWeight[], baseWinRate: number): StatWeightStat | 
   if (!best) for (const w of weights) if (w.damagePct > 0 && (!best || w.damagePct > best.damagePct)) best = w
   return best?.stat ?? null
 }
-
 /** Одна фраза «Главное для героя: …»: у защитных статов на насыщенном квесте — выживаемость, у атакующих — урон. */
 function headlineFor(w: StatWeight): string {
   const label = STAT_FULL_LABEL[w.stat]
-  if (w.metric === 'winRatePp' && w.winRatePp > 0) {
+  if (w.winRatePp > 0 && (w.metric === 'winRatePp' || w.winRatePp >= 0.005)) {
     return `Главное для героя: ${label}: ${w.stepLabel} ≈ +${(w.winRatePp * 100).toFixed(1)} п.п. win rate`
   }
-  if (w.metric === 'minSurvivorHpPp' && w.minSurvivorHpPp > 0) {
-    return `Главное для героя: ${label}: ${w.stepLabel} ≈ +${(w.minSurvivorHpPp * 100).toFixed(1)} п.п. мин. HP выжившего`
+  if (w.minSurvivorHpPp > 0 && (DEFENSIVE_STATS.includes(w.stat) || w.damagePct <= 0)) {
+    return `Главное для героя: ${label}: ${w.stepLabel} ≈ +${(w.minSurvivorHpPp * 100).toFixed(2)} п.п. мин. HP выжившего`
   }
   const dmg = `${w.damagePct >= 0 ? '+' : ''}${(w.damagePct * 100).toFixed(1)}% урона`
-  const hp = w.metric === 'damagePct' && w.minSurvivorHpPp > 0 ? `, +${(w.minSurvivorHpPp * 100).toFixed(1)} п.п. мин. HP` : ''
+  const hp = w.minSurvivorHpPp > 0 && DEFENSIVE_STATS.includes(w.stat) ? '' : w.minSurvivorHpPp > 0 ? `, +${(w.minSurvivorHpPp * 100).toFixed(2)} п.п. мин. HP` : ''
   return `Главное для героя: ${label}: ${w.stepLabel} ≈ ${dmg}${hp}`
 }
 
