@@ -17,6 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
+    "pretest:e2e": "npm run build",
+    "test:e2e": "playwright test",
     "pretypecheck": "node scripts/build-snapshot.ts --if-missing --offline",
     "typecheck": "tsc --noEmit",
     "dump-sheets": "node scripts/dump-sheets.ts",
@@ -47,6 +49,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "0.8.5",
     "@tanstack/router-cli": "^1.132.0",

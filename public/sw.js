@@ -5,7 +5,7 @@
  *   имена чанков содержимое-зависимые, поэтому устаревший кэш безопасен.
  * Картинки Kabam (playshoptitans.com / stcentral-hub) не кэшируем — при отсутствии сети GameIcon покажет заглушку.
  */
-const CACHE = 'st-app-v1'
+const CACHE = 'st-app-v2'
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -35,11 +35,14 @@ self.addEventListener('fetch', (event) => {
           (hit) => {
             const refresh = fetch(req)
               .then((res) => {
-                if (res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone()))
+                if (res.ok) {
+                  // clone() строго до возврата ответа: после отдачи в страницу тело уже потреблено
+                  const copy = res.clone()
+                  event.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)))
+                }
                 return res
               })
               .catch(() => {})
-            void refresh
             return hit || refresh
           },
         ),

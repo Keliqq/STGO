@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, Outlet, createRootRoute } from '@tanstack/react-router'
+import ThemeToggle from '#/components/ThemeToggle.tsx'
 import { useDataStatus } from '#/ui/dataSync.ts'
 
 export const Route = createRootRoute({
@@ -44,6 +45,9 @@ function RootComponent() {
           <Link to="/data" activeProps={{ className: 'underline' }}>
             Данные
           </Link>
+          <span className="ml-auto">
+            <ThemeToggle />
+          </span>
         </nav>
       </header>
       <UpdateBanner />
