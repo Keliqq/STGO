@@ -9,7 +9,8 @@
  *     крит врага ~10% ×1.5 от базового урона; AoE — по всем, отдельный урон Monster AOE DMG;
  *   · цель врага выбирается с вероятностью threat / Σ threat; EVA — шанс полного уклонения;
  *   · стихийный барьер: не пробит → урон отряда ×BARRIER_UNBROKEN_DMG_FACTOR (A9);
- *   · Extreme: штраф уклонения (A34); мана-щит гасит урон и восстанавливается после
+ *   · Extreme: уклонение −20 п.п. и предел 75% (A34/A42), у героя с отрицательным уклонением
+ *     повышен шанс получить крит врага (A59); мана-щит гасит урон и восстанавливается после
  *     MANA_SHIELD_RECHARGE_ROUNDS раундов без урона (A32).
  * Особые механики навыков (выжить смертельный удар, лечение за раунд, рипост после уклонения,
  * «щит» лорда, серия критов, угроза→ATK, лидерские ауры, эскалация по HP, казнь цели, вторая попытка,
@@ -30,6 +31,7 @@ import {
   MANA_SHIELD_RECHARGE_ROUNDS,
   MAX_EVASION,
   MAX_ROUNDS,
+  NEGATIVE_EVA_ENEMY_CRIT_PER_PP,
   RANDOM_BONUS_EXPECTED_FACTOR,
   THREAT_ATTACK_MULTIPLIER_DIVISOR,
 } from './constants.ts'
@@ -108,7 +110,31 @@ export function damageFactor(def: number, caps: DefCaps | null, model: ResolvedC
   return mit.at75
 }
 
-/** Порядок ходов отряда (Compendium): 3 — средний→левый→правый; 4 — ср-левый→крайний левый→крайний правый→ср-правый. */
+/**
+ * Предел уклонения бойца (A42): MAX_EVASION плюс его собственные «+N% to max Evasion»
+ * (Pathfinder/Insubstantial). Предел — персональный: у Pathfinder 78%, у остальных 75%.
+ */
+export function evaCapOf(sp: CombatSpecials): number {
+  return MAX_EVASION + sp.maxEvaBonusPct / 100
+}
+
+/**
+ * Эффективное уклонение бойца (доля): сумма статов, затем штраф Extreme вычитанием (A34),
+ * и только после этого предел (A42). 95% на Extreme = 75% (ровно предел), 0% на Extreme = −20 п.п.
+ * (отрицательное уклонение → повышенный шанс крита врага, A59).
+ */
+export function effectiveEvasion(evaSum: number, cap: number, extreme: boolean): number {
+  return Math.min(evaSum - (extreme ? EXTREME_EVA_PENALTY : 0), cap)
+}
+
+/** Шанс крита врага по бойцу: базовый + надбавка за отрицательное уклонение (A59, 0.25% за 1 п.п.). */
+export function enemyCritChanceVs(baseChance: number, eva: number): number {
+  return eva >= 0 ? baseChance : baseChance + NEGATIVE_EVA_ENEMY_CRIT_PER_PP * -eva * 100
+}
+
+/**
+ * Порядок ходов отряда (Compendium): 3 — средний→левый→правый; 4 — ср-левый→крайний левый→крайний правый→ср-правый.
+ */
 // ASSUMPTION: A33 — для 5 слотов (LCOG) порядок в источнике не указан: от центра, сначала влево.
 export function turnOrderFor(n: number): number[] {
   if (n === 3) return [1, 0, 2]
@@ -603,8 +629,8 @@ export interface Prepared {
   /** Кривая защиты, множитель при DEF=0 и урон непробитого барьера (параметры калибровки A57). */
   combat: ResolvedCombatModel
   groupCounts: Record<ClassGroup, number>
-  /** Предел уклонения отряда (A42): MAX_EVASION + «+N% to max Evasion» носителей. */
-  evaCap: number
+  /** Предел уклонения каждого бойца (A42): MAX_EVASION + его «+N% to max Evasion» (Pathfinder → 78%). */
+  evaCaps: number[]
   /** Вторая попытка при поражении (Chronomancer/Fateweaver), null — её нет. */
   secondAttempt: { powerBonusPct: number } | null
 }
@@ -732,7 +758,7 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     aoeChance: opts.aoeChance ?? combat.aoeChance,
     combat,
     groupCounts,
-    evaCap: MAX_EVASION + specials.reduce((a, s) => Math.max(a, s.maxEvaBonusPct), 0) / 100,
+    evaCaps: specials.map((s) => evaCapOf(s)),
     secondAttempt: retry ? { powerBonusPct: retry.secondAttemptPowerPct } : null,
   }
 }
@@ -825,16 +851,17 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     let eva = sp.evaSet ?? f.eva + m.eva
     // Внешняя правка уклонения (веса статов): +N п.п. к шансу уклонения.
     eva += f.bonus?.eva ?? 0
-    if (p.extreme) eva *= 1 - EXTREME_EVA_PENALTY
-    // ASSUMPTION: A42 — уклонение ограничено пределом; «+N% to max Evasion» его поднимает.
-    eva = Math.min(eva, p.evaCap + sp.maxEvaBonusPct / 100)
-    if (eva >= 1 || rng() < eva) {
+    // ASSUMPTION: A34/A42 — сначала штраф Extreme вычитанием, затем предел героя
+    // («+N% to max Evasion» поднимает именно предел: у Pathfinder 78%).
+    eva = effectiveEvasion(eva, p.evaCaps[i], p.extreme)
+    if (rng() < eva) {
       if (sp.riposte) riposteArmed[i] = true
       return
     }
     const defEff = (f.def + m.defFlat) * (1 + m.defPct)
     let dmg = baseDmg * damageFactor(defEff, quest.defCaps, p.combat)
-    if (rng() < p.enemyCritChance) dmg = Math.max(dmg, baseDmg) * ENEMY_CRIT_MULT
+    // A59: у героя с отрицательным уклонением (только на Extreme) шанс крита врага выше базового.
+    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva)) dmg = Math.max(dmg, baseDmg) * ENEMY_CRIT_MULT
     if (mana[i] > 0) {
       const absorbed = Math.min(mana[i], dmg)
       mana[i] -= absorbed

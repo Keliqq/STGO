@@ -128,7 +128,9 @@ describe('метрики калибровки', () => {
     const b = runPrediction(input({ quest: q }), data, { ...opts, seed: 7 })
     expect(a.metrics).toEqual(b.metrics)
     const c = runPrediction(input({ quest: q }), data, { ...opts, seed: 8 })
-    expect(c.metrics.winRate).not.toBe(a.metrics.winRate)
+    // Смена seed меняет поток случайности. Сравниваем весь набор метрик, а не только win rate:
+    // на 200 прогонах win rate двух разных seed может совпасть случайно (раунды и урон — нет).
+    expect(c.metrics).not.toEqual(a.metrics)
   })
 })
 

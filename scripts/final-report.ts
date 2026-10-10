@@ -86,7 +86,7 @@ function renderCase(title: string, res: OptimizerResult, ms: number, before: num
   lines.push('|---|---|---|---|---|---|')
   res.explanations.forEach((expls, hi) => {
     for (const e of expls) {
-      const why = [e.statHint?.text, e.statHint?.fallback ? `минус: ${e.statHint.fallback}` : ''].filter(Boolean).join(' · ')
+      const why = [e.statHint?.text, e.statHint?.fallback ? `минус: ${e.statHint.fallback}` : '', e.statHint?.note ?? ''].filter(Boolean).join(' · ')
       lines.push(`| ${team[hi].name} | ${e.slot + 1} | ${e.from} | ${e.to} | ${e.winRateDelta >= 0 ? '+' : ''}${(e.winRateDelta * 100).toFixed(1)} п.п. | ${why || '—'} |`)
     }
   })

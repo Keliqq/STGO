@@ -307,9 +307,16 @@ describe('Daimyo: гарантированное уклонение в 1-м ра
 })
 
 describe('Pathfinder: «+3% to max Evasion» поднимает предел уклонения (A42)', () => {
-  it('предел 1.0 + 3% = 1.03', () => {
-    const p = prepare([fighter({ skills: [skill('Insubstantial')] })], quest(), { runs: 1 })
-    expect(p.evaCap).toBeCloseTo(1.03, 6)
+  it('предел 75% у остальных и 78% у носителя', () => {
+    const withInsubstantial = prepare([fighter({ skills: [skill('Insubstantial')] })], quest(), { runs: 1 })
+    const plain = prepare([fighter()], quest(), { runs: 1 })
+    expect(withInsubstantial.evaCaps[0]).toBeCloseTo(0.78, 6)
+    expect(plain.evaCaps[0]).toBeCloseTo(0.75, 6)
+  })
+
+  it('предел персональный: носитель навыка не поднимает его союзникам', () => {
+    const p = prepare([fighter({ skills: [skill('Insubstantial')] }), fighter({ name: 'G' })], quest(), { runs: 1 })
+    expect(p.evaCaps).toEqual([0.78, 0.75])
   })
 })
 

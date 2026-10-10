@@ -6,8 +6,8 @@
  * Проверка корреляции с simulateTeam — score.test.ts (коэффициент Пирсона — в PROGRESS.md).
  */
 import type { Quest } from '../data/types.ts'
-import { AOE_CHANCE, BARRIER_UNBROKEN_DMG_FACTOR, ENEMY_CRIT_CHANCE, ENEMY_CRIT_MULT, EXTREME_EVA_PENALTY, MAX_ROUNDS } from './constants.ts'
-import { damageFactor, prepare, type Fighter } from './combat.ts'
+import { AOE_CHANCE, BARRIER_UNBROKEN_DMG_FACTOR, ENEMY_CRIT_CHANCE, ENEMY_CRIT_MULT, MAX_ROUNDS } from './constants.ts'
+import { damageFactor, effectiveEvasion, enemyCritChanceVs, prepare, type Fighter } from './combat.ts'
 
 export interface ScoreOptions {
   maxRounds?: number
@@ -28,8 +28,6 @@ export function quickScore(fighters: Fighter[], quest: Quest, opts: ScoreOptions
   const barrierK = p.barrierBroken ? 1 : BARRIER_UNBROKEN_DMG_FACTOR
   const n = fighters.length
   const threatSum = fighters.reduce((a, f) => a + Math.max(0, f.threat), 0)
-  // Среднее удорожание входящего урона из-за критов врага (по компендиуму ~10% ×1.5).
-  const enemyCritK = 1 + ENEMY_CRIT_CHANCE * (ENEMY_CRIT_MULT - 1)
   let expected = 0
   fighters.forEach((f, i) => {
     const m = p.selfStatic[i]
@@ -37,7 +35,10 @@ export function quickScore(fighters: Fighter[], quest: Quest, opts: ScoreOptions
     const atk = (f.atk + (f.atkFromShieldDef ?? 0) + m.atkFlat) * (1 + m.atkPct)
     const crit = Math.min(1, f.crit + m.crit)
     const dps = atk * (1 + crit * (f.critDmg + m.critDmg - 1)) * barrierK
-    const eva = Math.min(1, (f.eva + m.eva) * (p.extreme ? 1 - EXTREME_EVA_PENALTY : 1))
+    // A34/A42: штраф Extreme вычитанием, затем предел героя; A59 — крит врага по отрицательному EVA.
+    const eva = effectiveEvasion(f.eva + m.eva + (f.bonus?.eva ?? 0), p.evaCaps[i], p.extreme)
+    // Среднее удорожание входящего урона из-за критов врага (по компендиуму ~10% ×1.5).
+    const enemyCritK = 1 + enemyCritChanceVs(ENEMY_CRIT_CHANCE, eva) * (ENEMY_CRIT_MULT - 1)
     const defEff = (f.def + m.defFlat) * (1 + m.defPct)
     const mit = damageFactor(defEff, quest.defCaps)
     const share = n > 1 && threatSum > 0 ? Math.max(0, f.threat) / threatSum : 1

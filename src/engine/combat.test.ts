@@ -7,17 +7,29 @@ import { fixtureGameData } from '../test/fixtures.ts'
 import {
   barrierBroken,
   damageFactor,
+  effectiveEvasion,
+  enemyCritChanceVs,
+  evaCapOf,
   fighterFromChampion,
   fighterFromHero,
   isDoubledVsBoss,
   mulberry32,
   parseSpecials,
+  prepare,
   simulateTeam,
   turnOrderFor,
   type Fighter,
 } from './combat.ts'
+import { ENEMY_CRIT_CHANCE, EXTREME_EVA_PENALTY, MAX_EVASION } from './constants.ts'
 
 const data = fixtureGameData()
+
+/** Навык по имени из фикстуры (для механик «+N% to max Evasion» и т. п.). */
+const skillByName = (name: string): Skill => {
+  const s = data.skills.find((x) => x.name === name)
+  if (!s) throw new Error(`навык «${name}» не найден`)
+  return s
+}
 
 const CAPS: DefCaps = { p50: 1000, p70: 2000, p75: 6000 }
 
@@ -91,15 +103,6 @@ describe('барьер, уклонение, мана-щит', () => {
     expect(barrierBroken([fighter({ elementAny: 100, barrierAnyPct: 50 })], q)).toBe(true)
   })
 
-  it('уклонение 100% после экстрим-штрафа — урон не проходит', () => {
-    // EVA 1.25 × (1 − 0.2) = 1.0 → ни одного попадания за 10 раундов.
-    const m = simulateTeam([fighter({ eva: 1.25, hp: 10, atk: 0 })], quest({ difficulty: 'Extreme' }), { runs: 30, seed: 3, maxRounds: 10, aoeChance: 0 })
-    expect(m.survival[0].rate).toBe(1)
-    // Без штрафа EVA 0.8 → 20% попаданий за раунд, герой с 10 HP гарантированно погибнет.
-    const hit = simulateTeam([fighter({ eva: 0.8, hp: 10, atk: 0 })], quest({ difficulty: 'Extreme' }), { runs: 30, seed: 3, maxRounds: 10, aoeChance: 0 })
-    expect(hit.survival[0].rate).toBe(0)
-  })
-
   it('мана-щит гасит урон ровно на свой запас', () => {
     // DEF 500 = половина порога 50% → множитель 1.0. 2 раунда × 60 = 120; щит 50 → потеря HP 70 < 100 — жив.
     // 3 раунда = 180 → потеря 130 > 100 — мёртв.
@@ -108,6 +111,62 @@ describe('барьер, уклонение, мана-щит', () => {
     expect(two.survival[0].rate).toBe(1)
     const three = simulateTeam([fighter({ def: 500, manaShield: 50, hp: 100, atk: 0 })], q, { runs: 10, seed: 5, maxRounds: 3, enemyCritChance: 0, aoeChance: 0 })
     expect(three.survival[0].rate).toBe(0)
+  })
+})
+
+describe('предел уклонения и штраф Extreme (A34, A42, A59)', () => {
+  it('предел 75% у любого героя и 78% у носителя «+N% to max Evasion»', () => {
+    const plain = prepare([fighter()], quest(), { runs: 1 })
+    const pathfinder = prepare([fighter({ skills: [skillByName('Insubstantial')] })], quest(), { runs: 1 })
+    expect(plain.evaCaps[0]).toBe(MAX_EVASION)
+    expect(pathfinder.evaCaps[0]).toBeCloseTo(0.78, 6)
+    expect(effectiveEvasion(0.9, evaCapOf(parseSpecials([])), false)).toBeCloseTo(0.75)
+  })
+
+  it('штраф Extreme вычитает 20 п.п. из суммы ДО предела', () => {
+    expect(effectiveEvasion(0.8, MAX_EVASION, false)).toBeCloseTo(0.75)
+    expect(effectiveEvasion(0.8, MAX_EVASION, true)).toBeCloseTo(0.6)
+    // 95% на Extreme — ровно предел: «чтобы нивелировать штраф, нужно 95% уворота».
+    expect(effectiveEvasion(0.95, MAX_EVASION, true)).toBeCloseTo(0.75)
+    // У Pathfinder на Extreme полезно до 98% (предел 78% + 20 п.п.).
+    expect(effectiveEvasion(0.98, 0.78, true)).toBeCloseTo(0.78)
+    expect(effectiveEvasion(0.9, 0.78, true)).toBeCloseTo(0.7)
+    // Совсем без уворота штраф уводит значение в минус.
+    expect(effectiveEvasion(0, MAX_EVASION, true)).toBeCloseTo(-EXTREME_EVA_PENALTY)
+  })
+
+  it('95% на Extreme = 75% эффективных: бой совпадает с 75% на обычной сложности', () => {
+    const opts = { runs: 300, seed: 5, maxRounds: 10, enemyCritChance: 0, aoeChance: 0 } as const
+    const extreme = simulateTeam([fighter({ eva: 0.95, hp: 100, atk: 0 })], quest({ difficulty: 'Extreme' }), opts)
+    const plain = simulateTeam([fighter({ eva: 0.75, hp: 100, atk: 0 })], quest(), opts)
+    expect(extreme).toEqual(plain)
+    // 0.75 эффективного уворота — не 1.0: часть ударов всё же проходит.
+    expect(extreme.survival[0].rate).toBeLessThan(1)
+  })
+
+  it('излишек уворота выше предела не даёт ничего: 95% и 75% на обычном квесте — один и тот же бой', () => {
+    const opts = { runs: 300, seed: 9, maxRounds: 10, enemyCritChance: 0, aoeChance: 0 } as const
+    const surplus = simulateTeam([fighter({ eva: 0.95, hp: 100, atk: 0 })], quest(), opts)
+    const atCap = simulateTeam([fighter({ eva: 0.75, hp: 100, atk: 0 })], quest(), opts)
+    expect(surplus).toEqual(atCap)
+  })
+
+  it('нулевой EVA на Extreme: шанс крита врага 15% (10% базовых + 5%)', () => {
+    expect(enemyCritChanceVs(ENEMY_CRIT_CHANCE, effectiveEvasion(0, MAX_EVASION, true))).toBeCloseTo(0.15, 10)
+    // 20 п.п. уворота полностью нивелируют штраф: крит снова базовый.
+    expect(enemyCritChanceVs(ENEMY_CRIT_CHANCE, effectiveEvasion(0.2, MAX_EVASION, true))).toBeCloseTo(0.1, 10)
+    // Положительное уклонение надбавки не даёт.
+    expect(enemyCritChanceVs(ENEMY_CRIT_CHANCE, 0.5)).toBeCloseTo(0.1, 10)
+  })
+
+  it('герой без уворота на Extreme получает криты чаще и гибнет раньше', () => {
+    // 10 раундов по 100 урона: без критов герой с 1050 HP выживает, любой крит (+50) его добивает.
+    // Надбавка +5 п.п. крита (A59) снижает шанс выжить ровно на разницу 0.9^10 → 0.85^10.
+    const opts = { runs: 2000, seed: 11, maxRounds: 10, aoeChance: 0 } as const
+    const q = quest({ difficulty: 'Extreme', defCaps: null, monsterHp: 100000, monsterDmg: 100 })
+    const noEva = simulateTeam([fighter({ eva: 0, hp: 1050, atk: 0 })], q, opts)
+    const negated = simulateTeam([fighter({ eva: 0.2, hp: 1050, atk: 0 })], q, opts)
+    expect(negated.survival[0].rate - noEva.survival[0].rate).toBeGreaterThan(0.1)
   })
 })
 

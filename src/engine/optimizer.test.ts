@@ -12,7 +12,7 @@ import { fixtureGameData } from '../test/fixtures.ts'
 import { fighterFromHero, mulberry32, simulateTeam } from './combat.ts'
 import { OPTIMIZER_TOP_K } from './constants.ts'
 import { QUALITY_ORDER } from './quality.ts'
-import { applyHeroConfig, runOptimizer, selectSlotCandidates, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
+import { applyHeroConfig, evasionSurplusNote, runOptimizer, selectSlotCandidates, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
 import { quickScore } from './score.ts'
 
 const data = fixtureGameData()
@@ -156,6 +156,21 @@ describe('оптимизатор: детерминизм и режимы', () =>
     const res = await runOptimizer(data, baseInput(heroes[0]), { shouldCancel: () => true })
     expect(res.cancelled).toBe(true)
     expect(res.configs).toHaveLength(1)
+  })
+})
+
+describe('излишек уклонения в объяснении слота (A42)', () => {
+  it('EVA выше предела — предупреждаем; на Extreme запас до предела + 20 п.п.', () => {
+    expect(evasionSurplusNote(0.9, 0.75, false)).toBe('уклонение упирается в предел 75%')
+    expect(evasionSurplusNote(0.75, 0.75, false)).toBeNull()
+    // На Extreme те же 90% работают как 70%: 20 п.п. съедает штраф (A34) — излишка ещё нет.
+    expect(evasionSurplusNote(0.9, 0.75, true)).toBeNull()
+    expect(evasionSurplusNote(0.95, 0.75, true)).toBeNull()
+    expect(evasionSurplusNote(0.96, 0.75, true)).toBe('уклонение упирается в предел 75%')
+    // У Pathfinder предел выше (78%) — излишек начинается позже.
+    expect(evasionSurplusNote(0.78, 0.78, false)).toBeNull()
+    expect(evasionSurplusNote(0.8, 0.78, false)).toBe('уклонение упирается в предел 78%')
+    expect(evasionSurplusNote(0.98, 0.78, true)).toBeNull()
   })
 })
 

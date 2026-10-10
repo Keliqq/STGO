@@ -140,6 +140,7 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
                         <p className="mt-0.5 pl-9 text-xs text-muted-foreground">
                           почему: {expl.statHint.text}
                           {expl.statHint.fallback ? ` (минус: ${expl.statHint.fallback})` : ''}
+                          {expl.statHint.note ? ` — ${expl.statHint.note}` : ''}
                         </p>
                       ) : null}
                     </li>

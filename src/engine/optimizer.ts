@@ -21,6 +21,7 @@
 import type { Element, GameData, HeroClass, HeroInstance, Item, Quality, Quest } from '../data/types.ts'
 import { NON_EQUIPMENT_TYPES } from '../data/types.ts'
 import {
+  EXTREME_EVA_PENALTY,
   GOLD_ELEMENT_COUNTS_FOR_ANY_HERO,
   OPTIMIZER_BEAM,
   OPTIMIZER_CRN_SEED,
@@ -32,7 +33,7 @@ import {
   OPTIMIZER_TOP_K,
   OPTIMIZER_YIELD_INTERVAL_MS,
 } from './constants.ts'
-import { barrierBroken, fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
+import { barrierBroken, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
 import { quickScore } from './score.ts'
 import { statWeights, type StatWeightStat, type StatWeightsResult } from './statWeights.ts'
 import { effectiveClass } from './stats.ts'
@@ -151,6 +152,11 @@ export interface SlotStatHint {
   metric?: 'winRatePp' | 'damagePct'
   /** Что стало хуже в замене (например, HP −95) — показывается отдельно. */
   fallback?: string
+  /**
+   * Отдельная оговорка к замене: сейчас — «уклонение упирается в предел 75%», когда замена добавила
+   * EVA выше предела (A42): в бою такой излишек не работает (на Extreme — до предела + 20 п.п., A34).
+   */
+  note?: string
 }
 
 export interface OptimizerResult {
@@ -236,6 +242,19 @@ function statDeltaText(key: SlotStatStat, value: number): string {
     default:
       return `${sign}${Math.round(value)} ${key.toUpperCase()}`
   }
+}
+
+/**
+ * «Уклонение упирается в предел N%»: EVA выше предела героя в бою не даёт ничего (A42).
+ * На Extreme предел тот же, но 20 п.п. съедает штраф (A34), поэтому там излишек начинается только
+ * после предела + 20 п.п. (95% при пределе 75%). В смешанном наборе локаций берём строгий случай:
+ * если хоть одна локация не Extreme, уклонение сверх предела уже потеряно.
+ * `null` — излишка нет.
+ */
+export function evasionSurplusNote(eva: number, cap: number, extremeOnly: boolean): string | null {
+  const useful = cap + (extremeOnly ? EXTREME_EVA_PENALTY : 0)
+  if (eva <= useful + 1e-9) return null
+  return `уклонение упирается в предел ${Math.round(cap * 100)}%`
 }
 
 // ─────────────────────────── перебор вариантов ───────────────────────────
@@ -717,7 +736,16 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
       text: `${parts.join(', ')}${up.length > 2 ? ' и др.' : ''}`,
       stat: top.key,
       fallback: worst ? statDeltaText(worst.key, worst.value) : undefined,
+      // Излишек уклонения сверх предела в бою не работает (A42) — о нём и предупреждаем.
+      note: deltas.some((d) => d.key === 'eva' && d.value > 0)
+        ? (evasionSurplusNote(withNew.eva, evaCapOf(parseSpecials(withNew.skills)), extremeOnlyQuests()) ?? undefined)
+        : undefined,
     }
+  }
+
+  /** Все локации запуска Extreme? (в смешанном наборе излишек EVA теряется уже на обычной.) */
+  function extremeOnlyQuests(): boolean {
+    return quests.length > 0 && quests.every((q) => q.quest.difficulty === 'Extreme')
   }
 
   /** Стихия бойца (отображаемая величина в его стихии). */

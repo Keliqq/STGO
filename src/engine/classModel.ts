@@ -102,7 +102,7 @@ const NOTES: Record<string, { missing?: string[]; assumptions?: string[] }> = {
   Hemma: { assumptions: ['дренаж и рост ATK «plus N% for each drain» — трактовка A46'] },
   Fateweaver: { assumptions: ['«+15% power bonus» второй попытки применён к ATK — трактовка A44'] },
   Chronomancer: { assumptions: ['вторая попытка моделируется как повторный бой с теми же HP отряда (A51)'] },
-  Pathfinder: { assumptions: ['«+3% to max Evasion» поднимает предел уклонения; сам предел в игре неизвестен (A42)'] },
+  Pathfinder: { assumptions: ['«+3% to max Evasion» поднимает персональный предел уклонения (75% → 78%, гайд Develion, A42)'] },
   Mercenary: { assumptions: ['«+25% increased effect received from Champion skills» применено к лидерским баффам (A52)'] },
 }
 

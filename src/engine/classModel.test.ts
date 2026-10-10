@@ -72,7 +72,7 @@ function signals(dataIn: GameData, hero: HeroInstance, probes: Quest[], extra: F
     partyCond: p.partyCond,
     barrierBroken: p.barrierBroken,
     partyHeal: p.partyHeal,
-    evaCap: p.evaCap,
+    evaCaps: p.evaCaps,
     secondAttempt: p.secondAttempt,
   })
   const sim = JSON.stringify(
