@@ -38,7 +38,7 @@ export function quickScore(fighters: Fighter[], quest: Quest, opts: ScoreOptions
     // A34/A42: штраф Extreme вычитанием, затем предел героя; A59 — крит врага по отрицательному EVA.
     const eva = effectiveEvasion(f.eva + m.eva + (f.bonus?.eva ?? 0), p.evaCaps[i], p.extreme)
     // Среднее удорожание входящего урона из-за критов врага (по компендиуму ~10% ×1.5).
-    const enemyCritK = 1 + enemyCritChanceVs(ENEMY_CRIT_CHANCE, eva) * (ENEMY_CRIT_MULT - 1)
+    const enemyCritK = 1 + enemyCritChanceVs(ENEMY_CRIT_CHANCE, eva, p.negativeEvaCrit) * (ENEMY_CRIT_MULT - 1)
     const defEff = (f.def + m.defFlat) * (1 + m.defPct)
     const mit = damageFactor(defEff, quest.defCaps)
     const share = n > 1 && threatSum > 0 ? Math.max(0, f.threat) / threatSum : 1

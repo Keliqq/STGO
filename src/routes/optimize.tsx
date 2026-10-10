@@ -458,7 +458,7 @@ function OptimizePage() {
         <>
           <ResultView data={data} team={result.ctx.team} result={result} objectiveLabel={result.ctx.objectiveLabel} seeds={seeds} />
           {upgrades ? <UpgradeView team={result.ctx.team} rows={upgrades} objectiveLabel={result.ctx.objectiveLabel} /> : null}
-          {advice && advice.advice.length > 0 ? <SkillAdviceView team={result.ctx.team} advice={advice} /> : null}
+          {advice && advice.advice.length > 0 ? <SkillAdviceView data={data} team={result.ctx.team} advice={advice} /> : null}
           <RealityChecksView
             checks={checks}
             onChecksChange={setChecks}

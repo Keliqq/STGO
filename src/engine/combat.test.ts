@@ -16,6 +16,7 @@ import {
   mulberry32,
   parseSpecials,
   prepare,
+  resolveCombatModel,
   simulateTeam,
   turnOrderFor,
   type Fighter,
@@ -167,6 +168,29 @@ describe('предел уклонения и штраф Extreme (A34, A42, A59)'
     const noEva = simulateTeam([fighter({ eva: 0, hp: 1050, atk: 0 })], q, opts)
     const negated = simulateTeam([fighter({ eva: 0.2, hp: 1050, atk: 0 })], q, opts)
     expect(negated.survival[0].rate - noEva.survival[0].rate).toBeGreaterThan(0.1)
+  })
+
+  it('режим крита по отрицательному EVA (A57): additive по умолчанию, absolute — надбавка вместо базового', () => {
+    const negEva = effectiveEvasion(0, MAX_EVASION, true) // −20 п.п.
+    // По умолчанию — additive: 10% базовых + 5% надбавки.
+    expect(enemyCritChanceVs(ENEMY_CRIT_CHANCE, negEva)).toBeCloseTo(0.15, 10)
+    // absolute — надбавка задаёт шанс сама (буквальное чтение гайда: «герои с нулевым уворотом — 5%»).
+    expect(enemyCritChanceVs(ENEMY_CRIT_CHANCE, negEva, 'absolute')).toBeCloseTo(0.05, 10)
+    // Положительное уклонение режим не меняет.
+    expect(enemyCritChanceVs(ENEMY_CRIT_CHANCE, 0.5, 'absolute')).toBeCloseTo(0.1, 10)
+    // Параметр доходит до модели: по умолчанию additive, переопределяется.
+    expect(resolveCombatModel().negativeEvaCrit).toBe('additive')
+    expect(resolveCombatModel({ negativeEvaCrit: 'absolute' }).negativeEvaCrit).toBe('absolute')
+  })
+
+  it('absolute-режим делает бой без уворота на Extreme мягче, чем additive', () => {
+    const opts = { runs: 2000, seed: 13, maxRounds: 10, aoeChance: 0 } as const
+    const q = quest({ difficulty: 'Extreme', defCaps: null, monsterHp: 100000, monsterDmg: 100 })
+    const f = [fighter({ eva: 0, hp: 1050, atk: 0 })]
+    const additive = simulateTeam(f, q, opts)
+    const absolute = simulateTeam(f, q, { ...opts, model: { negativeEvaCrit: 'absolute' } })
+    // Крит 5% вместо 15% → герой выживает чаще.
+    expect(absolute.survival[0].rate).toBeGreaterThan(additive.survival[0].rate)
   })
 })
 

@@ -17,7 +17,15 @@ test('подбор для одного героя под квест + совет
   await expect(section(page, 'Результат').getByText('Lost City of Gold · босс · 13')).toBeVisible()
   await shot(page, 'optimize-result.png')
 
-  await expect(page.getByRole('heading', { name: 'Навыки: вклад и перекидка' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Навыки: вклад, план ролла и перекидка' })).toBeVisible()
+  // План ролла по герою (A60): шаги в порядке гайда + флажок «Роланд использован» (пересчёт плана без воркера).
+  const skills = section(page, 'Навыки: вклад, план ролла и перекидка')
+  await expect(skills.getByText(/План ролла · итого \d+ базовых кубиков/)).toBeVisible()
+  const roland = skills.getByLabel('Роланд на этом герое уже использован')
+  await expect(roland).toBeVisible()
+  await roland.check()
+  await expect(roland).toBeChecked()
+  await expect(skills.getByText(/План ролла · итого \d+ базовых кубиков/)).toBeVisible()
   await shot(page, 'optimize-skills.png')
 
   // «Стоит ли улучшать?»: прирост при +1 тире и +1 качестве считается после основного подбора.

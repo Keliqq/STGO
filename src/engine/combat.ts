@@ -31,6 +31,7 @@ import {
   MANA_SHIELD_RECHARGE_ROUNDS,
   MAX_EVASION,
   MAX_ROUNDS,
+  NEGATIVE_EVA_CRIT_MODE,
   NEGATIVE_EVA_ENEMY_CRIT_PER_PP,
   RANDOM_BONUS_EXPECTED_FACTOR,
   THREAT_ATTACK_MULTIPLIER_DIVISOR,
@@ -64,6 +65,11 @@ export interface CombatModel {
   aoeChance?: number
   /** Множитель урона отряда при непробитом барьере (A9). */
   barrierUnbrokenFactor?: number
+  /**
+   * Как надбавка за отрицательное уклонение складывается с базовым шансом крита врага (A59):
+   * `additive` (по умолчанию) — прибавляется к `enemyCritChance`; `absolute` — задаёт шанс сама.
+   */
+  negativeEvaCrit?: 'additive' | 'absolute'
 }
 
 /** Параметры боя с подставленными значениями по умолчанию. */
@@ -73,6 +79,7 @@ export interface ResolvedCombatModel {
   enemyCritChance: number
   aoeChance: number
   barrierUnbrokenFactor: number
+  negativeEvaCrit: 'additive' | 'absolute'
 }
 
 export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
@@ -82,6 +89,7 @@ export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
     enemyCritChance: m.enemyCritChance ?? ENEMY_CRIT_CHANCE,
     aoeChance: m.aoeChance ?? AOE_CHANCE,
     barrierUnbrokenFactor: m.barrierUnbrokenFactor ?? BARRIER_UNBROKEN_DMG_FACTOR,
+    negativeEvaCrit: m.negativeEvaCrit ?? NEGATIVE_EVA_CRIT_MODE,
   }
 }
 
@@ -127,9 +135,15 @@ export function effectiveEvasion(evaSum: number, cap: number, extreme: boolean):
   return Math.min(evaSum - (extreme ? EXTREME_EVA_PENALTY : 0), cap)
 }
 
-/** Шанс крита врага по бойцу: базовый + надбавка за отрицательное уклонение (A59, 0.25% за 1 п.п.). */
-export function enemyCritChanceVs(baseChance: number, eva: number): number {
-  return eva >= 0 ? baseChance : baseChance + NEGATIVE_EVA_ENEMY_CRIT_PER_PP * -eva * 100
+/**
+ * Шанс крита врага по бойцу: базовый + надбавка за отрицательное уклонение (A59, 0.25% за 1 п.п.).
+ * `mode` — как учитывается надбавка (параметр калибровки A57): `additive` — базовый + надбавка
+ * (0 EVA на Extreme → 15%), `absolute` — надбавка задаёт шанс сама (0 EVA на Extreme → 5%).
+ */
+export function enemyCritChanceVs(baseChance: number, eva: number, mode: 'additive' | 'absolute' = NEGATIVE_EVA_CRIT_MODE): number {
+  if (eva >= 0) return baseChance
+  const penalty = NEGATIVE_EVA_ENEMY_CRIT_PER_PP * -eva * 100
+  return mode === 'absolute' ? penalty : baseChance + penalty
 }
 
 /**
@@ -625,6 +639,8 @@ export interface Prepared {
   extreme: boolean
   maxRounds: number
   enemyCritChance: number
+  /** Как надбавка за отрицательное уклонение складывается с базовым критом врага (A59/A57). */
+  negativeEvaCrit: 'additive' | 'absolute'
   aoeChance: number
   /** Кривая защиты, множитель при DEF=0 и урон непробитого барьера (параметры калибровки A57). */
   combat: ResolvedCombatModel
@@ -755,6 +771,7 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     extreme: opts.extreme ?? quest.difficulty === 'Extreme',
     maxRounds: opts.maxRounds ?? MAX_ROUNDS,
     enemyCritChance: opts.enemyCritChance ?? combat.enemyCritChance,
+    negativeEvaCrit: combat.negativeEvaCrit,
     aoeChance: opts.aoeChance ?? combat.aoeChance,
     combat,
     groupCounts,
@@ -861,7 +878,8 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     const defEff = (f.def + m.defFlat) * (1 + m.defPct)
     let dmg = baseDmg * damageFactor(defEff, quest.defCaps, p.combat)
     // A59: у героя с отрицательным уклонением (только на Extreme) шанс крита врага выше базового.
-    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva)) dmg = Math.max(dmg, baseDmg) * ENEMY_CRIT_MULT
+    // Как именно выше (базовый + надбавка или надбавка вместо базового) — параметр A57.
+    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva, p.negativeEvaCrit)) dmg = Math.max(dmg, baseDmg) * ENEMY_CRIT_MULT
     if (mana[i] > 0) {
       const absorbed = Math.min(mana[i], dmg)
       mana[i] -= absorbed

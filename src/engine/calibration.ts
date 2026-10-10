@@ -348,6 +348,7 @@ const DEFAULT_COMBAT: Required<{ [K in keyof CombatModel]-?: CombatModel[K] }> =
   enemyCritChance: 0.1,
   aoeChance: 0.2,
   barrierUnbrokenFactor: 0.2,
+  negativeEvaCrit: 'additive',
 }
 
 /** Допущения, проверяемые вариантом: сверка статов (A5–A8, A25) и симулятор (A9, A30, A31). */
@@ -401,6 +402,12 @@ export const MODEL_VARIANTS: ModelVariant[] = [
   },
   { id: 'barrier-0.1', label: 'непробитый барьер: урон отряда ×0.1', assumption: 'A9', combat: { barrierUnbrokenFactor: 0.1 } },
   { id: 'barrier-0.4', label: 'непробитый барьер: урон отряда ×0.4', assumption: 'A9', combat: { barrierUnbrokenFactor: 0.4 } },
+  {
+    id: 'negative-eva-absolute',
+    label: 'крит по отрицательному EVA задаёт шанс сам (0 EVA на Extreme → 5%, а не 15%)',
+    assumption: 'A59',
+    combat: { negativeEvaCrit: 'absolute' },
+  },
 ]
 
 const fmtValue = (v: unknown): string => (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v))
