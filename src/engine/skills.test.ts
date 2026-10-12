@@ -110,24 +110,35 @@ const strongSkill = strongerInLine(data, weakSkill)!
 const tops = rollable.filter((s) => topOfLine(s) && s.line !== weakSkill.line)
 const top1 = tops[0]
 const top2 = tops.find((s) => s.line !== top1.line)!
+/** Класс, которому доступны и слабая, и сильная версии линейки (у сильной — тот же промоушен). */
+const pairClass = strongSkill.classes.find((c) => weakSkill.classes.includes(c))!
+/** Герой промоушена: сильная версия линейки попадает в его пул после снятия блокировки (A60). */
+const pairOverrides = { className: pairClass, level: 40, titanSoul: true } satisfies Partial<HeroInstance>
 
 /** Герой фикстуры с заданными слотами навыков (и, при необходимости, уровнем/Душой). */
 function heroWith(skills: string[], over: Partial<HeroInstance> = {}): HeroInstance {
   return { ...baseHero, id: 'test', name: 'Тест', skills, ...over }
 }
 
-/** Совет по слотам героя, собранный вручную: слоты из keepSlots — «нужные», остальные — на перекидку. */
-function adviceOf(heroIndex: number, hero: HeroInstance, keepSlots: number[]): SkillAdvice[] {
+/** Совет по слотам героя, собранный вручную: слоты из keepSlots — «нужные», остальные — на перекидку.
+ *  `strongGain` — насколько вклад сильной версии линейки больше вклада слабой (0,01 по умолчанию);
+ *  `null` — сильной версии в совете нет (как у навыка без ступени выше). */
+function adviceOf(heroIndex: number, hero: HeroInstance, keepSlots: number[], strongGain: number | null = 0.01): SkillAdvice[] {
   return hero.skills.map((id, i) => {
     const s = data.skills.find((x) => x.id === id)!
     const keep = keepSlots.includes(i + 1)
+    const contribution = keep ? 0.02 : 0
+    const strong = keep ? strongerInLine(data, s) : null
     return {
       heroIndex,
       skillIndex: i,
       skillName: s.name,
-      contribution: keep ? 0.02 : 0,
+      contribution,
       action: keep ? ('keep' as const) : ('reroll' as const),
       ...(keep ? {} : { cube: cubeForSlot(i + 1) }),
+      ...(strong && strongGain !== null
+        ? { stronger: { skillId: strong.id, skillName: strong.name, contribution: contribution + strongGain } }
+        : {}),
       reasons: [],
     }
   })
@@ -168,19 +179,98 @@ describe('семантика кубиков (A39)', () => {
     expect(plan.basicCubes).toBe(CUBE_BASIC_COST[4] + CUBE_BASIC_COST[1])
   })
 
-  it('слабая версия в 1-м слоте: шаг перекидки идёт перед шагом 4-го слота', () => {
-    const hero = heroWith([weakSkill.id, top1.id, top2.id], { level: 40, titanSoul: true })
+  it('шаг unblock показывается, когда сильная версия линейки — цель 4-го слота', () => {
+    const hero = heroWith([weakSkill.id, top1.id, top2.id], pairOverrides)
+    // Условие A60: сильная версия доступна герою и попадает в пул после снятия блокировки.
+    expect(rollableSkills(data, hero, { ignoreSlots: [1] }).some((s) => s.id === strongSkill.id)).toBe(true)
     const plan = rollPlan(data, hero, 0, adviceOf(0, hero, [1, 2, 3])) // все навыки нужные, 4-й слот пуст
     const unblock = plan.steps.findIndex((s) => s.kind === 'unblock' && s.slot === 1)
     const slot4 = plan.steps.findIndex((s) => s.kind === 'reroll' && s.slot === 4)
     expect(unblock).toBeGreaterThanOrEqual(0)
     expect(slot4).toBeGreaterThan(unblock)
+    // В шаге видны оба вклада: слабой версии и более выгодной сильной.
     expect(plan.steps[unblock].detail).toMatch(new RegExp(strongSkill.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    expect(plan.steps[unblock].detail).toMatch(/вклад .* п\.п\..*больше/)
     // Сильная версия линейки — цель 4-го слота: вероятность выводима из данных (1 / размер пула).
     expect(plan.steps[slot4].poolSize).toBeGreaterThan(0)
     expect(plan.steps[slot4].expectedRolls).toBe(plan.steps[slot4].poolSize)
     // Слот 1 уже перекинут шагом-разблокировкой — второй раз кубик на него не тратим.
     expect(plan.steps.filter((s) => s.kind === 'reroll' && s.slot === 1)).toEqual([])
+    // «Оставить» и «сроллить» для одного слота не выводятся вместе: слот 1 — перекидка, не keep.
+    expect(plan.slotActions).toContainEqual({ slot: 1, action: 'reroll', step: 'unblock' })
+  })
+
+  it('шага unblock нет, когда вклад сильной версии не больше вклада слабой', () => {
+    const hero = heroWith([weakSkill.id, top1.id, top2.id], pairOverrides)
+    const plan = rollPlan(data, hero, 0, adviceOf(0, hero, [1, 2, 3], -0.01)) // сильная версия слабее текущей
+    expect(plan.steps.some((s) => s.kind === 'unblock')).toBe(false)
+    // Слабую версию не трогаем: ни шага-разблокировки, ни базового кубика в 1-й слот.
+    expect(plan.steps.filter((s) => s.slot === 1)).toEqual([])
+    expect(plan.slotActions).toContainEqual({ slot: 1, action: 'keep' })
+    // Оговорки «можно пропустить» нет: шага просто нет.
+    expect(plan.steps.map((s) => s.detail).join(' ')).not.toMatch(/можно пропустить/)
+  })
+
+  it('шага unblock нет, когда сильной версии нет в пуле после снятия блокировки', () => {
+    // Базовый класс без Души Титана: сильная версия линейки требует промоушена и в пул не попадает.
+    const hero = heroWith([weakSkill.id, top1.id, top2.id], { level: 40 })
+    expect(rollableSkills(data, hero, { ignoreSlots: [1] }).some((s) => s.id === strongSkill.id)).toBe(false)
+    const plan = rollPlan(data, hero, 0, adviceOf(0, hero, [1, 2, 3])) // вклад сильной версии больше
+    expect(plan.steps.some((s) => s.kind === 'unblock')).toBe(false)
+    expect(plan.steps.filter((s) => s.slot === 1)).toEqual([])
+    expect(plan.slotActions).toContainEqual({ slot: 1, action: 'keep' })
+    expect(plan.steps.map((s) => s.detail).join(' ')).not.toMatch(/можно пропустить/)
+  })
+
+  it('вклад сильной версии измеряется так же, как вклад навыка в тот же слот', () => {
+    const weakHero = heroWith([weakSkill.id, top1.id, top2.id], pairOverrides)
+    const strongHero = { ...weakHero, skills: [strongSkill.id, top1.id, top2.id] }
+    const weak = skillContributions(data, [weakHero], null, quests, { ...opts, eps: -1 }).find((c) => c.skillIndex === 0)!
+    const strong = skillContributions(data, [strongHero], null, quests, opts).find((c) => c.skillIndex === 0)!
+    expect(weak.stronger?.skillName).toBe(strongSkill.name)
+    expect(weak.stronger?.contribution).toBeCloseTo(strong.contribution, 10)
+    // Сильная версия считается только для навыков, которые оставляем (вклад выше eps): при eps = 1 не считается.
+    expect(skillContributions(data, [weakHero], null, quests, { ...opts, eps: 1 })[0].stronger).toBeUndefined()
+    // Навык без ступени выше — сильной версии нет.
+    expect(skillContributions(data, [{ ...weakHero, skills: [top1.id] }], null, quests, { ...opts, eps: -1 })[0].stronger).toBeUndefined()
+  })
+
+  it('две слабые версии: цель 4-го слота — обе сильные, бросков вдвое меньше', () => {
+    // Вторая линейка, чья сильная версия доступна тому же промоушену.
+    const weak2 = rollable.find((s) => {
+      if (s.line === weakSkill.line || (s.tier ?? 0) > 2 || !s.classes.includes(pairClass)) return false
+      const st = strongerInLine(data, s)
+      if (!st || s.line === top1.line) return false
+      const hero = heroWith([weakSkill.id, top1.id, s.id], pairOverrides)
+      return rollableSkills(data, hero, { ignoreSlots: [3] }).some((x) => x.id === st.id)
+    })
+    expect(weak2).toBeDefined()
+    const hero = heroWith([weakSkill.id, top1.id, weak2!.id], pairOverrides)
+    const plan = rollPlan(data, hero, 0, adviceOf(0, hero, [1, 2, 3]))
+    expect(plan.steps.filter((s) => s.kind === 'unblock').map((s) => s.slot)).toEqual([1, 3])
+    const slot4 = plan.steps.find((s) => s.kind === 'reroll' && s.slot === 4)!
+    expect(slot4.detail).toMatch(/Цель — .+ или .+/)
+    expect(slot4.expectedRolls).toBe(Math.round(slot4.poolSize! / 2))
+  })
+
+  it('на один слот в плане ровно одно действие: «оставить» и «сроллить» вместе не выводятся', () => {
+    const teams: HeroInstance[][] = [
+      heroes.slice(0, 4),
+      [heroWith([weakSkill.id, top1.id, top2.id], pairOverrides)],
+      [heroWith([weakSkill.id, top2.id, top1.id], { level: 9 })],
+      [heroWith([top1.id, top2.id], { level: 40 })],
+    ]
+    const plans = teams.flatMap((team) => rerollAdvice(data, team, null, quests, { runs: 40, seed: 7 }).plans)
+    expect(plans.length).toBe(teams.reduce((a, t) => a + t.length, 0))
+    for (const plan of plans) {
+      const slots = plan.slotActions.map((x) => x.slot)
+      expect(new Set(slots).size).toBe(slots.length) // по одной записи на слот
+      for (const act of plan.slotActions) {
+        const kinds = plan.steps.filter((s) => s.slot === act.slot).map((s) => s.kind)
+        if (act.action === 'keep') expect(kinds.filter((k) => k === 'hire' || k === 'unblock' || k === 'reroll' || k === 'roland')).toEqual([])
+        else expect(kinds).not.toContain('keep')
+      }
+    }
   })
 
   it('Роланд использован: шага Роланда в плане нет, остаток закрывается кубиками', () => {

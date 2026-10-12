@@ -90,23 +90,42 @@ export function SkillAdviceView({ data, team, advice }: { data: GameData | null;
                 </div>
               ) : null}
               <ul className="space-y-2 text-sm">
-                {rows.map((a) => (
-                  <li key={a.skillIndex} className="flex flex-wrap items-center gap-2">
-                    <GameIcon kind="skill" id={skillIconId(a.skillName)} label={a.skillName} size={28} />
-                    <span>
-                      {a.skillName} <span className="text-muted-foreground">(слот {a.skillIndex + 1})</span>
-                    </span>
-                    <span className={cn('font-medium', a.contribution > 0 ? 'text-success' : 'text-muted-foreground')}>
-                      {(a.contribution * 100).toFixed(1)} п.п.
-                    </span>
-                    {a.action === 'reroll' ? (
-                      <Badge className="border-warning/40 bg-warning/15 text-warning">перекинуть: {a.cube ? CUBE_LABELS[a.cube] : ''}</Badge>
-                    ) : (
-                      <Badge className="border-success/40 bg-success/15 text-success">оставить</Badge>
-                    )}
-                    <span className="w-full text-xs text-muted-foreground">{a.reasons.join('; ')}</span>
-                  </li>
-                ))}
+                {rows.map((a) => {
+                  // Один слот — одно действие: если план перекидывает слот (например, снимает блокировку
+                  // слабой версии ради сильной в 4-м слоте), не показываем «оставить» (A60).
+                  const slotAction = plan?.slotActions.find((x) => x.slot === a.skillIndex + 1)
+                  const rerolled = slotAction ? slotAction.action === 'reroll' : a.action === 'reroll'
+                  const stepCube =
+                    slotAction?.step !== undefined
+                      ? plan?.steps.find((s) => s.slot === slotAction.slot && s.kind === slotAction.step)?.cube
+                      : undefined
+                  const shownCube = stepCube ?? a.cube
+                  const badgeText =
+                    slotAction?.step === 'hire'
+                      ? 'перекинуть наймом'
+                      : slotAction?.step === 'roland'
+                        ? 'перекинуть Роландом'
+                        : shownCube
+                          ? `перекинуть: ${CUBE_LABELS[shownCube]}`
+                          : 'перекинуть по плану'
+                  return (
+                    <li key={a.skillIndex} className="flex flex-wrap items-center gap-2">
+                      <GameIcon kind="skill" id={skillIconId(a.skillName)} label={a.skillName} size={28} />
+                      <span>
+                        {a.skillName} <span className="text-muted-foreground">(слот {a.skillIndex + 1})</span>
+                      </span>
+                      <span className={cn('font-medium', a.contribution > 0 ? 'text-success' : 'text-muted-foreground')}>
+                        {(a.contribution * 100).toFixed(1)} п.п.
+                      </span>
+                      {rerolled ? (
+                        <Badge className="border-warning/40 bg-warning/15 text-warning">{badgeText}</Badge>
+                      ) : (
+                        <Badge className="border-success/40 bg-success/15 text-success">оставить</Badge>
+                      )}
+                      <span className="w-full text-xs text-muted-foreground">{a.reasons.join('; ')}</span>
+                    </li>
+                  )
+                })}
               </ul>
               <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
                 <Checkbox checked={rolandUsedIds.includes(h.id)} onCheckedChange={(v) => toggleRoland(h.id, v === true)} />
