@@ -1,13 +1,18 @@
 /**
  * Герои пользователя: хранение в IndexedDB и экспорт/импорт JSON.
  * Данные живут только в браузере пользователя (CLAUDE.md → «Данные пользователя»).
+ *
+ * Версия записи 2 (сессия 25) добавила черновики (`draft`) и происхождение (`originId`).
+ * Записи и файлы версии 1 читаются: недостающие поля достраивает zod, а `normalizeHero`
+ * приводит их к явному виду, чтобы в UI и в файлах не было `undefined`.
  */
 import { z } from 'zod'
 import { idbStore, KEYS, type KeyValueStore } from './storage.ts'
 import { HERO_INSTANCE_VERSION, HeroInstanceSchema, type HeroInstance } from './types.ts'
 
 const StoredHeroesSchema = z.object({
-  version: z.literal(HERO_INSTANCE_VERSION),
+  /** Версия 1 (до появления черновиков) тоже читается: поля draft/originId достраивает zod. */
+  version: z.union([z.literal(1), z.literal(HERO_INSTANCE_VERSION)]),
   heroes: z.array(HeroInstanceSchema),
 })
 
@@ -15,10 +20,19 @@ const StoredHeroesSchema = z.object({
 export const HEROES_FILE_FORMAT = 'st-app/heroes'
 const HeroesFileSchema = z.object({
   format: z.literal(HEROES_FILE_FORMAT),
-  version: z.literal(HERO_INSTANCE_VERSION),
+  /** Версия 1 (до появления черновиков) тоже принимается: поля draft/originId достроит zod. */
+  version: z.union([z.literal(1), z.literal(HERO_INSTANCE_VERSION)]),
   exportedAt: z.string(),
   heroes: z.array(HeroInstanceSchema),
 })
+
+/**
+ * Черновик и происхождение — поля сессии 25. В записях/файлах прошлых версий их нет:
+ * достраиваем значениями по умолчанию, чтобы уже сохранённые герои не терялись.
+ */
+export function normalizeHero(hero: HeroInstance): HeroInstance {
+  return { ...hero, draft: hero.draft ?? false, originId: hero.originId ?? null }
+}
 
 export interface LoadedHeroes {
   heroes: HeroInstance[]
@@ -31,15 +45,7 @@ export async function loadHeroes(store: KeyValueStore = idbStore): Promise<Loade
   if (raw === undefined) return { heroes: [], error: null }
   const parsed = StoredHeroesSchema.safeParse(raw)
   if (!parsed.success) return { heroes: [], error: 'Сохранённые герои не прочитаны: формат записи не совпадает с текущей версией.' }
-  return { heroes: parsed.data.heroes, error: null }
-}
-
-export async function saveHeroes(heroes: HeroInstance[], store: KeyValueStore = idbStore): Promise<void> {
-  await store.set(KEYS.heroes, { version: HERO_INSTANCE_VERSION, heroes })
-}
-
-export function exportHeroesJson(heroes: HeroInstance[], now: Date = new Date()): string {
-  return JSON.stringify({ format: HEROES_FILE_FORMAT, version: HERO_INSTANCE_VERSION, exportedAt: now.toISOString(), heroes }, null, 2)
+  return { heroes: parsed.data.heroes.map(normalizeHero), error: null }
 }
 
 /** Разобрать файл экспорта. Ошибка — по-русски, с первым проблемным полем. */
@@ -56,7 +62,16 @@ export function parseHeroesJson(text: string): { heroes: HeroInstance[] } | { er
     const where = issue.path.length > 0 ? ` (поле ${issue.path.join('.')})` : ''
     return { error: `Это не файл героев этого приложения или другая версия формата${where}.` }
   }
-  return { heroes: parsed.data.heroes }
+  return { heroes: parsed.data.heroes.map(normalizeHero) }
+}
+
+/** Сохранить список (черновики и происхождение приводятся к явному виду перед записью). */
+export async function saveHeroes(heroes: HeroInstance[], store: KeyValueStore = idbStore): Promise<void> {
+  await store.set(KEYS.heroes, { version: HERO_INSTANCE_VERSION, heroes: heroes.map(normalizeHero) })
+}
+
+export function exportHeroesJson(heroes: HeroInstance[], now: Date = new Date()): string {
+  return JSON.stringify({ format: HEROES_FILE_FORMAT, version: HERO_INSTANCE_VERSION, exportedAt: now.toISOString(), heroes: heroes.map(normalizeHero) }, null, 2)
 }
 
 /** Добавить героев: с тем же id — заменить, новые — в конец. */

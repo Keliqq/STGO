@@ -4,17 +4,18 @@
  * Поле `inventory` из файлов старых версий (до сессии 11) при импорте игнорируется.
  */
 import { z } from 'zod'
-import { loadHeroes, saveHeroes, upsertByName } from './heroStore.ts'
+import { loadHeroes, normalizeHero, saveHeroes, upsertByName } from './heroStore.ts'
 import { RealityCheckSchema, loadRealityChecks, saveRealityChecks } from './realityChecks.ts'
 import { idbStore, type KeyValueStore } from './storage.ts'
 import { HeroInstanceSchema } from './types.ts'
 
 export const APP_STATE_FORMAT = 'st-app/state'
-export const APP_STATE_VERSION = 1
+export const APP_STATE_VERSION = 2
 
 export const AppStateSchema = z.object({
   format: z.literal(APP_STATE_FORMAT),
-  version: z.literal(APP_STATE_VERSION),
+  /** Версия 1 (до появления черновиков в героях) тоже принимается: поля достроит zod. */
+  version: z.union([z.literal(1), z.literal(APP_STATE_VERSION)]),
   exportedAt: z.string(),
   heroes: z.array(HeroInstanceSchema),
   realityChecks: z.array(RealityCheckSchema),
@@ -61,7 +62,7 @@ export async function importAppStateJson(text: string, store: KeyValueStore = id
   }
   const s = parsed.data
   const { heroes: existing } = await loadHeroes(store)
-  const merged = upsertByName(existing, s.heroes)
+  const merged = upsertByName(existing, s.heroes.map(normalizeHero))
   await saveHeroes(merged.heroes, store)
   const { checks } = await loadRealityChecks(store)
   const byId = new Set(checks.map((c) => c.id))

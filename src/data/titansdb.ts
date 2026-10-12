@@ -351,6 +351,8 @@ export function matchTitansDb(parsed: TitansDbHero[], data: GameData, options: M
       skills,
       seeds: { atk: 0, def: 0, hp: 0 },
       reference: { level: h.level, slots: structuredClone(slots), skills: [...skills], stats: { ...h.stats }, pct: { ...h.pct } },
+      draft: false,
+      originId: null,
     })
   }
   return { heroes, issues }

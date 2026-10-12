@@ -9,7 +9,7 @@
  *   · статы карточки героя — stats.ts (baseStatAtLevel, floorStat);
  *   · бой — combat.ts (всё остальное), быстрая оценка — score.ts (те же функции).
  */
-import type { DefCaps } from '../data/types.ts'
+import type { DefCaps, GameData } from '../data/types.ts'
 import {
   ENEMY_CRIT_MULT,
   EXTREME_EVA_PENALTY,
@@ -39,6 +39,18 @@ export function baseStatAtLevel(base1: number, level: number, growth: { k: numbe
  */
 export function floorStat(x: number): number {
   return Math.floor(x + 1e-9)
+}
+
+/**
+ * Максимальный тир предмета, который герой может носить на этом уровне: лист HERO LEVELS →
+ * `Hero Level → Max Item Tier` (docs/SCHEMA.md). Числа в таблице, а не в constants.ts.
+ * Уровень вне таблицы (выше 50-го или ниже первого) — ближайшее доступное значение; данных нет — null.
+ */
+export function maxItemTierFor(data: GameData, level: number): number | null {
+  const rows = [...data.heroLevels].sort((a, b) => a.level - b.level)
+  if (rows.length === 0) return null
+  const at = rows.filter((l) => l.level <= level).at(-1)
+  return (at ?? rows[0]).maxItemTier
 }
 
 // ─────────────────────────── урон и защита ───────────────────────────

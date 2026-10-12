@@ -338,7 +338,7 @@ export const HeroSlotSchema = z.object({
 })
 export type HeroSlot = z.infer<typeof HeroSlotSchema>
 
-export const HERO_INSTANCE_VERSION = 1
+export const HERO_INSTANCE_VERSION = 2
 
 /** Герой пользователя: хранится в IndexedDB, экспортируется в JSON. */
 export const HeroInstanceSchema = z.object({
@@ -356,7 +356,7 @@ export const HeroInstanceSchema = z.object({
   /**
    * Эталон из экспорта TitansDB: снаряжение и показанные игрой статы на момент экспорта.
    * Нужен для сверки расчёта и для калибровки базы героя (A8): пока уровень не изменился,
-   * база берётся из эталона, а не из усреднённой модели роста.
+   * база берётся из эталона, а не из усреднённой модели роста. У созданного вручную героя его нет.
    */
   reference: z
     .object({
@@ -376,6 +376,15 @@ export const HeroInstanceSchema = z.object({
       pct: z.object({ survive: nonNeg, atk: nonNeg, def: nonNeg }).optional(),
     })
     .nullable(),
+  /**
+   * Черновик — «копия для экспериментов» (требование владельца): дубликат героя, который можно
+   * свободно править и сравнивать с оригиналом. В подбор черновики попадают наравне с героями.
+   * Поле появилось в сессии 25; у файлов и записей прошлых версий его нет. Отсутствие = «не черновик»
+   * (`heroStore.ts → normalizeHero` приводит поле к явному false при сохранении и чтении).
+   */
+  draft: z.boolean().optional(),
+  /** Для черновика — id героя, с которого сделана копия (для сравнения «до/после»). */
+  originId: z.string().nullish(),
 })
 export type HeroInstance = z.infer<typeof HeroInstanceSchema>
 

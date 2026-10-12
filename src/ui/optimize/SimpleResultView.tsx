@@ -1,11 +1,13 @@
 import { useMemo } from 'react'
-import { Check } from 'lucide-react'
+import { Check, ClipboardCheck } from 'lucide-react'
 import { cn } from 'cn'
+import { Button } from '#/components/ui/button.tsx'
 import { elementIconId, spiritIconId } from '#/data/images.ts'
 import type { GameData, HeroInstance } from '#/data/types.ts'
 import { VERDICT_LIKELY_MIN, VERDICT_RISKY_MIN, VERDICT_SURE_MIN, WHATIF_WORTH_MIN_DELTA } from '#/engine/constants.ts'
 import type { OptimizerResult } from '#/engine/optimizer.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
+import { Tip } from '#/ui/Hint.tsx'
 import { Notice, Section } from '#/ui/layout.tsx'
 import { pct } from './format.ts'
 import type { UpgradeRow } from './UpgradeView.tsx'
@@ -16,6 +18,10 @@ interface SimpleResultViewProps {
   res: OptimizerResult
   /** Строки «стоит ли улучшать» (если уже посчитаны) — показываем только те, что окупаются. */
   upgrades: UpgradeRow[] | null
+  /** id героев, в черновик которых результат уже применён (кнопка меняет подпись). */
+  applied?: ReadonlySet<string>
+  /** Записать рекомендованную экипировку в героя (или в его черновик). */
+  onApply?: (heroIndex: number) => void
 }
 
 type Tone = 'success' | 'info' | 'warning' | 'error'
@@ -36,7 +42,7 @@ const VERDICT_TEXT_CLASS: Record<Tone, string> = {
 }
 
 /** Простая сводка результата для обычного игрока: вердикт и список «что надеть». Цифры и разбор — в «Подробном разборе». */
-export function SimpleResultView({ data, team, res, upgrades }: SimpleResultViewProps) {
+export function SimpleResultView({ data, team, res, upgrades, applied, onApply }: SimpleResultViewProps) {
   const itemByName = useMemo(() => new Map(data.items.map((i) => [i.name, i])), [data])
   const enchantByName = useMemo(() => new Map(data.enchants.map((e) => [e.name, e])), [data])
 
@@ -68,7 +74,27 @@ export function SimpleResultView({ data, team, res, upgrades }: SimpleResultView
           const changes = res.explanations[hi] ?? []
           return (
             <div key={hero?.id ?? hi} className="rounded-lg border p-3">
-              <h3 className="mb-2 font-semibold">{hero?.name ?? `Герой ${hi + 1}`}</h3>
+              <h3 className="mb-2 flex flex-wrap items-center gap-2 font-semibold">
+                {hero?.name ?? `Герой ${hi + 1}`}
+                {onApply && hero ? (
+                  <Tip
+                    text={
+                      hero.draft
+                        ? 'Записать этот набор в черновик героя (он и создан для опытов).'
+                        : 'Записать набор в героя. Оригинал не перезаписывается: будет создан черновик с этим набором, а на странице «Герои» появится сравнение статов с оригиналом.'
+                    }
+                  >
+                    <Button
+                      variant={applied?.has(hero.id) ? 'secondary' : 'outline'}
+                      size="sm"
+                      disabled={changes.length === 0 || applied?.has(hero.id)}
+                      onClick={() => onApply(hi)}
+                    >
+                      <ClipboardCheck /> {applied?.has(hero.id) ? 'Применено' : hero.draft ? 'Применить в черновик' : 'Применить подбор'}
+                    </Button>
+                  </Tip>
+                ) : null}
+              </h3>
               {changes.length === 0 ? (
                 <p className="flex items-center gap-1.5 text-sm text-success">
                   <Check className="size-4" /> Ничего менять не нужно

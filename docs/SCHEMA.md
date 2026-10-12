@@ -29,7 +29,7 @@ BLUEPRINTS.Component ────────► QUEST COMPONENTS.Name | BLUEPRI
 QUESTS.Component 1-3 ────────► QUEST COMPONENTS.Name
 QUEST COMPONENTS.Quest Area ─► QUESTS (заголовок блока, без учёта регистра)
 SKILLS.Classes ──────────────► HEROES (имя класса / группа «All Fighters», «All Promoted Rogues», …) | CHAMPIONS (имя)
-HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier
+HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier | редактор героя: «носит до T{N}» (`formulas.ts → maxItemTierFor`)
 ```
 
 ---
@@ -361,3 +361,7 @@ HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier
 | 53 | ? (`1`/`0`) | |
 
 Сопоставление с GameData: имена без учёта регистра, пробелов и вида апострофа; камень — по стихии и величине (тир сверяется); навык — имя линейки/ступени → id иконки fankit → описание. Ступень навыка не берётся из экспорта: её считает движок по стихии героя (ASSUMPTIONS A12, A22). Колонки 13/18/19 (шанс выжить, Σ ATK%, Σ DEF%) — это итоговые модификаторы, которые посчитала игра; движок сверяет с ними свои Σ ATK%/DEF% (A28) — это точная проверка модели навыков. Колонки 14–17 и 38–40 — кандидаты в семена силы, но **в фикстуре они нулевые у всех 18 героев**, поэтому сейчас не разбираются: прибавка за семя — параметр `SEED_STAT_PER_SEED` (A55). Хранение — `HeroInstance` (`src/data/types.ts`), IndexedDB-ключ `heroes`, файл экспорта `st-app/heroes` (JSON).
+
+С сессии 25 героя можно создать и править вручную (форма «Новый герой» / «Изменить»): экспорт нужен
+только для того, чтобы получить эталон базы (A8). Поля черновика (`draft`, `originId`) и версия записи 2
+описаны в ASSUMPTIONS A65; правила «что герою можно надеть» — `src/engine/heroEditor.ts`.

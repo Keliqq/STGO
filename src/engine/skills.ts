@@ -234,12 +234,12 @@ function weaponTypes(data: GameData): Set<string> {
 }
 
 /** Навык на оружие («X Master», Warlord, Marksman…): его условие — тип предмета из оружейных. */
-function isWeaponSkill(s: Skill, weapons: Set<string>): boolean {
+export function isWeaponSkill(s: Skill, weapons: Set<string>): boolean {
   return s.effects.some((e) => e.condition?.kind === 'itemType' && e.condition.types.some((t) => weapons.has(t)))
 }
 
 /** Имена классов героя, по которым ищем доступные навыки: свой класс и (при Душе Титана) промоушен. */
-function heroClassNames(data: GameData, hero: HeroInstance): string[] {
+export function heroClassNames(data: GameData, hero: HeroInstance): string[] {
   const cls = data.heroClasses.find((c) => c.name === hero.className)
   const names = [hero.className]
   if (hero.titanSoul && cls?.promotion) names.push(cls.promotion)
@@ -247,9 +247,40 @@ function heroClassNames(data: GameData, hero: HeroInstance): string[] {
 }
 
 /** Герой промоушен или с Душой Титана — только им доступны навыки «Requires Class Promotion». */
-function isPromoted(data: GameData, hero: HeroInstance): boolean {
+export function isPromoted(data: GameData, hero: HeroInstance): boolean {
   const cls = data.heroClasses.find((c) => c.name === hero.className)
   return hero.titanSoul || cls?.baseClass != null
+}
+
+/**
+ * Все навыки, которые игра может выдать этому герою как обычный навык (Type `Hero`):
+ * доступные его классу (при Душе Титана — ещё и промоушену) и разрешённые без промоушена.
+ * Блокировки «одна линейка» и «второй навык на оружие» (A40) проверяются отдельно —
+ * они зависят от того, какие слоты уже заняты (`rollableSkills`).
+ * Используется редактором героя («доступные классу навыки», требование владельца).
+ */
+export function skillChoices(data: GameData, hero: HeroInstance): Skill[] {
+  const classNames = heroClassNames(data, hero)
+  const promoted = isPromoted(data, hero)
+  return data.skills.filter(
+    (s) => s.type === 'Hero' && s.rarity !== null && s.tier !== null && (!s.requiresPromotion || promoted) && s.classes.some((c) => classNames.includes(c)),
+  )
+}
+
+/** Почему навык нельзя поставить в этот слот (блокировки A40). `null` — можно. */
+export function skillBlockReason(data: GameData, hero: HeroInstance, skill: Skill, slot: number, choices = skillChoices(data, hero)): string | null {
+  const available = new Set(choices.map((s) => s.id))
+  if (!available.has(skill.id)) return `навык недоступен классу ${hero.className}${skill.requiresPromotion ? ' без промоушена' : ''}`
+  const others = hero.skills
+    .map((id, i) => ({ skill: data.skills.find((s) => s.id === id), slot: i + 1 }))
+    .filter((x): x is { skill: Skill; slot: number } => x.skill !== undefined && x.slot !== slot)
+    .map((x) => x.skill)
+  if (others.some((s) => s.line === skill.line)) return `на герое уже есть навык линейки «${skill.line}» — они взаимоисключающие`
+  const weapons = weaponTypes(data)
+  if (isWeaponSkill(skill, weapons) && others.some((s) => isWeaponSkill(s, weapons) && s.rarity === skill.rarity)) {
+    return `на оружие не больше одного ${skill.rarity === 'Epic' ? 'эпического' : 'обычного'} навыка (A40)`
+  }
+  return null
 }
 
 /**

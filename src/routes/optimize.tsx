@@ -9,7 +9,7 @@ import { NativeSelect, NativeSelectOption } from '#/components/ui/native-select.
 import { Progress } from '#/components/ui/progress.tsx'
 import { RadioGroup, RadioGroupItem } from '#/components/ui/radio-group.tsx'
 import { areaIconId, difficultyIconId } from '#/data/images.ts'
-import { loadHeroes } from '#/data/heroStore.ts'
+import { loadHeroes, saveHeroes } from '#/data/heroStore.ts'
 import { loadConstraintOverrides, saveConstraintOverrides } from '#/data/optimizeSettings.ts'
 import { addRealityCheck, loadRealityChecks, type RealityCheck } from '#/data/realityChecks.ts'
 import { questsWithCaps } from '#/data/sync.ts'
@@ -24,6 +24,7 @@ import {
   type ConstraintOverrides,
 } from '#/engine/constraints.ts'
 import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
+import { draftCopy } from '#/engine/heroEditor.ts'
 import { ENGINE_MODEL_VERSION, SEED_STAT_PER_SEED } from '#/engine/constants.ts'
 import type { SkillAdviceResult } from '#/engine/skills.ts'
 import { seedAdviceFromWeights, type SeedAdvice } from '#/engine/statWeights.ts'
@@ -136,6 +137,9 @@ function OptimizePage() {
   const [upgrading, setUpgrading] = useState(false)
   const cancelRequested = useRef(false)
   const [error, setError] = useState<string | null>(null)
+  /** Герои, в черновик которых уже применён результат подбора (кнопка «Применить» меняет подпись). */
+  const [applied, setApplied] = useState<Set<string>>(() => new Set())
+  const [applyNote, setApplyNote] = useState<string | null>(null)
 
   const quests = useMemo(() => (data ? questsWithCaps(data).quests : []), [data])
   const questAreas = useMemo(() => [...new Set(quests.map((q) => q.area))], [quests])
@@ -275,6 +279,29 @@ function OptimizePage() {
   function cancel(): void {
     cancelRequested.current = true
     engineRef.current?.cancel()
+  }
+
+  /**
+   * «Применить подбор»: записать рекомендованную экипировку в героя.
+   * Герой-черновик правится на месте (он и создан для опытов). Обычный герой не перезаписывается:
+   * его текущий набор — эталон для сравнения, поэтому создаётся черновик с этими же статами и
+   * в него записывается результат. Пользователь видит в «Героях» таблицу «черновик ↔ оригинал».
+   */
+  async function applyBuild(heroIndex: number): Promise<string> {
+    if (!result) return 'Результата подбора ещё нет.'
+    const cfg = result.res.configs[heroIndex]
+    const hero = result.ctx.team[heroIndex]
+    if (!cfg || !hero) return 'Не удалось сопоставить героя с результатом подбора.'
+    const { heroes: stored } = await loadHeroes()
+    const target = stored.find((h) => h.id === hero.id)
+    if (!target) return `Герой «${hero.name}» не найден в сохранённых — импортируйте или создайте его заново.`
+    const applied = applyHeroConfig(target.draft ? target : draftCopy(target), cfg)
+    const next = target.draft ? stored.map((h) => (h.id === target.id ? applied : h)) : [...stored, applied]
+    await saveHeroes(next)
+    setApplied((cur) => new Set(cur).add(hero.id))
+    return target.draft
+      ? `Набор записан в черновик «${applied.name}» — статы сравните с оригиналом на странице «Герои».`
+      : `Создан черновик «${applied.name}» с рекомендованным набором: оригинал «${target.name}» не изменён, сравнение — на странице «Герои».`
   }
 
   async function markReality(passed: boolean, deadHeroes: string[]): Promise<void> {
@@ -546,7 +573,15 @@ function OptimizePage() {
 
       {result ? (
         <>
-          <SimpleResultView data={data} team={result.ctx.team} res={result.res} upgrades={upgrades} />
+          <SimpleResultView
+            data={data}
+            team={result.ctx.team}
+            res={result.res}
+            upgrades={upgrades}
+            applied={applied}
+            onApply={(hi) => void applyBuild(hi).then(setApplyNote)}
+          />
+          {applyNote ? <Notice tone="success">{applyNote}</Notice> : null}
           <details className="group mb-6 rounded-xl border bg-card p-4 shadow-sm">
             <summary className="cursor-pointer text-lg font-semibold">
               Подробный разбор

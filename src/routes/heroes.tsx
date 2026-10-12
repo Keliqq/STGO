@@ -1,33 +1,30 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Download, Trash2, Upload } from 'lucide-react'
+import { Copy, Download, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { cn } from 'cn'
 import { Badge } from '#/components/ui/badge.tsx'
 import { Button } from '#/components/ui/button.tsx'
-import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '#/components/ui/card.tsx'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '#/components/ui/card.tsx'
 import { Input } from '#/components/ui/input.tsx'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import { exportHeroesJson, loadHeroes, mergeHeroes, parseHeroesJson, saveHeroes, upsertByName } from '#/data/heroStore.ts'
-import { classIconId, itemIconId, skillIconId, spiritIconId, elementIconId } from '#/data/images.ts'
+import { classIconId } from '#/data/images.ts'
 import { importTitansDb, type ImportIssue } from '#/data/titansdb.ts'
 import type { GameData, HeroInstance } from '#/data/types.ts'
 import { modelWarning } from '#/engine/classModel.ts'
-import { calcStats, effectiveClass, MAIN_STATS } from '#/engine/stats.ts'
+import { draftCopy, emptySlot, newHero } from '#/engine/heroEditor.ts'
+import { calcStats, effectiveClass } from '#/engine/stats.ts'
 import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { useGameData } from '#/ui/dataSync.ts'
 import { HintLabel, Tip } from '#/ui/Hint.tsx'
 import { Notice, Page, Section } from '#/ui/layout.tsx'
+import { HeroEditor } from '#/ui/heroes/HeroEditor.tsx'
+import { DraftBadge, ElementIcon, HeroStatTable } from '#/ui/heroes/heroStatTable.tsx'
+import { enchantByName } from '#/ui/heroes/heroView.ts'
 import { HeroWeightsPanel } from '#/ui/optimize/HeroWeightsPanel.tsx'
 
 export const Route = createFileRoute('/heroes')({ component: HeroesPage })
-
-const STAT_LABEL = { atk: 'ATK', def: 'DEF', hp: 'HP' } as const
-
-function pct(x: number): string {
-  return `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`
-}
 
 function ImportReport({ issues, summary }: { issues: ImportIssue[]; summary: string }) {
   return (
@@ -49,53 +46,89 @@ function ImportReport({ issues, summary }: { issues: ImportIssue[]; summary: str
   )
 }
 
-function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData; onDelete: () => void }) {
+/** Кнопки карточки героя: изменить, копия для экспериментов, удалить. */
+function HeroActions({ onEdit, onCopy, onDelete }: { onEdit: () => void; onCopy: () => void; onDelete: () => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      <Tip text="Открыть форму правки: имя, класс, уровень, навыки, экипировка, семена. Статы пересчитываются сразу.">
+        <Button variant="outline" size="sm" onClick={onEdit}>
+          <Pencil /> Изменить
+        </Button>
+      </Tip>
+      <Tip text="Дублировать героя с пометкой «черновик»: оригинал остаётся как есть, а копию можно свободно править и сравнивать с ним.">
+        <Button variant="outline" size="sm" onClick={onCopy}>
+          <Copy /> Копия для экспериментов
+        </Button>
+      </Tip>
+      <Tip text="Удалить героя из этого браузера. Можно импортировать заново.">
+        <Button variant="ghost" size="sm" onClick={onDelete}>
+          <Trash2 /> Удалить
+        </Button>
+      </Tip>
+    </div>
+  )
+}
+
+function HeroCard({
+  hero,
+  data,
+  original,
+  onEdit,
+  onCopy,
+  onDelete,
+}: {
+  hero: HeroInstance
+  data: GameData
+  /** Черновик сравнивается с оригиналом (если он ещё есть в списке). */
+  original?: HeroInstance
+  onEdit: () => void
+  onCopy: () => void
+  onDelete: () => void
+}) {
   const stats = calcStats(hero, data)
-  const model = calcStats(hero, data, { useReference: false })
   const ref = hero.reference?.stats
   // Пометка о точности: класс смоделирован не полностью (см. src/engine/classModel.ts).
   const modelNote = modelWarning(data, effectiveClass(hero, data)?.name ?? hero.className)
+  const originalStats = original ? calcStats(original, data) : null
   return (
     <article className="flex">
-      <Card className="flex-1 gap-4">
-        <CardHeader className="flex items-center gap-3">
-          <GameIcon kind="class" id={classIconId(hero.className)} label={hero.className} size={44} />
-          <div className="min-w-0 flex-1">
-            <CardTitle>
-              <h3 className="text-lg font-semibold">{hero.name}</h3>
-            </CardTitle>
-            <CardDescription>
-              {hero.className}, уровень {hero.level}
-              {hero.titanSoul ? ', Душа Титана' : ''} · стихия {stats.element}
-            </CardDescription>
-            {modelNote ? (
-              <p className={cn('mt-1 text-xs', modelNote.level === 'partial' ? 'text-warning' : 'text-muted-foreground')} title={modelNote.text}>
-                {modelNote.text}
-              </p>
-            ) : null}
+      <Card className={cn('flex-1 gap-4', hero.draft && 'border-warning/60')}>
+        <CardHeader className="gap-3">
+          <div className="flex items-center gap-3">
+            <GameIcon kind="class" id={classIconId(hero.className)} label={hero.className} size={44} />
+            <div className="min-w-0 flex-1">
+              <CardTitle>
+                <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
+                  {hero.name}
+                  {hero.draft ? <DraftBadge /> : null}
+                </h3>
+              </CardTitle>
+              <CardDescription>
+                {hero.className}, уровень {hero.level}
+                {hero.titanSoul ? ', Душа Титана' : ''} · стихия {stats.element}
+                <ElementIcon element={effectiveClass(hero, data)?.element ?? null} size={14} />
+              </CardDescription>
+              {modelNote ? (
+                <p className={cn('mt-1 text-xs', modelNote.level === 'partial' ? 'text-warning' : 'text-muted-foreground')} title={modelNote.text}>
+                  {modelNote.text}
+                </p>
+              ) : null}
+            </div>
           </div>
-          <CardAction>
-            <Tip text="Удалить героя из этого браузера. Можно импортировать заново.">
-              <Button variant="ghost" size="sm" onClick={onDelete}>
-                <Trash2 /> Удалить
-              </Button>
-            </Tip>
-          </CardAction>
+          <HeroActions onEdit={onEdit} onCopy={onCopy} onDelete={onDelete} />
         </CardHeader>
 
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {hero.slots.map((s, i) => (
               <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 p-1.5 text-xs">
-                <GameIcon kind="item" id={s.item ? itemIconId(s.item) : null} label={s.item ?? 'пусто'} size={32} />
+                <GameIcon kind="item" id={s.item ? (data.items.find((x) => x.name === s.item)?.imageId ?? null) : null} label={s.item ?? 'пусто'} size={32} />
                 <div className="min-w-0">
                   <div className="truncate font-medium">{s.item ?? '—'}</div>
                   <div className="flex items-center gap-1 text-muted-foreground">
                     {s.item ? s.quality : ''}
-                    {s.element ? (
-                      <GameIcon kind="element" id={data.enchants.find((e) => e.name === s.element)?.iconId ?? elementIconId('Any')} label={s.element} size={14} />
-                    ) : null}
-                    {s.spirit ? <GameIcon kind="spirit" id={spiritIconId(s.spirit)} label={s.spirit} size={14} /> : null}
+                    {s.element ? <GameIcon kind="element" id={enchantByName(data, s.element)?.iconId ?? 'all'} label={s.element} size={14} /> : null}
+                    {s.spirit ? <GameIcon kind="spirit" id={data.enchants.find((e) => e.name === s.spirit)?.iconId ?? null} label={s.spirit} size={14} /> : null}
                   </div>
                 </div>
               </div>
@@ -108,7 +141,6 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
               .map((s, i) => (
                 <Tip key={i} text={s.text}>
                   <Badge variant="secondary" className="gap-1.5 py-1">
-                    <GameIcon kind="skill" id={skillIconId(s.name)} label={s.name} size={16} />
                     {s.name}
                     {s.tier ? ` (${s.tier})` : ''}
                   </Badge>
@@ -116,68 +148,20 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
               ))}
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead />
-                <TableHead>
-                  <HintLabel hint="Статы, посчитанные приложением по надетым предметам, навыкам и стихиям.">Расчёт</HintLabel>
-                </TableHead>
-                {ref ? (
-                  <TableHead>
-                    <HintLabel hint="Статы из файла экспорта TitansDB — эталон для проверки расчёта.">Экспорт</HintLabel>
-                  </TableHead>
-                ) : null}
-                {ref ? <TableHead>
-                  <HintLabel hint="Расчёт с базой из модели роста по уровню, без эталона экспорта. В скобках — отклонение от экспорта: показывает точность модели.">Модель без эталона</HintLabel>
-                </TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {MAIN_STATS.map((st) => (
-                <TableRow key={st}>
-                  <TableCell className="text-muted-foreground">{STAT_LABEL[st]}</TableCell>
-                  <TableCell className="font-semibold">{stats[st]}</TableCell>
-                  {ref ? <TableCell>{ref[st]}</TableCell> : null}
-                  {ref ? (
-                    <TableCell className="text-muted-foreground">
-                      {model[st]} ({pct(model[st] / ref[st] - 1)})
-                    </TableCell>
-                  ) : null}
-                </TableRow>
-              ))}
-              <TableRow>
-                <TableCell className="text-muted-foreground">
-                  <HintLabel hint="Шанс критического удара и его множитель урона.">Крит</HintLabel>
-                </TableCell>
-                <TableCell>
-                  {(stats.crit * 100).toFixed(0)}% ×{stats.critDmg.toFixed(1)}
-                </TableCell>
-                {ref ? (
-                  <TableCell>
-                    {(ref.crit * 100).toFixed(0)}% ×{ref.critDmg}
-                  </TableCell>
-                ) : null}
-              </TableRow>
-              <TableRow>
-                <TableCell className="text-muted-foreground">
-                  <HintLabel hint="Шанс полностью избежать вражеской атаки.">Уклонение</HintLabel>
-                </TableCell>
-                <TableCell>{(stats.eva * 100).toFixed(0)}%</TableCell>
-                {ref ? <TableCell>{(ref.eva * 100).toFixed(0)}%</TableCell> : null}
-              </TableRow>
-              <TableRow>
-                <TableCell className="text-muted-foreground">
-                  <HintLabel hint="Чем выше угроза, тем чаще босс выбирает героя целью атаки (танку нужна высокая).">Угроза</HintLabel>
-                </TableCell>
-                <TableCell>{stats.threat}</TableCell>
-                {ref ? <TableCell>{ref.threat}</TableCell> : null}
-              </TableRow>
-            </TableBody>
-          </Table>
+          {originalStats ? (
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">
+                Сравнение с оригиналом{original ? ` «${original.name}»` : ''}: слева черновик, справа оригинал.
+              </p>
+              <HeroStatTable label="Черновик" stats={stats} other={originalStats} otherLabel="Оригинал" showDelta />
+            </div>
+          ) : (
+            <HeroStatTable label="Расчёт" stats={stats} other={ref ?? null} otherLabel="Экспорт" />
+          )}
         </CardContent>
         <CardFooter className="text-xs text-muted-foreground">
-          База: {stats.breakdown.baseSource === 'reference' ? 'из экспорта (уровень не менялся)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±10% HP)'}
+          База: {stats.breakdown.baseSource === 'reference' ? 'из экспорта (уровень не менялся)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±9% HP)'}
+          {hero.reference && hero.reference.level !== hero.level ? ` · эталон с ${hero.reference.level} ур. больше не подходит — уровень изменён` : ''}
         </CardFooter>
         <CardContent>
           <HeroWeightsPanel hero={hero} data={data} />
@@ -194,6 +178,8 @@ function HeroesPage() {
   const [report, setReport] = useState<{ issues: ImportIssue[]; summary: string } | null>(null)
   const [paste, setPaste] = useState('')
   const [dragging, setDragging] = useState(false)
+  /** Открытая форма: «новый герой» или правка конкретного. */
+  const [editing, setEditing] = useState<{ hero: HeroInstance; creating: boolean } | null>(null)
 
   useEffect(() => {
     void loadHeroes().then((r) => {
@@ -234,8 +220,45 @@ function HeroesPage() {
     } else await importText(text)
   }
 
+  /** Создать пустого героя: класс по умолчанию — первый из данных. */
+  const startCreating = (): void => {
+    if (!data) return
+    const first = data.heroClasses.find((c) => c.baseClass == null) ?? data.heroClasses[0]
+    if (!first) return
+    setEditing({ hero: { ...newHero(first.name), slots: [emptySlot(), emptySlot(), emptySlot(), emptySlot(), emptySlot(), emptySlot()] }, creating: true })
+  }
+
+  /** Сохранение формы: новую запись — в конец, существующую — на её месте (id сохраняется). */
+  const saveEdited = (next: HeroInstance): void => {
+    const list = heroes ?? []
+    const exists = list.some((h) => h.id === next.id)
+    update(exists ? list.map((h) => (h.id === next.id ? next : h)) : [...list, next])
+    setEditing(null)
+  }
+
+  /** «Копия для экспериментов»: дубликат с пометкой «черновик» и ссылкой на оригинал. */
+  const makeDraft = (hero: HeroInstance): void => {
+    const list = heroes ?? []
+    update([...list, draftCopy(hero)])
+  }
+
+  const drafts = heroes?.filter((h) => h.draft).length ?? 0
+
   return (
-    <Page title="Герои" description="Импортируйте экспорт TitansDB. Герои хранятся только в этом браузере.">
+    <Page
+      title="Герои"
+      description="Создавайте героев вручную или импортируйте экспорт TitansDB. Герои и их черновики хранятся только в этом браузере."
+    >
+      {editing ? (
+        <HeroEditor
+          data={data!}
+          hero={editing.hero}
+          creating={editing.creating}
+          onSave={saveEdited}
+          onCancel={() => setEditing(null)}
+        />
+      ) : null}
+
       <Section title="Импорт из TitansDB">
         <div
           onDragOver={(e) => {
@@ -281,7 +304,17 @@ function HeroesPage() {
 
       <section>
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <h2 className="flex-1 text-xl font-semibold">Мои герои ({heroes?.length ?? '…'})</h2>
+          <h2 className="flex-1 text-xl font-semibold">
+            Мои герои ({heroes?.length ?? '…'}
+            {drafts > 0 ? `, черновиков ${drafts}` : ''})
+          </h2>
+          <Tip text="Создать героя вручную: класс, уровень, навыки и экипировка. Доступны только те предметы, камни, духи и навыки, которые герой может использовать.">
+            <span>
+              <Button size="sm" disabled={!data} onClick={startCreating}>
+                <Plus /> Новый герой
+              </Button>
+            </span>
+          </Tip>
           <Tip text="Скачать файл со всеми героями (JSON), чтобы перенести их в другой браузер.">
             <span>
               <Button variant="outline" size="sm" disabled={!heroes?.length} onClick={() => heroes && downloadText('st-heroes.json', exportHeroesJson(heroes))}>
@@ -305,10 +338,30 @@ function HeroesPage() {
           </Tip>
         </div>
         {error ? <Notice tone="error">{error}</Notice> : null}
-        {heroes && heroes.length === 0 ? <p className="text-sm text-muted-foreground">Пока нет героев — импортируйте экспорт TitansDB.</p> : null}
+        {heroes && heroes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Пока нет героев — создайте нового кнопкой «Новый герой» или импортируйте экспорт TitansDB.
+          </p>
+        ) : null}
+        <p className="mb-3 text-xs text-muted-foreground">
+          <HintLabel hint="Черновик — это копия героя для экспериментов: правьте её свободно, оригинал не меняется. Для черновика показывается сравнение статов с оригиналом.">
+            Черновик
+          </HintLabel>{' '}
+          — копия героя для опытов: в подбор идёт наравне с героями, а его статы сравниваются с оригиналом.
+        </p>
         <div className="grid gap-4 md:grid-cols-2">
           {data && heroes
-            ? heroes.map((h) => <HeroCard key={h.id} hero={h} data={data} onDelete={() => update(heroes.filter((x) => x.id !== h.id))} />)
+            ? heroes.map((h) => (
+                <HeroCard
+                  key={h.id}
+                  hero={h}
+                  data={data}
+                  original={h.originId ? heroes.find((x) => x.id === h.originId) : undefined}
+                  onEdit={() => setEditing({ hero: h, creating: false })}
+                  onCopy={() => makeDraft(h)}
+                  onDelete={() => update(heroes.filter((x) => x.id !== h.id))}
+                />
+              ))
             : null}
         </div>
       </section>

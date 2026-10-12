@@ -15,17 +15,28 @@ const hero: HeroInstance = {
   skills: [],
   seeds: { atk: 0, def: 0, hp: 0 },
   reference: null,
+  draft: false,
+  originId: null,
 }
 
 describe('резервная копия состояния', () => {
   it('экспорт → импорт в пустую базу', async () => {
-    const src = memoryStore({ heroes: { version: 1, heroes: [hero] } })
+    const src = memoryStore({ heroes: { version: 2, heroes: [hero] } })
     const json = await exportAppStateJson(new Date('2026-10-10T00:00:00Z'), src)
     expect(JSON.parse(json)).not.toHaveProperty('inventory')
     const dst = memoryStore()
     const r = await importAppStateJson(json, dst)
     expect(r).toMatchObject({ heroesAdded: 1, counts: { heroes: 1, realityChecks: 0 } })
     expect((await loadHeroes(dst)).heroes).toEqual([hero])
+  })
+
+  it('запись героев версии 1 читается: черновик и происхождение достраиваются', async () => {
+    // Формат до сессии 25: полей draft/originId в сохранённых героях не было.
+    const legacy = { ...hero, draft: undefined, originId: undefined }
+    const store = memoryStore({ heroes: { version: 1, heroes: [legacy] } })
+    const loaded = await loadHeroes(store)
+    expect(loaded.error).toBeNull()
+    expect(loaded.heroes).toEqual([hero])
   })
 
   it('файл старой версии с инвентарём импортируется, инвентарь игнорируется', async () => {
