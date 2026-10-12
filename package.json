@@ -16,6 +16,7 @@
     "pretest": "node scripts/build-snapshot.ts --if-missing --offline",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "vitest run src/engine/optimizer.bench.test.ts --silent=false",
     "lint": "eslint .",
     "pretest:e2e": "npm run build",
     "test:e2e": "playwright test",

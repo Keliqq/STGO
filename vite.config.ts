@@ -16,8 +16,14 @@ const config = defineConfig({
     viteReact(),
   ],
   worker: { format: 'es' },
+  build: {
+    // Снапшот данных (src/data/snapshot.json) — отдельный ленивый чанк ~1,7 МБ (144 КБ gzip), это ожидаемо
+    chunkSizeWarningLimit: 1800,
+  },
   test: {
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+    // Бенчмарк упирается в CPU при параллельных воркерах и флакует по времени — запускается отдельно: npm run bench
+    exclude: ['**/node_modules/**', ...(process.argv.some((a) => a.includes('bench')) ? [] : ['**/*.bench.test.ts'])],
     environment: 'node',
   },
 })
