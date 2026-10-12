@@ -21,9 +21,17 @@ import {
   STAT_WEIGHT_MAIN_PCT,
   STAT_WEIGHT_RUNS,
   STAT_WEIGHT_THREAT,
+  PROBE_DMG_EXPONENT,
+  PROBE_MIN_RUNS,
+  PROBE_OUT_OF_RANGE_PENALTY,
+  PROBE_RUNS_SHARE,
   PROBE_TARGET_WIN_RATE,
   PROBE_WIN_RATE_MAX,
   PROBE_WIN_RATE_MIN,
+  SKILL_REROLL_EPS,
+  THREAT_WARNING_MARGIN,
+  WEIGHT_SATURATED_HIGH,
+  WEIGHT_SATURATED_LOW,
   WEIGHTS_PROBE_FACTORS,
 } from './constants.ts'
 import {
@@ -57,18 +65,19 @@ const ELEMENT_RU: Record<string, string> = {
 /** Подпись шага: «+1% CRIT», «+10% CRIT DMG», «+5% ATK», «+10 стихии (Свет)». */
 export function statStepLabel(stat: StatWeightStat, element: Element | null = null): string {
   switch (stat) {
+    // Подписи — из тех же констант, что и сами шаги (иначе при подгонке шага подпись врала бы).
     case 'crit':
-      return '+1% CRIT'
+      return `+${STAT_WEIGHT_CRIT_PCT}% CRIT`
     case 'critDmg':
-      return '+10% CRIT DMG'
+      return `+${STAT_WEIGHT_CRIT_DMG_PCT}% CRIT DMG`
     case 'eva':
-      return '+1% EVA'
+      return `+${STAT_WEIGHT_EVA_PCT}% EVA`
     case 'atk':
-      return '+5% ATK'
+      return `+${STAT_WEIGHT_MAIN_PCT}% ATK`
     case 'hp':
-      return '+5% HP'
+      return `+${STAT_WEIGHT_MAIN_PCT}% HP`
     case 'def':
-      return '+5% DEF'
+      return `+${STAT_WEIGHT_MAIN_PCT}% DEF`
     case 'element':
       return `+${STAT_WEIGHT_ELEMENT} стихии${element ? ` (${ELEMENT_RU[element] ?? element})` : ''}`
     case 'threat':
@@ -233,7 +242,7 @@ const round = (x: number, digits = 4): number => Math.round(x * 10 ** digits) / 
  *  · win rate 0% при полном провале → мин. % HP (веса всё равно ≈0 — нужен зонд).
  */
 export function metricOf(baseWinRate: number, stat?: StatWeightStat): 'winRatePp' | 'damagePct' | 'minSurvivorHpPp' {
-  if (baseWinRate > 0.01 && baseWinRate < 0.99) return 'winRatePp'
+  if (baseWinRate > WEIGHT_SATURATED_LOW && baseWinRate < WEIGHT_SATURATED_HIGH) return 'winRatePp'
   if (stat && DEFENSIVE_STATS.includes(stat)) return 'minSurvivorHpPp'
   return 'damagePct'
 }
@@ -254,8 +263,8 @@ export function weightsProbeQuest(quest: Quest, factor: number): Quest {
     ...quest,
     monsterHp: Math.max(1, Math.round(quest.monsterHp / factor)),
     // Урон ослабляем мягче, чем HP (иначе зонд превращается в лёгкую прогулку, где статы не нужны).
-    monsterDmg: Math.max(1, Math.round(quest.monsterDmg / Math.sqrt(factor))),
-    monsterAoe: Math.max(0, Math.round(quest.monsterAoe / Math.sqrt(factor))),
+    monsterDmg: Math.max(1, Math.round(quest.monsterDmg / factor ** PROBE_DMG_EXPONENT)),
+    monsterAoe: Math.max(0, Math.round(quest.monsterAoe / factor ** PROBE_DMG_EXPONENT)),
   }
 }
 
@@ -271,7 +280,7 @@ export function statWeights(fighters: Fighter[], quest: Quest, options: StatWeig
   // Win rate 0 %: квест не различает наборы (отряд проваливается всегда), веса были бы нулями.
   // Перебор зондов идёт на коротких прогонах (выбрать множитель — грубая задача), а победитель
   // пересчитывается на полном числе прогонов, чтобы дельты были точными.
-  const short = Math.max(100, Math.round(runs / 4))
+  const short = Math.max(PROBE_MIN_RUNS, Math.round(runs * PROBE_RUNS_SHARE))
   const probeOf = (factor: number, r: number): StatWeightsResult => {
     const q = weightsProbeQuest(quest, factor)
     return computeAt(fighters, q, quest, r, seed, { ...options, baseWinRate: undefined }, {
@@ -306,7 +315,7 @@ function discrimination(w: StatWeightsResult): number {
  */
 function probeRank(r: StatWeightsResult): number {
   const dist = Math.min(Math.abs(r.base.winRate - PROBE_TARGET_WIN_RATE), Math.abs(r.base.winRate - (1 - PROBE_TARGET_WIN_RATE)))
-  return dist + (r.base.winRate > PROBE_WIN_RATE_MIN && r.base.winRate < PROBE_WIN_RATE_MAX ? 0 : 0.25)
+  return dist + (r.base.winRate > PROBE_WIN_RATE_MIN && r.base.winRate < PROBE_WIN_RATE_MAX ? 0 : PROBE_OUT_OF_RANGE_PENALTY)
 }
 
 /** Выбирает из зондов тот, у которого win rate ближе к 50 % (и исход заметнее зависит от статов). */
@@ -364,7 +373,8 @@ function computeAt(
       const m = sim(fs)
       return {
         stat,
-        stepLabel: statStepLabel(stat, stat === 'element' ? (barrierEl ?? ownElement) : null),
+        // Прибавка идёт в собственную стихию бойца (applyFighterBonus) — её и подписываем.
+        stepLabel: statStepLabel(stat, stat === 'element' ? (ownElement ?? barrierEl) : null),
         plus: steps[si],
         winRatePp: round(m.winRate - base.winRate),
         damagePct: base.avgDamagePerRound > 0 ? round(m.avgDamagePerRound / base.avgDamagePerRound - 1) : 0,
@@ -426,7 +436,7 @@ function bestStat(weights: StatWeight[], baseWinRate: number): StatWeightStat | 
 /** Одна фраза «Главное для героя: …»: у защитных статов на насыщенном квесте — выживаемость, у атакующих — урон. */
 function headlineFor(w: StatWeight): string {
   const label = STAT_FULL_LABEL[w.stat]
-  if (w.winRatePp > 0 && (w.metric === 'winRatePp' || w.winRatePp >= 0.005)) {
+  if (w.winRatePp > 0 && (w.metric === 'winRatePp' || w.winRatePp >= SKILL_REROLL_EPS)) {
     return `Главное для героя: ${label}: ${w.stepLabel} ≈ +${(w.winRatePp * 100).toFixed(1)} п.п. win rate`
   }
   if (w.minSurvivorHpPp > 0 && (DEFENSIVE_STATS.includes(w.stat) || w.damagePct <= 0)) {
@@ -555,7 +565,7 @@ export function threatWarning(weights: StatWeightsResult, tankIndex: number | nu
   const tank = weights.threat[tankIndex]
   if (!tank) return null
   const worst = weights.threat.filter((t) => t.index !== tankIndex).reduce((a, b) => (b.share > a.share ? b : a))
-  if (worst.share <= tank.share + 0.05) return null
+  if (worst.share <= tank.share + THREAT_WARNING_MARGIN) return null
   return `${worst.name} получает ${(worst.share * 100).toFixed(0)} % ударов босса — больше танка ${tank.name} (${(tank.share * 100).toFixed(0)} %). Угроза у ДД выше танка: удары достаются тому, кто бьёт сильнее.`
 }
 

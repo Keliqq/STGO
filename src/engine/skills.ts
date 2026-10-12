@@ -22,9 +22,9 @@
  * ASSUMPTION: A39 — какие тиры навыков выпадают каким кубиком, в данных нет (в ST-Central про тиры
  * ничего нет): считаем, что кубик k может выдать навык до тира CUBE_MAX_TIER[k], Роланд — любой.
  * ASSUMPTION: A60 — шаги плана и пул навыков для оценки вероятности; слот-специфичных пулов в данных нет.
- * Шаг `unblock` (сроллить слабую версию в слоте 1/3) показывается, только если сильная версия этой
- * линейки — реальная цель 4-го слота: её вклад (измеряется в `skillContributions`) больше вклада слабой
- * и она попадает в `rollableSkills` после снятия блокировки. Иначе шага нет — слабую версию не трогаем.
+ * Шага «сначала сроллить слабую версию нужного навыка» в плане нет (A63): пары «слабая ↔ сильная версия»
+ * в данных не связаны — ни по линейке (ступень выбирает стихия), ни по иконке (у пар разные файлы fankit,
+ * `s_hp` / `s_megahp`). Правило гайда остаётся текстом в памятке «Как роллить».
  * На каждый слот в плане ровно одно действие: «оставить» и «сроллить» одновременно не выводятся
  * (`HeroSkillPlan.slotActions`).
  */
@@ -62,17 +62,6 @@ export interface SkillAdviceOptions {
   rolandUsed?: readonly number[]
 }
 
-/** Сильная («парная») версия навыка: та же линейка, ступень выше (A60). */
-export interface SkillCandidate {
-  skillId: string
-  skillName: string
-  /**
-   * Вклад сильной версии в тот же слот — измерен так же, как `contribution` слабой:
-   * win rate отряда с ней минус win rate отряда с пустым слотом (средзвешенный по квестам).
-   */
-  contribution: number
-}
-
 export interface SkillContribution {
   heroIndex: number
   /** Индекс в hero.skills (слот навыка 0..3). */
@@ -84,11 +73,6 @@ export interface SkillContribution {
   tier: number | null
   /** win rate с навыком − win rate без него (средзвешенный по квестам). */
   contribution: number
-  /**
-   * Сильная версия этой же линейки — считается только для навыков, которые оставляем (вклад выше eps):
-   * план ролла решает по ней, стоит ли сроллить слабую версию ради цели в 4-м слоте (A60).
-   */
-  stronger?: SkillCandidate
 }
 
 export interface SkillAdvice {
@@ -99,8 +83,6 @@ export interface SkillAdvice {
   action: 'keep' | 'reroll'
   /** Каким кубиком перекидывать (только при action='reroll'). */
   cube?: Cube
-  /** Сильная версия линейки и её вклад (только для навыков с вкладом выше eps). */
-  stronger?: SkillCandidate
   reasons: string[]
 }
 
@@ -117,8 +99,6 @@ export type RollStepKind =
   | 'hire'
   /** Прокачка уровня (и, если нужно, Душа Титана) — открывает слоты 3 и 4. */
   | 'level'
-  /** Слабая версия парного навыка в слоте 1/3 — сроллить её до ролла 4-го слота. */
-  | 'unblock'
   /** Перекидка слота кубиком. */
   | 'reroll'
   /** Слот уже хорош — не трогаем. */
@@ -138,9 +118,7 @@ export interface RollStep {
   basicCubes: number
   /** Сколько навыков в пуле перекидки этого слота (после блокировок) — знаменатель вероятности. */
   poolSize?: number
-  /** Ожидаемое число бросков до нужного навыка — только если нужный навык известен из данных. */
-  expectedRolls?: number
-  /** Почему ожидаемое число бросков не показано. */
+  /** Почему ожидаемое число бросков не показано (нужный навык в данных не задан). */
   rollsNote?: string
 }
 
@@ -155,12 +133,9 @@ export interface HeroSkillPlan {
   /** Роланд: любой навык в любой слот, один раз на героя — тратить последним, обычно на слот 3. */
   roland: { slot: number; reason: string } | null
   reasons: string[]
-  /** Пошаговый план в порядке гайда: слот 2 → прокачка → блокировки → слот 4 → слот 1 → Роланд. */
+  /** Пошаговый план в порядке гайда: слот 2 → прокачка → слот 4 → слот 1 → Роланд. */
   steps: RollStep[]
-  /**
-   * Одно действие на слот: шаг плана («сроллить») важнее вердикта совета («оставить») — если слабую
-   * версию в слоте перекидывают ради сильной в 4-м слоте, слот не считается «оставленным» (A60).
-   */
+  /** Одно действие на слот: шаг плана («сроллить») важнее вердикта совета («оставить», A60). */
   slotActions: SlotPlanAction[]
   /** Цена всего плана в базовых кубиках (идеальный = 8; найм и Роланд бесплатны). */
   basicCubes: number
@@ -174,12 +149,12 @@ export interface SlotPlanAction {
   slot: number
   /** `keep` — слот не трогаем, `reroll` — слот перекидывается шагом плана. */
   action: 'keep' | 'reroll'
-  /** Шаг, который перекидывает слот (при action='reroll'): найм, кубик, разблокировка или Роланд. */
+  /** Шаг, который перекидывает слот (при action='reroll'): найм, кубик или Роланд. */
   step?: RollStepKind
 }
 
 /** Шаги, которыми слот перекидывается (заменяется другим навыком): «оставить» к ним не добавляется. */
-const REROLL_STEP_KINDS: readonly RollStepKind[] = ['hire', 'unblock', 'reroll', 'roland']
+const REROLL_STEP_KINDS: readonly RollStepKind[] = ['hire', 'reroll', 'roland']
 
 function weightedWinRate(heroes: HeroInstance[], data: GameData, champion: { name: string; rank: number } | null | undefined, quests: QuestWeight[], seed: number, runs: number): number {
   const fighters = heroes.map((h) => fighterFromHero(h, data))
@@ -202,7 +177,6 @@ export function skillContributions(
   if (quests.length === 0 || heroes.length === 0) return []
   const seed = (options.seed ?? OPTIMIZER_CRN_SEED) >>> 0
   const runs = options.runs ?? OPTIMIZER_SIM_RUNS
-  const eps = options.eps ?? SKILL_REROLL_EPS
   const base = weightedWinRate(heroes, data, champion, quests, seed, runs)
   const out: SkillContribution[] = []
   heroes.forEach((hero, heroIndex) => {
@@ -211,21 +185,6 @@ export function skillContributions(
       if (!skill) return
       const without = heroes.map((h, i) => (i === heroIndex ? { ...h, skills: h.skills.filter((_, j) => j !== skillIndex) } : h))
       const wrWithout = weightedWinRate(without, data, champion, quests, seed, runs)
-      const contribution = base - wrWithout
-      // Сильную версию измеряем с той же пустой базой (wrWithout), поэтому вклады слабой и сильной сравнимы:
-      // contribution(strong) − contribution(weak) = win rate с сильной − win rate со слабой.
-      let stronger: SkillCandidate | undefined
-      const strong = contribution > eps ? strongerInLine(data, skill) : null
-      if (strong && !hero.skills.some((id) => id === strong.id)) {
-        const withStrong = heroes.map((h, i) =>
-          i === heroIndex ? { ...h, skills: h.skills.map((id, j) => (j === skillIndex ? strong.id : id)) } : h,
-        )
-        stronger = {
-          skillId: strong.id,
-          skillName: strong.name,
-          contribution: weightedWinRate(withStrong, data, champion, quests, seed, runs) - wrWithout,
-        }
-      }
       out.push({
         heroIndex,
         skillIndex,
@@ -234,8 +193,7 @@ export function skillContributions(
         line: skill.line,
         rarity: skill.rarity,
         tier: skill.tier,
-        contribution,
-        ...(stronger ? { stronger } : {}),
+        contribution: base - wrWithout,
       })
     })
   })
@@ -324,17 +282,6 @@ export function rollableSkills(data: GameData, hero: HeroInstance, options: { ig
   })
 }
 
-/**
- * «Парные» навыки: слабая версия — навык той же линейки (иконки) с меньшей ступенью, сильная — с большей.
- * Гайд: «Такие навыки блокируют друг друга. Если вам выпала слабая версия нужного навыка в 1й или 3й слот,
- * вам нужно сроллить их на что-то другое перед тем как роллить 4й навык».
- */
-export function strongerInLine(data: GameData, skill: Skill): Skill | null {
-  const tier = skill.tier ?? 0
-  const candidates = data.skills.filter((s) => s.line === skill.line && (s.tier ?? 0) > tier)
-  return candidates.length === 0 ? null : candidates.reduce((a, b) => ((a.tier ?? 0) >= (b.tier ?? 0) ? a : b))
-}
-
 /** Стоимость кубика в базовых: 'roland' бесплатен. */
 const cubeCost = (cube: Cube): number => (cube === 'roland' ? 0 : CUBE_BASIC_COST[cube])
 
@@ -344,12 +291,11 @@ const cubeCost = (cube: Cube): number => (cube === 'roland' ? 0 : CUBE_BASIC_COS
  * План ролла героя по шагам гайда (A60):
  *  1) слот 2 — найм (пока навык не тот и герой не прокачан) либо кубик;
  *  2) прокачка до 35 ур. / Душа Титана (если слоты 3–4 ещё закрыты);
- *  3) слабая версия парного навыка в слоте 1/3 — сроллить её ДО 4-го слота;
- *  4) слот 4 — идеальный кубик;
- *  5) слот 1 — базовый кубик;
- *  6) остаток — Роланд (если на этом герое он ещё не использован).
- * Цена — в базовых кубиках (идеальный = 8). Ожидаемое число бросков показываем только там, где нужный
- * навык известен из данных (сильная версия пары): вероятность одного броска = 1 / размер пула.
+ *  3) слот 4 — идеальный кубик;
+ *  4) слот 1 — базовый кубик;
+ *  5) остаток — Роланд (если на этом герое он ещё не использован).
+ * Цена — в базовых кубиках (идеальный = 8). Нужный навык в данных не задан, поэтому вместо ожидаемого
+ * числа бросков показываем вероятность конкретного навыка ≈ 1 / размер пула.
  */
 export function rollPlan(
   data: GameData,
@@ -363,10 +309,6 @@ export function rollPlan(
     const a = mine.find((x) => x.skillIndex === slot - 1)
     if (!a) return 'empty'
     return a.action === 'keep' ? 'keep' : 'junk'
-  }
-  const skillAt = (slot: number): Skill | undefined => {
-    const id = hero.skills[slot - 1]
-    return id === undefined ? undefined : data.skills.find((s) => s.id === id)
   }
   const steps: RollStep[] = []
   const reasons: string[] = []
@@ -436,55 +378,8 @@ export function rollPlan(
     })
   }
 
-  // 3. Блокировки: слабая версия НУЖНОГО навыка в слоте 1/3 не даст выпасть сильной версии в 4-й слот.
-  //    Шаг нужен только тогда, когда сильная версия этой линейки — реальная цель 4-го слота: её вклад
-  //    выше вклада слабой (измерен в skillContributions) и она действительно попадает в пул перекидки
-  //    после снятия блокировки. Иначе слабую версию не трогаем и шага нет (A60).
-  const unblock: { slot: number; weak: Skill; strong: Skill; strongContribution: number }[] = []
-  if (stateOf(4) !== 'keep') {
-    for (const slot of [1, 3]) {
-      if (stateOf(slot) !== 'keep') continue
-      const weak = skillAt(slot)
-      if (!weak) continue
-      const strong = strongerInLine(data, weak)
-      if (!strong) continue
-      if (hero.skills.some((id) => id === strong.id)) continue
-      const adv = mine.find((a) => a.skillIndex === slot - 1)
-      // Вклад сильной версии должен быть больше, чем у слабой: тогда перекидка слабой — не потеря.
-      if (adv?.stronger?.skillId !== strong.id || adv.stronger.contribution <= adv.contribution) continue
-      // И сильная версия должна быть доступна герою после снятия блокировки (класс, промоушен, оружие).
-      const poolAfterUnblock = rollableSkills(data, hero, { ignoreSlots: [slot] })
-      if (!poolAfterUnblock.some((s) => s.id === strong.id)) continue
-      unblock.push({ slot, weak, strong, strongContribution: adv.stronger.contribution })
-    }
-  }
-  for (const u of unblock) {
-    const cube = cubeForSlot(u.slot)
-    const poolSize = rollableSkills(data, hero, { ignoreSlots: [u.slot] }).length
-    const weakAdv = mine.find((a) => a.skillIndex === u.slot - 1)
-    const pct = (v: number): string => `${(v * 100).toFixed(1)} п.п.`
-    steps.push({
-      kind: 'unblock',
-      slot: u.slot,
-      cube,
-      title: `Слот ${u.slot} — сначала сроллить слабую версию`,
-      detail:
-        `«${u.weak.name}»${weakAdv ? ` (вклад ${pct(weakAdv.contribution)})` : ''} — слабая версия «${u.strong.name}» ` +
-        `(вклад ${pct(u.strongContribution)}${weakAdv ? `, на ${pct(u.strongContribution - weakAdv.contribution)} больше` : ''}): ` +
-        'одна линейка, они блокируют друг друга, поэтому сильная ' +
-        'версия не выпадет в 4-й слот, пока слабая стоит здесь. Гайд: сроллить её на что-то другое ПЕРЕД роллом 4-го слота; ' +
-        `подойдёт и идеальный кубик — он работает в любом слоте. Шаг дешевле: ${cubeDetails(cube)}.`,
-      basicCubes: cubeCost(cube),
-      poolSize,
-      expectedRolls: 1,
-      rollsNote: 'цель — любой другой навык, поэтому хватает одного броска',
-    })
-  }
-
-  // 4. Слот 4: идеальный кубик (гайд) — он не трогает остальные слоты (A39). Целей может быть несколько
-  //    (по одной сильной версии на каждую снятую блокировку) — тогда вероятность выпадения любой из них выше.
+  // 3. Слот 4: идеальный кубик (гайд) — он не трогает остальные слоты (A39).
   const slot4 = stateOf(4)
-  const targets = unblock.map((u) => u.strong)
   if (slot4 === 'keep') {
     steps.push({
       kind: 'keep',
@@ -495,9 +390,7 @@ export function rollPlan(
       basicCubes: 0,
     })
   } else {
-    const ignoreSlots = [4, ...unblock.map((u) => u.slot)]
-    const pool = rollableSkills(data, hero, { ignoreSlots })
-    const inPool = targets.filter((t) => pool.some((s) => s.id === t.id))
+    const pool = rollableSkills(data, hero, { ignoreSlots: [4] })
     steps.push({
       kind: 'reroll',
       slot: 4,
@@ -505,25 +398,15 @@ export function rollPlan(
       title: 'Слот 4 — идеальный кубик',
       detail:
         'Идеальный кубик (8 базовых, добывается в Башне Титана) — единственный, которым можно перекинуть 4-й слот; ' +
-        'остальные слоты он не задевает, поэтому 2-й слот, выбранный наймом, остаётся на месте.' +
-        (inPool.length > 0
-          ? ` Цель — ${inPool.map((t) => `«${t.name}»`).join(' или ')}${inPool.length < targets.length ? ' (часть целей пока недоступна: нужна Душа Титана / промоушен)' : ''}.`
-          : ''),
+        'остальные слоты он не задевает, поэтому 2-й слот, выбранный наймом, остаётся на месте.',
       basicCubes: cubeCost(4),
       poolSize: pool.length,
-      ...(inPool.length > 0
-        ? { expectedRolls: Math.round(pool.length / inPool.length) }
-        : {
-            rollsNote:
-              targets.length > 0
-                ? `цели (${targets.map((t) => `«${t.name}»`).join(', ')}) пока недоступны (нужна Душа Титана / промоушен) — вероятность считаем по текущему пулу: 1/${pool.length}`
-                : `нужный навык в данных не задан; вероятность конкретного навыка ≈ 1/${pool.length}`,
-          }),
+      rollsNote: `нужный навык в данных не задан; вероятность конкретного навыка ≈ 1/${pool.length}`,
     })
   }
 
-  // 5. Слот 1: базовый кубик (если слабую версию из 1-го слота уже перекинули шагом выше — второй раз не надо).
-  if (stateOf(1) !== 'keep' && !unblock.some((u) => u.slot === 1)) {
+  // 4. Слот 1: базовый кубик.
+  if (stateOf(1) !== 'keep') {
     const cube = cubeForSlot(1)
     const poolSize = rollableSkills(data, hero, { ignoreSlots: [1] }).length
     steps.push({
@@ -538,7 +421,7 @@ export function rollPlan(
     })
   }
 
-  // 6. Роланд — на остаток, последним. По гайду слоты 1, 2 и 4 закрываются своими механизмами
+  // 5. Роланд — на остаток, последним. По гайду слоты 1, 2 и 4 закрываются своими механизмами
   //    (базовый кубик, найм, идеальный кубик), поэтому Роланду остаётся «оставшийся» слот — обычно 3-й
   //    (его труднее всего выкинуть кубиком).
   const handled = new Set<number>()
@@ -574,8 +457,7 @@ export function rollPlan(
     )
   }
 
-  // Один слот — одно действие. Шаг плана («сроллить») важнее вердикта совета («оставить»): слабая версия
-  // в слоте 1/3 «оставлена» только до тех пор, пока план её не перекидывает ради цели в 4-м слоте.
+  // Один слот — одно действие: шаг плана («сроллить») важнее вердикта совета («оставить»).
   const slotActions: SlotPlanAction[] = []
   for (const slot of [1, 2, 3, 4]) {
     const step = steps.find((s) => s.slot === slot && REROLL_STEP_KINDS.includes(s.kind))
@@ -629,17 +511,7 @@ export function rerollAdvice(
         skillName: c.skillName,
         contribution: c.contribution,
         action: 'keep',
-        // Вклад сильной версии линейки — по нему rollPlan решает, нужен ли шаг-разблокировка (A60).
-        ...(c.stronger ? { stronger: c.stronger } : {}),
-        reasons: [
-          `навык добавляет ${(c.contribution * 100).toFixed(1)} п.п. win rate`,
-          ...(c.stronger
-            ? [
-                `сильная версия этой линейки — «${c.stronger.skillName}»: её вклад ${(c.stronger.contribution * 100).toFixed(1)} п.п.` +
-                  (c.stronger.contribution > c.contribution ? ' (больше текущего)' : ' (не больше текущего)'),
-              ]
-            : []),
-        ],
+        reasons: [`навык добавляет ${(c.contribution * 100).toFixed(1)} п.п. win rate`],
       })
       continue
     }

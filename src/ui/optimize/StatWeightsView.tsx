@@ -202,7 +202,7 @@ export function StatWeightsView({
             <Hint label="Что такое семена силы">Семена силы — постоянная прибавка к статам героя. Здесь показано, на что выгоднее потратить семена для этого квеста.</Hint>
           </p>
           <p className="text-xs text-muted-foreground">
-            Ценность семени — параметр (ASSUMPTION A55): таблицы прибавки за семя в данных нет. Значения — прибавка за одно семя к базе героя.
+            Одно семя прибавляет к базе героя +4 ATK, +1 HP или +4 DEF (ST-Central, Hero Academia).
           </p>
           <ul className="mt-1 space-y-1 text-sm">
             {seeds.map((s) => (

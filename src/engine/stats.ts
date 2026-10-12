@@ -23,6 +23,10 @@ import {
   SPIRIT_SKILL_DOUBLING_ITEMS,
   TYPED_ITEM_BONUS_STATS,
 } from './constants.ts'
+import { baseStatAtLevel, floorStat } from './formulas.ts'
+
+// Формула округления живёт в formulas.ts; реэкспорт — для прежних импортов из stats.ts.
+export { floorStat } from './formulas.ts'
 
 export type MainStat = 'atk' | 'def' | 'hp'
 export const MAIN_STATS: readonly MainStat[] = ['atk', 'def', 'hp']
@@ -47,12 +51,11 @@ export interface StatModel {
 
 /** База класса на уровне: база₁ × (1 + k·(L−1)) + c·(L−1), база₁ — статы из HEROES (A8). */
 export function baseStatsAt(cls: HeroClass, level: number, model?: Pick<StatModel, 'hpGrowthMult'>): Record<MainStat, number> {
-  const l = Math.max(1, level) - 1
   const hpGrowth = HERO_LEVEL_STAT_GROWTH.hp
   const hpMult = model?.hpGrowthMult ?? 1
   const at = (st: MainStat): number => {
     const g = st === 'hp' ? { k: hpGrowth.k * hpMult, c: hpGrowth.c * hpMult } : HERO_LEVEL_STAT_GROWTH[st]
-    return cls.base[st] * (1 + g.k * l) + g.c * l
+    return baseStatAtLevel(cls.base[st], level, g)
   }
   return { atk: at('atk'), def: at('def'), hp: at('hp') }
 }
@@ -109,14 +112,6 @@ export interface HeroStats {
   /** Сумма всех камней (для навыков «per point in any Element»). */
   elementAny: number
   breakdown: StatBreakdown
-}
-
-/**
- * Округление итогового стата — отбрасывание дробной части: в Combat Compendium 16307.55 показано как 16307
- * (в тексте статьи «.5 rounds down», но пример — .55). Эпсилон — от ошибок двоичной арифметики (5060 × 3.15).
- */
-export function floorStat(x: number): number {
-  return Math.floor(x + 1e-9)
 }
 
 const zero = (): Record<MainStat, number> => ({ atk: 0, def: 0, hp: 0 })

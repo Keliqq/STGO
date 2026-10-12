@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { importTitansDb } from '../data/titansdb.ts'
 import type { Quest } from '../data/types.ts'
 import { fixtureGameData } from '../test/fixtures.ts'
-import { applyFighterBonus, barrierBroken, elementContributions, fighterFromHero, simulateTeam, threatShares } from './combat.ts'
+import { applyFighterBonus, barrierBroken, elementContributions, fighterFromHero, prepare, simulateTeam, threatShares } from './combat.ts'
 import { STAT_WEIGHT_STATS, metricOf, seedAdviceFromWeights, statWeights, weightValue, weightsProbeQuest } from './statWeights.ts'
 
 const data = fixtureGameData()
@@ -44,12 +44,21 @@ describe('веса статов: детерминизм', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b))
   })
 
-  it('другой seed → другой шум, но тот же порядок статов по важности', () => {
+  it('другой seed → другой шум, но тот же порядок статов по важности (в пределах шума)', () => {
     const q = quest({ monsterHp: 150000 })
-    const a = statWeights(fighters, q, { runs: 400, seed: 1 })
-    const b = statWeights(fighters, q, { runs: 400, seed: 99 })
-    const best = (r: typeof a): string => r.heroes.map((h) => h.best).join(',')
-    expect(best(a)).toBe(best(b))
+    const a = statWeights(fighters, q, { runs: 2000, seed: 1 })
+    const b = statWeights(fighters, q, { runs: 2000, seed: 99 })
+    // Лучший стат одного seed в другом не хуже его лучшего больше чем на шум (у Антуана EVA и угроза
+    // дают по ≈ +0,33 п.п. — ничью решает шум, поэтому точное совпадение имён проверять нельзя).
+    const NOISE = 0.005
+    for (const [x, y] of [[a, b], [b, a]] as const) {
+      x.heroes.forEach((h, i) => {
+        const other = y.heroes[i]
+        const bestOther = Math.max(...other.weights.map((w) => w.winRatePp))
+        const mineInOther = other.weights.find((w) => w.stat === h.best)!.winRatePp
+        expect(bestOther - mineInOther, `${h.name}: ${h.best}`).toBeLessThanOrEqual(NOISE)
+      })
+    }
   })
 })
 
@@ -73,6 +82,19 @@ describe('веса статов: смысл', () => {
     const boosted = simulateTeam([applyFighterBonus(f, { atk: f.atk * 0.05 })], q, { runs: 3, seed: 11, maxRounds: 5 })
     expect(base.avgDamagePerRound).toBeGreaterThan(0)
     expect(boosted.avgDamagePerRound).toBeGreaterThan(base.avgDamagePerRound)
+  })
+
+  it('прибавка применяется ровно один раз (HP, EVA, CRIT, CRIT DMG)', () => {
+    const f = fighterFromHero(pick('Эбигейл'), data)
+    const q = quest()
+    const plus = applyFighterBonus(f, { hp: 100, eva: 0.01, crit: 0.01, critDmg: 0.1 })
+    expect(plus.hp).toBe(f.hp + 100)
+    expect(plus.eva).toBeCloseTo(f.eva + 0.01, 10)
+    expect(plus.crit).toBeCloseTo(f.crit + 0.01, 10)
+    expect(plus.critDmg).toBeCloseTo(f.critDmg + 0.1, 10)
+    // Бой не прибавляет бонус второй раз: у бойца без навыков макс. HP = HP, +100 → ровно +100.
+    const bare = { ...f, skills: [], innateSkillId: null, innateBonus: undefined }
+    expect(prepare([applyFighterBonus(bare, { hp: 100 })], q, {}).maxHp[0] - prepare([bare], q, {}).maxHp[0]).toBe(100)
   })
 
   it('метрика: насыщенный win rate → урон/мин. HP, средний → win rate', () => {

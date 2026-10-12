@@ -201,6 +201,20 @@ describe('ход боя', () => {
     const m = simulateTeam([soft, tank], quest({ monsterDmg: 100 }), { runs: 50, seed: 11, maxRounds: 5, enemyCritChance: 0, aoeChance: 0 })
     expect(m.survival[1].rate).toBe(0) // танк умирает от 100-го урона
     expect(m.survival[0].rate).toBe(1)
+    // Доля боёв, где боец погиб: танк — во всех, «статичный» — ни в одном.
+    expect(m.survival.map((s) => s.deathRate)).toEqual([0, 1])
+  })
+
+  it('deathRate = доля прогонов, где боец мёртв в конце боя (дополняет rate до 1)', () => {
+    const a = fighter({ name: 'a', threat: 10, hp: 900, def: 500 })
+    const b = fighter({ name: 'b', threat: 10, hp: 400, def: 500 })
+    const m = simulateTeam([a, b], quest({ monsterDmg: 100, monsterHp: 1e9 }), { runs: 200, seed: 5, maxRounds: 12 })
+    for (const s of m.survival) {
+      expect(s.deathRate).toBeGreaterThanOrEqual(0)
+      expect(s.deathRate + s.rate).toBeCloseTo(1, 10)
+    }
+    // Слабый по HP погибает чаще.
+    expect(m.survival[1].deathRate).toBeGreaterThan(m.survival[0].deathRate)
   })
 
   it('враг бьёт первым: герой, убивающий монстра с одного удара, всё равно получает урон', () => {

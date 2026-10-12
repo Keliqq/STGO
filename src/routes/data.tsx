@@ -15,6 +15,7 @@ import { GameIcon } from '#/ui/GameIcon.tsx'
 import { type Settings, loadSettings, refreshNow, saveSettings, useDataStatus, useGameData } from '#/ui/dataSync.ts'
 import { Tip } from '#/ui/Hint.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
+import { CheckSuggestionsView } from '#/ui/CheckSuggestionsView.tsx'
 import { ModelAccuracyView } from '#/ui/ModelAccuracyView.tsx'
 
 export const Route = createFileRoute('/data')({ component: DataPage })
@@ -156,6 +157,8 @@ function DataPage() {
       <BackupSection />
 
       <ModelAccuracyView />
+
+      {data ? <CheckSuggestionsView data={data} /> : null}
 
       <Section title="Пороги защиты квестов">
         <p className="mb-2 text-sm">

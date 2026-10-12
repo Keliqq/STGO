@@ -20,7 +20,6 @@ import { Notice, Section } from '#/ui/layout.tsx'
 const STEP_CLASS: Record<RollStep['kind'], string> = {
   hire: 'text-info',
   level: 'text-info',
-  unblock: 'text-warning',
   reroll: 'text-warning',
   keep: 'text-success',
   roland: 'text-success',
@@ -82,11 +81,7 @@ export function SkillAdviceView({ data, team, advice }: { data: GameData | null;
                           {st.basicCubes > 0 ? `${st.basicCubes} баз.` : 'бесплатно'}
                         </span>
                         <span className="block text-xs text-muted-foreground">{st.detail}</span>
-                        {st.expectedRolls !== undefined ? (
-                          <span className="block text-xs text-muted-foreground">
-                            В среднем бросков: {st.expectedRolls} (пул слота — {st.poolSize} навыков).
-                          </span>
-                        ) : st.rollsNote ? (
+                        {st.rollsNote ? (
                           <span className="block text-xs text-muted-foreground">Число бросков не оцениваем: {st.rollsNote}.</span>
                         ) : null}
                       </li>
@@ -96,8 +91,7 @@ export function SkillAdviceView({ data, team, advice }: { data: GameData | null;
               ) : null}
               <ul className="space-y-2 text-sm">
                 {rows.map((a) => {
-                  // Один слот — одно действие: если план перекидывает слот (например, снимает блокировку
-                  // слабой версии ради сильной в 4-м слоте), не показываем «оставить» (A60).
+                  // Один слот — одно действие: если план перекидывает слот, не показываем «оставить» (A60).
                   const slotAction = plan?.slotActions.find((x) => x.slot === a.skillIndex + 1)
                   const rerolled = slotAction ? slotAction.action === 'reroll' : a.action === 'reroll'
                   const stepCube =

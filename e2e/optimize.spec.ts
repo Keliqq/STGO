@@ -36,8 +36,12 @@ test('подбор для одного героя под квест + совет
   await upgrade.scrollIntoViewIfNeeded()
   await shot(page, 'optimize-upgrade.png')
 
-  await section(page, 'Проверка на реальности').getByRole('button', { name: 'проходит', exact: true }).click()
-  await expect(section(page, 'Проверка на реальности').getByText(/· проходит ·/)).toBeVisible()
+  // Кто погиб — чекбоксы по отряду перед кнопкой исхода; в списке отметок их можно поменять.
+  const reality = section(page, 'Проверка на реальности')
+  await reality.getByLabel('погиб: Антуан').first().check()
+  await reality.getByRole('button', { name: 'проходит', exact: true }).click()
+  await expect(reality.getByText(/· проходит ·/)).toBeVisible()
+  await expect(reality.getByRole('listitem').getByLabel('погиб: Антуан')).toBeChecked()
 
   // Отметка доезжает до «Данных»: блок «Точность модели» показывает сводку (N боёв, совпадение, дата).
   // Совпадение может быть и «0 из 1» — экипировка героя фикстуры может не пройти эту локацию,
@@ -50,8 +54,17 @@ test('подбор для одного героя под квест + совет
   expect(summary).toMatch(/Совпало с предсказанием\s+[01] из 1 \((0[.,]0|100[.,]0)%\)/)
   expect(summary).toMatch(/Дата калибровки\s+\d{2}\.\d{2}\.\d{4}/)
   await expect(accuracy.getByText(/Lost City of Gold · босс · 13 · Антуан · проходит · симуляция/)).toBeVisible()
+  expect(summary).toMatch(/Погибшие отмечены\s+в 1 из 1/)
   await accuracy.scrollIntoViewIfNeeded()
   await shot(page, 'data-accuracy.png')
+
+  // «Что отметить»: отряд по умолчанию — из последней отметки; топ квестов, где варианты модели расходятся.
+  const suggest = section(page, 'Что отметить')
+  await expect(suggest.getByLabel('в отряд для «Что отметить»: Антуан')).toBeChecked()
+  await suggest.getByRole('button', { name: 'Найти бои для проверки' }).click()
+  await expect(suggest.getByText(/Этот бой лучше всего проверит A\d+|все варианты допущений сходятся/).first()).toBeVisible({ timeout: 120_000 })
+  await suggest.scrollIntoViewIfNeeded()
+  await shot(page, 'data-check-suggestions.png')
   expect(errors).toEqual([])
 })
 

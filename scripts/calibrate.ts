@@ -94,6 +94,8 @@ interface RealityCheckPlain {
   passed: boolean
   simWinRate: number
   createdAt: string
+  /** Кто погиб (нет поля — неизвестно). */
+  deadHeroes?: string[]
 }
 
 interface JsonInput {
@@ -117,6 +119,7 @@ function asChecks(v: unknown, where: string): RealityCheckPlain[] {
       passed: c.passed,
       simWinRate: c.simWinRate,
       createdAt: typeof c.createdAt === 'string' ? c.createdAt : '',
+      ...(Array.isArray(c.deadHeroes) ? { deadHeroes: c.deadHeroes.filter((x): x is string => typeof x === 'string') } : {}),
     }
   })
 }
@@ -305,6 +308,11 @@ function renderReport(args: {
   out.push(`| Согласие по win rate в момент отметки | ${pct(s.agreementStored)} |`)
   out.push(`| Отметок «проходит» | ${pct(s.passRate)} |`)
   out.push(`| Средний предсказанный win rate | ${pct(s.meanPredicted)} |`)
+  out.push(
+    s.deathN > 0
+      ? `| Brier по смерти героев (${s.deathN} пар «боец ↔ отметка») | **${s.deathBrier.toFixed(4)}**, верно ${pct(s.deathAgreement)} |`
+      : '| Brier по смерти героев | погибшие не отмечены ни в одной отметке |',
+  )
   out.push(`| Смещение (предсказали «пройдёт» чаще, чем было) | ${s.bias >= 0 ? '+' : ''}${(s.bias * 100).toFixed(1)} п.п. |`)
   out.push(`| Дата последней отметки (дата калибровки) | ${fmtDate(dates[dates.length - 1] ?? '')} |`)
   out.push('')
@@ -330,14 +338,14 @@ function renderReport(args: {
     out.push('Анализ чувствительности не считался (`--no-tune`).')
   } else {
     out.push('')
-    out.push('| Вариант допущения | A | Brier | Согласие | Δ согласия | Δ Brier | Сверка статов (RMS) |')
-    out.push('|---|---|---|---|---|---|---|')
+    out.push('| Вариант допущения | A | Brier | Согласие | Δ согласия | Δ Brier | Δ Brier смертей | Сверка статов (RMS) |')
+    out.push('|---|---|---|---|---|---|---|---|')
     const base = args.sens.find((r) => r.id === 'base')
     const rows = base ? [base, ...rankInfluence(args.sens)] : args.sens
     for (const r of rows) {
       const isBase = r.id === 'base'
       out.push(
-        `| ${r.label} | ${r.assumption} | ${r.summary.brier.toFixed(4)} | ${pct(r.summary.agreement)} | ${isBase ? '—' : signedPp(r.agreementDeltaPp)} | ${isBase ? '—' : `${r.brierDelta >= 0 ? '+' : ''}${r.brierDelta.toFixed(4)}`} | ${rmsText(r.fixtureRms)} |`,
+        `| ${r.label} | ${r.assumption} | ${r.summary.brier.toFixed(4)} | ${pct(r.summary.agreement)} | ${isBase ? '—' : signedPp(r.agreementDeltaPp)} | ${isBase ? '—' : `${r.brierDelta >= 0 ? '+' : ''}${r.brierDelta.toFixed(4)}`} | ${isBase || r.summary.deathN === 0 ? '—' : `${r.deathBrierDelta >= 0 ? '+' : ''}${r.deathBrierDelta.toFixed(4)}`} | ${rmsText(r.fixtureRms)} |`,
       )
     }
     const top = rankInfluence(args.sens).slice(0, 5)
@@ -357,10 +365,12 @@ function renderReport(args: {
     out.push('Подгонка не выполнялась (`--no-tune`).')
   } else {
     const t = args.tuning
-    out.push('| | Доля верных | Brier | Сверка статов (RMS) |')
-    out.push('|---|---|---|---|')
-    out.push(`| До | ${pct(t.before.agreement)} | ${t.before.brier.toFixed(4)} | ${rmsText(t.fixtureRmsBefore)} |`)
-    out.push(`| После | ${pct(t.after.agreement)} | ${t.after.brier.toFixed(4)} | ${rmsText(t.fixtureRmsAfter)} |`)
+    out.push('Цель подгонки — Brier исхода + Brier смертей героев (если погибшие отмечены).')
+    out.push('')
+    out.push('| | Доля верных | Brier | Brier смертей | Сверка статов (RMS) |')
+    out.push('|---|---|---|---|---|')
+    out.push(`| До | ${pct(t.before.agreement)} | ${t.before.brier.toFixed(4)} | ${t.before.deathBrier.toFixed(4)} | ${rmsText(t.fixtureRmsBefore)} |`)
+    out.push(`| После | ${pct(t.after.agreement)} | ${t.after.brier.toFixed(4)} | ${t.after.deathBrier.toFixed(4)} | ${rmsText(t.fixtureRmsAfter)} |`)
     out.push('')
     if (t.knobs.length === 0) {
       out.push('Ни один из проверенных параметров не улучшил Brier в пределах допуска по сверке статов — трогать нечего.')
@@ -469,6 +479,7 @@ async function main(): Promise<void> {
   )
   const s = calibrationSummary(predictions)
   console.log(`Базовая модель: верных ${s.matched} из ${s.n} (${pct(s.agreement)}), Brier ${s.brier.toFixed(4)}`)
+  if (s.deathN > 0) console.log(`Смерти героев: ${s.deathN} пар, Brier ${s.deathBrier.toFixed(4)}, верно ${pct(s.deathAgreement)}`)
   console.log(`Сверка статов по ${cli.heroes}: ${rmsText(baselineRms)}`)
 
   let sens: SensitivityRow[] | null = null

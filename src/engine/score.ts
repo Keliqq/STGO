@@ -6,13 +6,16 @@
  * Проверка корреляции с simulateTeam — score.test.ts (коэффициент Пирсона — в PROGRESS.md).
  */
 import type { Quest } from '../data/types.ts'
-import { AOE_CHANCE, BARRIER_UNBROKEN_DMG_FACTOR, ENEMY_CRIT_CHANCE, ENEMY_CRIT_MULT, MAX_ROUNDS } from './constants.ts'
-import { damageFactor, effectiveEvasion, enemyCritChanceVs, prepare, type Fighter } from './combat.ts'
+import { ENEMY_CRIT_MULT, MAX_ROUNDS } from './constants.ts'
+import { damageFactor, prepare, type CombatModel, type Fighter } from './combat.ts'
+import { combatStat, effectiveEvasion, enemyCritChanceVs } from './formulas.ts'
 
 export interface ScoreOptions {
   maxRounds?: number
   extreme?: boolean
   aoeChance?: number
+  /** Переопределение модели боя (как в SimOptions.model) — чтобы отсев и симуляция считали одинаково. */
+  model?: CombatModel
 }
 
 /**
@@ -24,25 +27,26 @@ export interface ScoreOptions {
 export function quickScore(fighters: Fighter[], quest: Quest, opts: ScoreOptions = {}): number {
   const p = prepare(fighters, quest, opts)
   const maxRounds = opts.maxRounds ?? MAX_ROUNDS
-  const aoeChance = opts.aoeChance ?? AOE_CHANCE
-  const barrierK = p.barrierBroken ? 1 : BARRIER_UNBROKEN_DMG_FACTOR
+  const aoeChance = fighters.length > 1 ? p.aoeChance : 0
+  const barrierK = p.barrierBroken ? 1 : p.combat.barrierUnbrokenFactor
   const n = fighters.length
   const threatSum = fighters.reduce((a, f) => a + Math.max(0, f.threat), 0)
   let expected = 0
   fighters.forEach((f, i) => {
     const m = p.selfStatic[i]
     const sp = p.specials[i]
-    const atk = (f.atk + (f.atkFromShieldDef ?? 0) + m.atkFlat) * (1 + m.atkPct)
-    const crit = Math.min(1, f.crit + m.crit)
+    const atk = combatStat(f.atk, f.sheetPct?.atk ?? 0, (f.atkFromShieldDef ?? 0) + m.atkFlat, m.atkPct, p.combat.pctStacking)
+    const crit = Math.min(1, sp.critSet ?? f.crit + m.crit)
     const dps = atk * (1 + crit * (f.critDmg + m.critDmg - 1)) * barrierK
     // A34/A42: штраф Extreme вычитанием, затем предел героя; A59 — крит врага по отрицательному EVA.
-    const eva = effectiveEvasion(f.eva + m.eva + (f.bonus?.eva ?? 0), p.evaCaps[i], p.extreme)
+    const eva = effectiveEvasion(sp.evaSet ?? f.eva + m.eva, p.evaCaps[i], p.extreme)
     // Среднее удорожание входящего урона из-за критов врага (по компендиуму ~10% ×1.5).
-    const enemyCritK = 1 + enemyCritChanceVs(ENEMY_CRIT_CHANCE, eva, p.negativeEvaCrit) * (ENEMY_CRIT_MULT - 1)
-    const defEff = (f.def + m.defFlat) * (1 + m.defPct)
-    const mit = damageFactor(defEff, quest.defCaps)
-    const share = n > 1 && threatSum > 0 ? Math.max(0, f.threat) / threatSum : 1
-    const incoming = ((n > 1 ? share * quest.monsterDmg * mit : quest.monsterDmg * mit) + (n > 1 ? aoeChance * quest.monsterAoe * mit : 0)) * (1 - eva) * enemyCritK
+    const enemyCritK = 1 + enemyCritChanceVs(p.enemyCritChance, eva, p.negativeEvaCrit) * (ENEMY_CRIT_MULT - 1)
+    const defEff = combatStat(f.def, f.sheetPct?.def ?? 0, m.defFlat, m.defPct, p.combat.pctStacking)
+    const mit = damageFactor(defEff, quest.defCaps, p.combat)
+    const share = n <= 1 ? 1 : threatSum > 0 ? Math.max(0, f.threat) / threatSum : 1 / n
+    // Как в бою (и threatShares): доля AoE-атак бьёт всех, остальные — одну цель по угрозе; соло AoE не бывает.
+    const incoming = ((1 - aoeChance) * share * quest.monsterDmg + aoeChance * quest.monsterAoe) * mit * (1 - Math.max(0, eva)) * enemyCritK
     const heal = sp.healSelf + p.partyHeal
     const pool = p.maxHp[i] + p.manaMax[i]
     const lifetime = incoming <= heal ? maxRounds : Math.min(maxRounds, pool / (incoming - heal))

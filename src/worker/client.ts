@@ -7,6 +7,7 @@
 import * as Comlink from 'comlink'
 import EngineWorker from './engine.worker?worker'
 import type { EngineApi } from './engine.worker.ts'
+import type { QuestCheckSuggestion } from '../engine/calibration.ts'
 import type { Fighter, SimMetrics } from '../engine/combat.ts'
 import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
 import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
@@ -38,6 +39,14 @@ export interface Engine {
     quest: Quest,
     runs?: number,
   ): Promise<{ weights: StatWeightsResult; seeds: (SeedAdvice & { heroIndex: number })[] }>
+  /** «Что отметить»: квесты, где варианты калибровки сильнее всего расходятся по win rate (в воркере). */
+  questsToCheck(
+    data: GameData,
+    quests: Quest[],
+    heroes: HeroInstance[],
+    champion: { name: string; rank: number } | null,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<QuestCheckSuggestion[]>
   /**
    * Оптимизатор. Сначала кэш IndexedDB по хешу входа; промах — расчёт в воркере, затем запись в кэш.
    * Отменённые результаты не кэшируются.
@@ -85,6 +94,8 @@ export function createEngine(store: KeyValueStore = idbStore): Engine {
     skillAdvice: (data, heroes, champion, quests, options) =>
       remote.skillAdvice(data, heroes, champion, quests, options),
     statWeights: (data, heroes, champion, quest, runs) => remote.statWeights(data, heroes, champion, quest, runs),
+    questsToCheck: (data, quests, heroes, champion, onProgress) =>
+      remote.questsToCheck(data, quests, heroes, champion, onProgress ? Comlink.proxy(onProgress) : undefined),
     optimize: async (data, input, onProgress) => {
       const hash = optimizerInputHash(data, input)
       const cache = await cacheRead(store)

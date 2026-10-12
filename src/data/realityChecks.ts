@@ -12,8 +12,9 @@ import { idbStore, KEYS, type KeyValueStore } from './storage.ts'
 /**
  * Версия формата сохранённых отметок. v2: добавлено поле `modelVersion` (версия модели боя,
  * на которой считалось предсказание) — отметки 0.x считаются сделанными «до версионирования».
+ * v3: добавлено поле `deadHeroes` (кто погиб в бою); у отметок v1/v2 его нет — «неизвестно».
  */
-export const REALITY_CHECKS_VERSION = 2
+export const REALITY_CHECKS_VERSION = 3
 
 export const RealityCheckSchema = z.object({
   id: z.string().min(1),
@@ -30,21 +31,29 @@ export const RealityCheckSchema = z.object({
    * Не у каждой старой отметки есть: отсутствие = «до версионирования» (0).
    */
   modelVersion: z.number().int().nonnegative().optional(),
+  /**
+   * Кто из отряда погиб в бою (имена как в `teamLabel`) — единственное, кроме исхода, что игра
+   * показывает после боя. Нет поля = неизвестно (старые отметки); `[]` = не погиб никто.
+   */
+  deadHeroes: z.array(z.string()).optional(),
 })
 export type RealityCheck = z.infer<typeof RealityCheckSchema>
 
 const StoredSchema = z.object({ version: z.literal(REALITY_CHECKS_VERSION), checks: z.array(RealityCheckSchema) })
 
-/** Отметки формата v1 (без `modelVersion`) — читаем, чтобы не терять накопленную калибровку. */
-const StoredSchemaV1 = z.object({ version: z.literal(1), checks: z.array(RealityCheckSchema) })
+/**
+ * Отметки форматов v1 (без `modelVersion`) и v2 (без `deadHeroes`) — читаем, чтобы не терять
+ * накопленную калибровку. Миграция: недостающие поля остаются пустыми (= неизвестно).
+ */
+const StoredSchemaOld = z.object({ version: z.union([z.literal(1), z.literal(2)]), checks: z.array(RealityCheckSchema) })
 
 export async function loadRealityChecks(store: KeyValueStore = idbStore): Promise<{ checks: RealityCheck[]; error: string | null }> {
   const raw = await store.get<unknown>(KEYS.realityChecks)
   if (raw === undefined) return { checks: [], error: null }
   const parsed = StoredSchema.safeParse(raw)
   if (parsed.success) return { checks: parsed.data.checks, error: null }
-  const v1 = StoredSchemaV1.safeParse(raw)
-  if (v1.success) return { checks: v1.data.checks, error: null }
+  const old = StoredSchemaOld.safeParse(raw)
+  if (old.success) return { checks: old.data.checks.map(migrateCheck), error: null }
   return { checks: [], error: 'Сохранённые отметки не прочитаны: формат не совпадает с текущей версией.' }
 }
 
@@ -57,6 +66,38 @@ export async function addRealityCheck(check: RealityCheck, store: KeyValueStore 
   // Одна отметка на пару «квест + отряд»: новая заменяет старую.
   const rest = checks.filter((c) => !(c.questId === check.questId && c.teamLabel === check.teamLabel))
   const next = [...rest, check]
+  await saveRealityChecks(next, store)
+  return next
+}
+
+/** Копия отметки без `deadHeroes` (= «кто погиб — неизвестно»). */
+function withoutDeaths(c: RealityCheck): RealityCheck {
+  const copy = { ...c }
+  delete copy.deadHeroes
+  return copy
+}
+
+/**
+ * Отметка формата v1/v2 → текущий: погибшие неизвестны. Поле в старых форматах не писалось,
+ * поэтому любое его значение там — не наше, и «никто не погиб» из него выводить нельзя.
+ */
+export const migrateCheck = (c: RealityCheck): RealityCheck => withoutDeaths(c)
+
+/** Участники отряда отметки (герои и чемпион) — по подписи «Антуан + Беовульф + Argon». */
+export function teamMembers(teamLabel: string): string[] {
+  return teamLabel
+    .split('+')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/** Известно ли, кто погиб в бою этой отметки. */
+export const deathsKnown = (c: RealityCheck): boolean => c.deadHeroes !== undefined
+
+/** Поменять список погибших у сохранённой отметки (например, дозаполнить старую). */
+export async function setDeadHeroes(id: string, deadHeroes: string[] | undefined, store: KeyValueStore = idbStore): Promise<RealityCheck[]> {
+  const { checks } = await loadRealityChecks(store)
+  const next = checks.map((c) => (c.id !== id ? c : deadHeroes === undefined ? withoutDeaths(c) : { ...c, deadHeroes }))
   await saveRealityChecks(next, store)
   return next
 }

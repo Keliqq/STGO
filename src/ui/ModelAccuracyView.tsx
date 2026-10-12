@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, X } from 'lucide-react'
-import { loadRealityChecks, modelAccuracy, type RealityCheck } from '#/data/realityChecks.ts'
+import { deathsKnown, loadRealityChecks, modelAccuracy, type RealityCheck } from '#/data/realityChecks.ts'
 import { ENGINE_MODEL_VERSION } from '#/engine/constants.ts'
 import { Notice, Section } from '#/ui/layout.tsx'
 import { pct } from '#/ui/optimize/format.ts'
@@ -53,6 +53,10 @@ export function ModelAccuracyView() {
             <dt className="text-muted-foreground">Совпало с предсказанием</dt>
             <dd className="font-medium">
               {acc.matched} из {acc.total} ({pct(acc.agreement)})
+            </dd>
+            <dt className="text-muted-foreground">Погибшие отмечены</dt>
+            <dd>
+              в {checks.filter(deathsKnown).length} из {acc.total}
             </dd>
             <dt className="text-muted-foreground">Дата калибровки</dt>
             <dd>{acc.calibratedAt ? new Date(acc.calibratedAt).toLocaleString('ru-RU') : '—'}</dd>

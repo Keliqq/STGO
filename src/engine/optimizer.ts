@@ -24,18 +24,23 @@ import {
   EXTREME_EVA_PENALTY,
   GOLD_ELEMENT_COUNTS_FOR_ANY_HERO,
   OPTIMIZER_BEAM,
+  OPTIMIZER_BEAM_SLACK,
   OPTIMIZER_CRN_SEED,
   OPTIMIZER_K_ADAPT_STEP,
   OPTIMIZER_K_ADAPT_TOL,
   OPTIMIZER_LOCAL_NEIGHBORS,
+  OPTIMIZER_LOCAL_PASSES,
+  OPTIMIZER_QUICK_PASSES,
+  OPTIMIZER_ROLE_TIE_TOL,
   OPTIMIZER_SIM_BUDGET,
+  OPTIMIZER_SIM_PASSES,
   OPTIMIZER_SIM_RUNS,
   OPTIMIZER_TOP_K,
   OPTIMIZER_YIELD_INTERVAL_MS,
 } from './constants.ts'
 import { barrierBroken, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
 import { quickScore } from './score.ts'
-import { statWeights, type StatWeightStat, type StatWeightsResult } from './statWeights.ts'
+import { partyElementBonusPct, STAT_WEIGHT_STATS, statWeights, type StatWeightStat, type StatWeightsResult } from './statWeights.ts'
 import { effectiveClass } from './stats.ts'
 
 // ─────────────────────────── вход/выход ───────────────────────────
@@ -459,6 +464,8 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
 
   // Симуляционный слой (используется и для финального выбора, и для finish при ранней отмене).
   let simsUsed = 0
+  /** Win rate надетой экипировки (для «+N п.п. к надетому»); null — ещё не считался (ранняя отмена). */
+  let baselineWinRate: number | null = null
   /** Симуляции, потраченные на веса статов (сверх бюджета поиска). */
   let weightSims = 0
   const simCache = new Map<string, CandEval>()
@@ -544,7 +551,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     const k = configKey(cfg)
     const prev = beam.get(k)
     if (!prev || score > prev.score) beam.set(k, { cfg: cloneTeam(cfg), score })
-    if (beam.size > OPTIMIZER_BEAM * 4) {
+    if (beam.size > OPTIMIZER_BEAM * OPTIMIZER_BEAM_SLACK) {
       const keep = [...beam.entries()].sort((a, b) => b[1].score - a[1].score || (a[0] < b[0] ? -1 : 1)).slice(0, OPTIMIZER_BEAM)
       beam.clear()
       for (const [k2, v] of keep) beam.set(k2, v)
@@ -554,8 +561,8 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
 
   // Тай-брейк ролей при близких quickScore: танк — DEF (до порога 75%) и угроза; ДД — урон и выживаемость.
   const betterQuick = (s: number, trial: HeroConfig[], hi: number, bs: number, bestCfg: HeroConfig[]): boolean => {
-    if (s > bs * 1.01) return true
-    if (s < bs * 0.99) return false
+    if (s > bs * (1 + OPTIMIZER_ROLE_TIE_TOL)) return true
+    if (s < bs * (1 - OPTIMIZER_ROLE_TIE_TOL)) return false
     const a = heroFighter(hi, trial[hi])
     const b = heroFighter(hi, bestCfg[hi])
     if (ctxs[hi].tank) {
@@ -591,7 +598,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
       for (const opt of options[hi][si]) tryOption(hi, si, opt, true)
     }
   }
-  for (let pass = 0; pass < 3; pass++) {
+  for (let pass = 0; pass < OPTIMIZER_QUICK_PASSES; pass++) {
     await yieldC()
     if (cancel()) return finish(best, [], 'Отменено во время совместной доводки')
     let changed = false
@@ -605,17 +612,21 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
 
   // ── 3. Финальный выбор симуляцией (CRN: один seed на всех кандидатов) ──
   // Базовая экипировка (то, что надето) — точка отсчёта для строки «+N п.п. к надетому».
-  // Метрики базового набора берём из кэша, если он там уже есть: лишних симуляций не добавляем.
-  const baseKey = configKey(baseline)
-  const baseHit = simCache.get(baseKey)
-  const baselineWinRate = baseHit ? baseHit.wr : 0
+  // Надетый набор симулируется всегда: без него «+N п.п. к надетому» не с чем сравнить,
+  // и он же — законный кандидат (если спуск по quickScore увёл в худший по симуляции набор).
+  const baseEv = await evaluate(baseline)
+  baselineWinRate = baseEv.wr
   let bestEv = await evaluate(best)
+  if (betterEval(baseEv, bestEv)) {
+    bestEv = baseEv
+    best = cloneTeam(baseline)
+  }
   const changedCount = best.reduce((n, cfg, hi) => n + cfg.filter((sc, si) => slotKey(sc) !== slotKey(baseline[hi][si])).length, 0)
   const explCost = changedCount * quests.length
 
   // ── 3a. Локальный поиск: после спуска для каждого слота прогнать симуляцией N следующих по рангу
   // quickScore кандидатов — ловит предметы, которые quickScore недооценил (A38). ──
-  local: for (let round = 0; round < 2; round++) {
+  local: for (let round = 0; round < OPTIMIZER_LOCAL_PASSES; round++) {
     let improved = false
     for (let hi = 0; hi < ctxs.length; hi++) {
       for (let si = 0; si < ctxs[hi].items.length; si++) {
@@ -656,7 +667,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
   }
 
   // Симуляционная доводка по слотам: пока хватает бюджета — менять по одному слоту, выбор симуляцией.
-  outer: for (let round = 0; round < 4; round++) {
+  outer: for (let round = 0; round < OPTIMIZER_SIM_PASSES; round++) {
     let improved = false
     for (let hi = 0; hi < ctxs.length; hi++) {
       for (let si = 0; si < ctxs[hi].items.length; si++) {
@@ -702,7 +713,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
 
   // Веса статов — после выбора набора: объясняют, ПОЧЕМУ он такой (и заодно дают барьер/угрозу).
   const weights = computeWeights(teamOf(best))
-  return finish(best, explanations, null, simsUsed, bestEv, weights, baselineWinRate)
+  return finish(best, explanations, null, simsUsed, bestEv, weights)
 
   /** «Почему» для слота: какой стат дала замена (сравнение бойца с этой вещью и без неё). */
   function slotStatHint(hi: number, si: number, from: SlotConfig, to: SlotConfig): SlotStatHint | null {
@@ -763,7 +774,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     // Чемпион не входит в веса героев: его экипировку программа не подбирает.
     const heroesOnly = fs.slice(0, heroes.length)
     const w = statWeights(heroesOnly, quests[0].quest, { runs: input.statWeightRuns, seed })
-    weightSims += w.heroes.length * (1 + 8) + 1
+    weightSims += w.heroes.length * (1 + STAT_WEIGHT_STATS.length) + 1
     return w
   }
 
@@ -775,8 +786,6 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     sims = 0,
     ev: CandEval | null = null,
     weights: StatWeightsResult | null = null,
-    /** Win rate надетой экипировки: на раннем выходе (отмена) неизвестен — 0. */
-    baselineWinRate = 0,
   ): OptimizerResult {
     const fs = teamOf(cfg)
     const per = ev?.per ?? quests.map((qw) => simulateTeam(fs, qw.quest, { runs, seed }))
@@ -786,7 +795,8 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
       weight: quests[i].weight,
       winRate: m.winRate,
       avgRounds: m.avgRounds,
-      barrierBroken: barrierBroken(fs, quests[i].quest),
+      // С бонусом отряда к стихии против барьера (Rudo) — как в бою (prepare).
+      barrierBroken: barrierBroken(fs, quests[i].quest, partyElementBonusPct(fs)),
     }))
     for (const pq of perQuest) {
       if (!pq.barrierBroken) warnings.push(`Барьер квеста «${pq.label}» не пробит — урон отряда снижен (стихия не подходит или её мало).`)
@@ -795,7 +805,8 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     let worst: QuestOutcome | null = null
     if (input.mode === 'universal') worst = perQuest.reduce((a, b) => (b.winRate < a.winRate ? b : a), perQuest[0])
     // Насколько вырос win rate относительно надетого (для строки «итого» в UI).
-    const improvement = o.wr - baselineWinRate
+    // На раннем выходе (отмена до симуляций) надетый набор не считался — прироста не показываем.
+    const improvement = baselineWinRate == null ? 0 : o.wr - baselineWinRate
     if (cancelNote) warnings.push(cancelNote)
     // Были ли среди проверенных кандидатов другие наборы с той же целью (выбор сделал тай-брейк)?
     let tieBreakUsed = false

@@ -5,6 +5,7 @@
 import * as Comlink from 'comlink'
 import type { GameData, HeroInstance, Quest } from '../data/types.ts'
 import { fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from '../engine/combat.ts'
+import { questsToCheck, type QuestCheckSuggestion } from '../engine/calibration.ts'
 import { SEED_STAT_PER_SEED } from '../engine/constants.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult, type QuestWeight } from '../engine/optimizer.ts'
 import { rerollAdvice, type SkillAdviceOptions, type SkillAdviceResult } from '../engine/skills.ts'
@@ -76,6 +77,28 @@ const api = {
     const weights = statWeights(heroesOnly, quest, { runs })
     const seeds = heroesOnly.map((_, i) => ({ ...seedAdvice(heroesOnly, quest, SEED_STAT_PER_SEED, { runs, heroIndex: i }), heroIndex: i }))
     return { weights, seeds }
+  },
+  /**
+   * «Что отметить»: квесты, где варианты допущений калибровки сильнее всего расходятся по win rate
+   * для этого отряда. Прогресс — пройденные квесты; отмена — cancel() (вернётся то, что успели).
+   */
+  questsToCheck(
+    data: GameData,
+    quests: Quest[],
+    heroes: HeroInstance[],
+    champion: { name: string; rank: number } | null,
+    onProgress?: (done: number, total: number) => void,
+  ): QuestCheckSuggestion[] {
+    cancelled = false
+    const champ = champion ? data.champions.find((c) => c.name === champion.name) : undefined
+    return questsToCheck({
+      data,
+      quests,
+      heroes,
+      champion: champ && champion ? { champion: champ, rank: champion.rank } : null,
+      onProgress: onProgress ? (done, total) => void onProgress(done, total) : undefined,
+      shouldCancel: () => cancelled,
+    })
   },
   cancel(): void {
     cancelled = true

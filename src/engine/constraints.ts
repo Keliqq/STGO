@@ -115,9 +115,13 @@ export function upgradeScenarios(data: GameData, input: OptimizerInput, result: 
   const base = { ...input, heroes, simBudget: OPTIMIZER_WHATIF_SIM_BUDGET }
   const c = input.constraints
   const out: UpgradeScenario[] = []
-  if (c.maxItemTier < maxDataTier(data)) {
+  const dataTier = maxDataTier(data)
+  if (c.maxItemTier < dataTier) {
     const t = c.maxItemTier + 1
-    out.push({ kind: 'tier', label: `до T${t}`, input: { ...base, constraints: { ...c, maxItemTier: t } } })
+    // Потолок героя = min(свой, отряда) (capForHero): поднимаем оба, иначе «+1 тир» упирался бы
+    // в прежний потолок героя и сценарий ничего не менял.
+    const perHero = c.perHero?.map((h) => ({ ...h, maxItemTier: Math.min(dataTier, h.maxItemTier + 1) }))
+    out.push({ kind: 'tier', label: `до T${t}`, input: { ...base, constraints: { ...c, maxItemTier: t, perHero } } })
   }
   const q = nextQuality(c.maxQuality)
   if (q) out.push({ kind: 'quality', label: `до ${q}`, input: { ...base, constraints: { ...c, maxQuality: q } } })

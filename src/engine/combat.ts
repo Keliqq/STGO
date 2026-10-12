@@ -25,18 +25,30 @@ import {
   DEFAULT_SIM_RUNS,
   DEF_MITIGATION,
   ENEMY_CRIT_CHANCE,
-  ENEMY_CRIT_MULT,
   ENEMY_DMG_MAX_FACTOR,
-  EXTREME_EVA_PENALTY,
   MANA_SHIELD_RECHARGE_ROUNDS,
-  MAX_EVASION,
   MAX_ROUNDS,
   NEGATIVE_EVA_CRIT_MODE,
-  NEGATIVE_EVA_ENEMY_CRIT_PER_PP,
-  RANDOM_BONUS_EXPECTED_FACTOR,
-  THREAT_ATTACK_MULTIPLIER_DIVISOR,
+  PCT_STACKING,
 } from './constants.ts'
+import {
+  combatStat,
+  critMultiplier,
+  damageFactor as damageFactorOnCurve,
+  drainAttackGain,
+  effectiveEvasion,
+  enemyCritChanceVs,
+  enemyCritDamage,
+  escalationMult,
+  evasionCap,
+  randomAttackBonus,
+  threatAttackMultiplier,
+  threatShareList,
+} from './formulas.ts'
 import { activeInnateSkill, activeSkills, calcStats, effectiveClass, heroElementValue, innateBonusOf, type CalcOptions } from './stats.ts'
+
+// Формулы живут в formulas.ts; реэкспорт — для прежних импортов из combat.ts.
+export { effectiveEvasion, enemyCritChanceVs } from './formulas.ts'
 
 /** Детерминированный PRNG (mulberry32). */
 export function mulberry32(seed: number): () => number {
@@ -70,6 +82,8 @@ export interface CombatModel {
    * `additive` (по умолчанию) — прибавляется к `enemyCritChance`; `absolute` — задаёт шанс сама.
    */
   negativeEvaCrit?: 'additive' | 'absolute'
+  /** Как % боя складываются с % карточки (A62): `pooled` (Compendium) или `multiplicative`. */
+  pctStacking?: 'pooled' | 'multiplicative'
 }
 
 /** Параметры боя с подставленными значениями по умолчанию. */
@@ -80,6 +94,7 @@ export interface ResolvedCombatModel {
   aoeChance: number
   barrierUnbrokenFactor: number
   negativeEvaCrit: 'additive' | 'absolute'
+  pctStacking: 'pooled' | 'multiplicative'
 }
 
 export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
@@ -90,6 +105,7 @@ export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
     aoeChance: m.aoeChance ?? AOE_CHANCE,
     barrierUnbrokenFactor: m.barrierUnbrokenFactor ?? BARRIER_UNBROKEN_DMG_FACTOR,
     negativeEvaCrit: m.negativeEvaCrit ?? NEGATIVE_EVA_CRIT_MODE,
+    pctStacking: m.pctStacking ?? PCT_STACKING,
   }
 }
 
@@ -100,22 +116,7 @@ export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
  * `model` — переопределение кривой (анализ чувствительности A57), по умолчанию константы.
  */
 export function damageFactor(def: number, caps: DefCaps | null, model: ResolvedCombatModel = resolveCombatModel()): number {
-  if (!caps || caps.p50 <= 0) return 1
-  const mit = model.mitigation
-  const pts: [number, number][] = [
-    [0, model.enemyDmgMaxFactor],
-    [caps.p50 / 2, 1],
-    [caps.p50, mit.at50],
-    [caps.p70, mit.at70],
-    [caps.p75, mit.at75],
-  ]
-  if (def >= caps.p75) return mit.at75
-  for (let i = 1; i < pts.length; i++) {
-    const [x0, y0] = pts[i - 1]
-    const [x1, y1] = pts[i]
-    if (def <= x1) return x1 === x0 ? y1 : y0 + ((def - x0) * (y1 - y0)) / (x1 - x0)
-  }
-  return mit.at75
+  return damageFactorOnCurve(def, caps, model)
 }
 
 /**
@@ -123,27 +124,7 @@ export function damageFactor(def: number, caps: DefCaps | null, model: ResolvedC
  * (Pathfinder/Insubstantial). Предел — персональный: у Pathfinder 78%, у остальных 75%.
  */
 export function evaCapOf(sp: CombatSpecials): number {
-  return MAX_EVASION + sp.maxEvaBonusPct / 100
-}
-
-/**
- * Эффективное уклонение бойца (доля): сумма статов, затем штраф Extreme вычитанием (A34),
- * и только после этого предел (A42). 95% на Extreme = 75% (ровно предел), 0% на Extreme = −20 п.п.
- * (отрицательное уклонение → повышенный шанс крита врага, A59).
- */
-export function effectiveEvasion(evaSum: number, cap: number, extreme: boolean): number {
-  return Math.min(evaSum - (extreme ? EXTREME_EVA_PENALTY : 0), cap)
-}
-
-/**
- * Шанс крита врага по бойцу: базовый + надбавка за отрицательное уклонение (A59, 0.25% за 1 п.п.).
- * `mode` — как учитывается надбавка (параметр калибровки A57): `additive` — базовый + надбавка
- * (0 EVA на Extreme → 15%), `absolute` — надбавка задаёт шанс сама (0 EVA на Extreme → 5%).
- */
-export function enemyCritChanceVs(baseChance: number, eva: number, mode: 'additive' | 'absolute' = NEGATIVE_EVA_CRIT_MODE): number {
-  if (eva >= 0) return baseChance
-  const penalty = NEGATIVE_EVA_ENEMY_CRIT_PER_PP * -eva * 100
-  return mode === 'absolute' ? penalty : baseChance + penalty
+  return evasionCap(sp.maxEvaBonusPct)
 }
 
 /**
@@ -186,6 +167,11 @@ export interface Fighter {
    * Считается в fighterFromHero (нужна экипировка), в бою просто прибавляется к ATK.
    */
   atkFromShieldDef?: number
+  /**
+   * Σ% карточки по ATK/DEF/HP (0.3 = +30%), уже входящие в atk/def/hp. Нужны, чтобы % боя
+   * складывались с ними, а не умножались поверх (PCT_STACKING = pooled, A62). Нет — считаем 0.
+   */
+  sheetPct?: { atk: number; def: number; hp: number }
   group?: ClassGroup
   isChampion?: boolean
   skills: Skill[]
@@ -200,9 +186,8 @@ export interface Fighter {
    */
   innateBonus?: { eva: number; crit: number }
   /**
-   * Внешняя правка статов (веса статов, семена силы) — уже применена к полям выше,
-   * здесь хранится только её «хвост», который бой читает отдельно: прибавка к максимуму HP
-   * и к уклонению в tryHit. См. FighterBonus / applyFighterBonus.
+   * Внешняя правка статов (веса статов, семена силы) — уже применена к полям выше
+   * (applyFighterBonus); здесь только для справки. Бой её повторно НЕ прибавляет.
    */
   bonus?: FighterBonus
 }
@@ -395,6 +380,12 @@ export function parseSpecials(skills: Skill[]): CombatSpecials {
 
 const num = (text: string, re: RegExp): number => Number(text.match(re)?.[1] ?? 0)
 
+/** «Effect is doubled when below X% HP and tripled when below Y% HP» этого навыка (Berserker/Jarl). */
+function hpEscalationOf(skill: Skill): { doubleBelow: number; tripleBelow: number } | undefined {
+  const m = skill.text.match(SPECIAL_RE.hpEscalation)
+  return m ? { doubleBelow: Number(m[1]), tripleBelow: Number(m[2]) } : undefined
+}
+
 export function isDoubledVsBoss(skill: Skill): boolean {
   return SPECIAL_RE.doubledVsBoss.test(skill.text)
 }
@@ -437,7 +428,7 @@ export function fighterFromHero(hero: HeroInstance, data: GameData, options: Cal
     atk: stats.atk, def: stats.def, hp: stats.hp, manaShield: stats.manaShield,
     crit: stats.crit, critDmg: stats.critDmg, eva: stats.eva, threat: stats.threat,
     elements, elementAny: ev.elementAny, barrierAnyPct: specials.anyElementPct,
-    atkFromShieldDef, group: cls?.group, skills,
+    atkFromShieldDef, sheetPct: { ...stats.breakdown.pct }, group: cls?.group, skills,
     innateSkillId: innate?.id ?? null, innateBonus,
   }
 }
@@ -509,6 +500,11 @@ export interface HeroSurvival {
   name: string
   /** Доля прогонов, где боец выжил. */
   rate: number
+  /**
+   * Доля прогонов, где боец погиб (в конце боя мёртв — при второй попытке Chronomancer — во второй).
+   * Это ровно то, что игра показывает после боя, — с ним сверяются отметки «кто погиб».
+   */
+  deathRate: number
 }
 
 export interface SimMetrics {
@@ -584,15 +580,6 @@ function condOk(c: SkillEffect['condition'], ctx: CondCtx): boolean {
     case 'perPartyMember':
       return true
   }
-}
-
-/** Множитель эскалации по HP владельца: 0–X% → ×3, X–Y% → ×2, иначе ×1 (Berserker/Jarl). */
-function escalationMult(esc: CondRef['esc'], selfHpFrac: number): number {
-  if (!esc) return 1
-  const pct = selfHpFrac * 100
-  if (pct < esc.tripleBelow) return 3
-  if (pct < esc.doubleBelow) return 2
-  return 1
 }
 
 function applyEffect(m: Mods, ref: EffectRef, valueMult = 1): void {
@@ -686,7 +673,9 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   fighters.forEach((f, i) => {
     for (const sk of f.skills) {
       const dbl = isBoss && isDoubledVsBoss(sk)
-      const esc = specials[i].hpEscalation ?? undefined
+      // Эскалация — только у эффектов того навыка, в тексте которого она написана (Berserk Rage),
+      // а не у всех условных эффектов бойца.
+      const esc = hpEscalationOf(sk)
       const fromChampion = f.isChampion === true || sk.type === 'Leader'
       for (const e of sk.effects) {
         // ASSUMPTION: A54 — «until damaged» бонус врождённого навыка класса уже входит в статы бойца
@@ -697,7 +686,7 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
           dbl,
           perGroup: e.condition?.kind === 'perPartyMember' ? e.condition.group : undefined,
           // Эскалация относится к условным эффектам навыка (Berserker/Jarl: «effect is doubled below 50% HP»).
-          esc: e.condition ? esc : undefined,
+          esc: e.condition && esc ? esc : undefined,
           fromChampion,
         }
         if (e.scope === 'party') partyRefs.push(ref)
@@ -712,7 +701,8 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   const maxHp: number[] = []
   const manaMax: number[] = []
   // «Highly random attack bonus for the party, up to +N%» (Tamas): матожидание, одинаково всем бойцам (A43).
-  const randomAtkPct = specials.reduce((a, s) => Math.max(a, s.randomPartyAtkUpToPct), 0) * RANDOM_BONUS_EXPECTED_FACTOR / 100
+  const randomAtkPct = randomAttackBonus(specials.reduce((a, s) => Math.max(a, s.randomPartyAtkUpToPct), 0))
+  const combat = resolveCombatModel(opts.model)
 
   fighters.forEach((f, i) => {
     const sm = emptyMods()
@@ -747,16 +737,14 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     }
     selfStatic.push(sm)
     selfCond.push(cond)
-    // Внешняя правка HP (FighterBonus.hp) — плоская прибавка к максимуму, как «+N Health» навыка.
-    const bonusHp = f.bonus?.hp ?? 0
-    maxHp.push(Math.max(1, Math.floor((f.hp + bonusHp + hpFlat) * (1 + hpPct))))
+    // Внешняя правка HP (FighterBonus.hp) уже входит в f.hp (applyFighterBonus). % боя — с % карточки (A62).
+    maxHp.push(Math.max(1, Math.floor(combatStat(f.hp, f.sheetPct?.hp ?? 0, hpFlat, hpPct, combat.pctStacking))))
     manaMax.push(Math.floor((f.manaShield + manaFlat) * (1 + manaPct)))
   })
 
   const partyHeal = specials.reduce((a, s) => a + s.healParty, 0)
   const elemBonus = specials.reduce((a, s) => Math.max(a, s.elemBarrierBonusPct), 0)
   const retry = specials.find((s) => s.secondAttempt)
-  const combat = resolveCombatModel(opts.model)
   return {
     fighters,
     specials,
@@ -815,6 +803,8 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
   const alive = new Array<boolean>(n).fill(true)
   const damagedBefore = new Array<boolean>(n).fill(false)
   const noDmgRun = new Array<number>(n).fill(0)
+  /** Раунд, в котором боец потерял «until damaged» (для возврата у Sensei); 0 — не терял. */
+  const lostRound = new Array<number>(n).fill(0)
   const hitThisRound = new Array<boolean>(n).fill(false)
   const riposteArmed = new Array<boolean>(n).fill(false)
   const consec = new Array<number>(n).fill(0)
@@ -866,8 +856,6 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       return
     }
     let eva = sp.evaSet ?? f.eva + m.eva
-    // Внешняя правка уклонения (веса статов): +N п.п. к шансу уклонения.
-    eva += f.bonus?.eva ?? 0
     // ASSUMPTION: A34/A42 — сначала штраф Extreme вычитанием, затем предел героя
     // («+N% to max Evasion» поднимает именно предел: у Pathfinder 78%).
     eva = effectiveEvasion(eva, p.evaCaps[i], p.extreme)
@@ -875,17 +863,18 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       if (sp.riposte) riposteArmed[i] = true
       return
     }
-    const defEff = (f.def + m.defFlat) * (1 + m.defPct)
+    const defEff = combatStat(f.def, f.sheetPct?.def ?? 0, m.defFlat, m.defPct, p.combat.pctStacking)
     let dmg = baseDmg * damageFactor(defEff, quest.defCaps, p.combat)
     // A59: у героя с отрицательным уклонением (только на Extreme) шанс крита врага выше базового.
     // Как именно выше (базовый + надбавка или надбавка вместо базового) — параметр A57.
-    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva, p.negativeEvaCrit)) dmg = Math.max(dmg, baseDmg) * ENEMY_CRIT_MULT
+    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva, p.negativeEvaCrit)) dmg = enemyCritDamage(dmg, baseDmg)
     if (mana[i] > 0) {
       const absorbed = Math.min(mana[i], dmg)
       mana[i] -= absorbed
       dmg -= absorbed
     }
     hitThisRound[i] = true
+    if (!damagedBefore[i]) lostRound[i] = round
     damagedBefore[i] = true
     hp[i] -= dmg
     if (hp[i] <= 0) {
@@ -930,11 +919,15 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       if (!alive[i]) continue
       const f = p.fighters[i]
       const sp = p.specials[i]
-      const m = mods[i]
-      // «Equipped Shield's DEF is added to ATK» (A45) и прибавка от дренажа (Hemma) — плоские.
-      let atk = (f.atk + (f.atkFromShieldDef ?? 0) + drainAtk[i] + m.atkFlat) * (1 + m.atkPct) * atkBonus
-      if (sp.threatAtkPct > 0) atk *= 1 + (sp.threatAtkPct / 100) * (f.threat / THREAT_ATTACK_MULTIPLIER_DIVISOR)
-      const critChance = sp.critSet ?? f.crit + m.crit + (f.bonus?.crit ?? 0)
+      // Модификаторы — на момент удара, а не на начало раунда: враг бьёт первым и может снять
+      // «until damaged» ещё до атаки героя (ST-Central, Hero Academia → Ninja: «hitting the Ninja and
+      // eliminating the passive boost before the Ninja even attacks»). Так же — пороги HP и HP врага.
+      const m = computeMods(i, round, monsterHp / quest.monsterHp)
+      // «Equipped Shield's DEF is added to ATK» (A45) и прибавка от дренажа (Hemma) — плоские; % боя — с % карточки (A62).
+      const atkFlat = (f.atkFromShieldDef ?? 0) + drainAtk[i] + m.atkFlat
+      let atk = combatStat(f.atk, f.sheetPct?.atk ?? 0, atkFlat, m.atkPct, p.combat.pctStacking) * atkBonus
+      if (sp.threatAtkPct > 0) atk *= threatAttackMultiplier(sp.threatAtkPct, f.threat)
+      const critChance = sp.critSet ?? f.crit + m.crit
 
       let isCrit = false
       if (riposteArmed[i]) {
@@ -947,7 +940,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       }
       let dmg = atk
       if (isCrit) {
-        dmg *= f.critDmg + m.critDmg + (f.bonus?.critDmg ?? 0) + consec[i] * (sp.consecCritPct / 100)
+        dmg *= critMultiplier(f.critDmg + m.critDmg, consec[i], sp.consecCritPct)
         consec[i] = Math.min(consec[i] + 1, sp.consecCritMax)
       } else consec[i] = 0
       const ignoreBarrier = sp.firstRoundCrit && round === 1 && isCrit // Iaido: крит игнорирует барьер
@@ -975,7 +968,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       }
       if (total > 0) {
         hp[c] = Math.min(p.maxHp[c], hp[c] + total)
-        drainAtk[c] += total * (1 + d.atkBonusPct / 100)
+        drainAtk[c] += drainAttackGain(total, d.atkBonusPct)
       }
     }
     for (let i = 0; i < n; i++) {
@@ -985,12 +978,13 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       if (hitThisRound[i]) noDmgRun[i] = 0
       else {
         noDmgRun[i]++
-        // «Regain bonuses after N rounds» (Sensei): «until damaged» включается снова, и снятый
-        // после урона врождённый бонус EVA/CRIT возвращается (A49/A54).
-        const regain = p.specials[i].regainAfterRounds
-        if (regain > 0 && noDmgRun[i] >= regain) damagedBefore[i] = false
         if (noDmgRun[i] >= MANA_SHIELD_RECHARGE_ROUNDS) mana[i] = p.manaMax[i]
       }
+      // «Regain bonuses after N rounds» (Sensei): бонус возвращается через N раундов после потери,
+      // попал ли враг в промежутке — неважно (ST-Central, Hero Academia → Sensei: удар → атака без бонуса →
+      // враг бьёт снова, «doesn't matter if it hits or you evade» → атака без бонуса → бонус снова до хода врага).
+      const regain = p.specials[i].regainAfterRounds
+      if (regain > 0 && damagedBefore[i] && round - lostRound[i] + 1 >= regain) damagedBefore[i] = false
     }
   }
   return { win: false, rounds: p.maxRounds, alive, dmgDealt, minSurvivorHpFrac: minSurvivorHpFrac() }
@@ -1002,13 +996,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
  * Это ожидание до боя, поэтому «кто принимает удары» не зависит от исхода каждого прогона.
  */
 export function threatShares(fighters: Fighter[], opts: { aoeChance?: number } = {}): number[] {
-  const n = fighters.length
-  if (n === 0) return []
-  const aoe = opts.aoeChance ?? AOE_CHANCE
-  // Один боец (или бой без AoE по механике) — все удары идут в него.
-  if (n === 1) return [1]
-  const sum = fighters.reduce((a, f) => a + Math.max(0, f.threat), 0)
-  return fighters.map((f) => (1 - aoe) * (sum > 0 ? Math.max(0, f.threat) / sum : 1 / n) + aoe / n)
+  return threatShareList(fighters.map((f) => f.threat), opts.aoeChance ?? AOE_CHANCE)
 }
 
 /** Вклад каждого бойца в каждую стихию барьера квеста: [герой][стихия] = величина. */
@@ -1046,7 +1034,11 @@ export function simulateTeam(fighters: Fighter[], quest: Quest, opts: SimOptions
     runs: done,
     winRate: done > 0 ? wins / done : 0,
     avgRounds: done > 0 ? roundsSum / done : 0,
-    survival: fighters.map((f, i) => ({ name: f.name, rate: done > 0 ? aliveCount[i] / done : 0 })),
+    survival: fighters.map((f, i) => ({
+      name: f.name,
+      rate: done > 0 ? aliveCount[i] / done : 0,
+      deathRate: done > 0 ? (done - aliveCount[i]) / done : 0,
+    })),
     avgDamagePerRound: roundsSum > 0 ? dmgSum / roundsSum : 0,
     avgMinSurvivorHpPct: done > 0 ? minSurvSum / done : 0,
   }

@@ -78,10 +78,10 @@ describe('Berserker/Jarl: эскалация условного бонуса п�
   })
 
   it('урон растёт ровно на добавку от ×2 и ×3', () => {
-    // 100 урона монстра в раунд, HP 1000: герой бьёт в раундах 1–9 и гибнет в 10-м.
+    // 100 урона монстра в раунд, HP 1000: враг бьёт первым, герой бьёт в раундах 1–9 и гибнет в 10-м.
     // Базовая условная прибавка (+30% ATK ниже 75% HP) есть в обеих версиях и в разницу не входит.
-    // Пороги на момент расчёта модификаторов: 40/30% → ×2 (раунды 7–8, +30 урона каждый),
-    // 20% → ×3 (раунд 9, +60). Итого добавка эскалации: 30 + 30 + 60 = 120 урона.
+    // HP — на момент удара героя (после удара врага): 40/30% → ×2 (раунды 6–7, +30 урона каждый),
+    // 20/10% → ×3 (раунды 8–9, +60). Итого добавка эскалации: 30 + 30 + 60 + 60 = 180 урона.
     const q = quest({ monsterHp: 1_000_000, monsterDmg: 100 })
     const opts = { runs: 5, seed: 3, enemyCritChance: 0, aoeChance: 0 } as const
     const withEsc = fighter({ hp: 1000, atk: 100, skills: [atkOnly(angerPoint, true)] })
@@ -90,7 +90,50 @@ describe('Berserker/Jarl: эскалация условного бонуса п�
     const b = simulateTeam([noEsc], q, opts)
     expect(a.avgRounds).toBe(10)
     expect(b.avgRounds).toBe(10)
-    expect((a.avgDamagePerRound - b.avgDamagePerRound) * a.avgRounds).toBeCloseTo(120, 2)
+    expect((a.avgDamagePerRound - b.avgDamagePerRound) * a.avgRounds).toBeCloseTo(180, 2)
+  })
+})
+
+describe('эскалация по HP — только у своего навыка', () => {
+  const angerPoint = skill('Anger Point')
+  /** Чужой условный навык без эскалации: +30% ATK ниже 75% HP. */
+  const other: Skill = {
+    ...angerPoint,
+    id: 'Test Rage',
+    name: 'Test Rage',
+    text: '+30% Attack when HP falls below 75%',
+    effects: [{ stat: 'atk', mode: 'pct', value: 30, scope: 'self', condition: { kind: 'selfHpBelow', pct: 75 } }],
+    ignored: [],
+  }
+
+  it('условный эффект другого навыка Berserker не удваивается и не утраивается', () => {
+    // Как в тесте выше: HP 1000, 100 урона в раунд, герой бьёт в раундах 1–9. Ниже 75% HP на момент
+    // удара — раунды 3–9: чужой навык даёт ровно 7 × 30 = 210 урона (с эскалацией было бы 390).
+    const q = quest({ monsterHp: 1_000_000, monsterDmg: 100 })
+    const opts = { runs: 5, seed: 3, enemyCritChance: 0, aoeChance: 0 } as const
+    const both = fighter({ hp: 1000, atk: 100, skills: [atkOnly(angerPoint, true), other] })
+    const own = fighter({ hp: 1000, atk: 100, skills: [atkOnly(angerPoint, true)] })
+    const a = simulateTeam([both], q, opts)
+    const b = simulateTeam([own], q, opts)
+    expect(a.avgRounds).toBe(10)
+    expect((a.avgDamagePerRound - b.avgDamagePerRound) * a.avgRounds).toBeCloseTo(210, 2)
+  })
+})
+
+describe('Ninja: враг бьёт первым и снимает «until damaged» до атаки героя', () => {
+  it('удар врага в 1-м раунде — первая атака героя уже без бонуса крита', () => {
+    // ST-Central, Hero Academia → Ninja: «the enemy always attacks first, potentially hitting the Ninja and
+    // eliminating the passive boost before the Ninja even attacks». +100% крита до урона, враг всегда попадает.
+    const ninja: Skill = {
+      ...skill('Shadow Assassin'),
+      id: 'Test Ninja',
+      text: '+100% Critical Hit Chance until damaged',
+      effects: [{ stat: 'crit', mode: 'pct', value: 100, scope: 'self', condition: { kind: 'untilDamaged' } }],
+      ignored: [],
+    }
+    const q = quest({ monsterHp: 1_000_000, monsterDmg: 10 })
+    const r = simulateTeam([fighter({ atk: 100, critDmg: 2, skills: [ninja] })], q, { runs: 5, seed: 1, maxRounds: 1, enemyCritChance: 0, aoeChance: 0 })
+    expect(r.avgDamagePerRound).toBe(100)
   })
 })
 

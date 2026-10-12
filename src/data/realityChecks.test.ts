@@ -5,8 +5,12 @@ import {
   checkMatches,
   loadRealityChecks,
   modelAccuracy,
+  deathsKnown,
   REALITY_CHECKS_VERSION,
   removeRealityCheck,
+  saveRealityChecks,
+  setDeadHeroes,
+  teamMembers,
 } from './realityChecks.ts'
 import { memoryStore } from './storage.ts'
 
@@ -51,6 +55,37 @@ describe('отметки «проверка на реальности»', () => 
     // Неизвестная версия — понятная ошибка, а не падение.
     await store.set('realityChecks', { version: 99, checks: [] })
     expect((await loadRealityChecks(store)).error).toBeTruthy()
+  })
+
+  it('v3: погибшие герои — у старых отметок (v1/v2) «неизвестно», [] — «не погиб никто»', async () => {
+    const store = memoryStore()
+    // В v2 поля не было: даже если в записи что-то лежит, это не «никто не погиб», а неизвестно.
+    await store.set('realityChecks', { version: 2, checks: [{ ...mk('1', false, 0.3), modelVersion: 15 }, { ...mk('2', true, 0.8), deadHeroes: [] }] })
+    const r = await loadRealityChecks(store)
+    expect(r.error).toBeNull()
+    expect(r.checks.map(deathsKnown)).toEqual([false, false])
+    expect(r.checks[0].modelVersion).toBe(15)
+
+    expect(REALITY_CHECKS_VERSION).toBe(3)
+    await saveRealityChecks([{ ...mk('3', true, 0.7), deadHeroes: [] }, { ...mk('4', false, 0.4), deadHeroes: ['Антуан'] }], store)
+    const v3 = await loadRealityChecks(store)
+    expect(v3.checks.map((c) => c.deadHeroes)).toEqual([[], ['Антуан']])
+  })
+
+  it('setDeadHeroes дозаполняет старую отметку и умеет вернуть «неизвестно»', async () => {
+    const store = memoryStore()
+    await saveRealityChecks([mk('1', false, 0.3), mk('2', true, 0.9)], store)
+    let checks = await setDeadHeroes('1', ['Антуан'], store)
+    expect(checks.find((c) => c.id === '1')?.deadHeroes).toEqual(['Антуан'])
+    expect(deathsKnown(checks.find((c) => c.id === '2')!)).toBe(false)
+    checks = await setDeadHeroes('1', undefined, store)
+    expect(deathsKnown(checks[0])).toBe(false)
+    expect('deadHeroes' in checks[0]).toBe(false)
+  })
+
+  it('teamMembers: участники по подписи отряда', () => {
+    expect(teamMembers('Антуан + Беовульф + Argon')).toEqual(['Антуан', 'Беовульф', 'Argon'])
+    expect(teamMembers('')).toEqual([])
   })
 
   it('сводка «Точность модели»: N боёв, доля совпадений, дата последней отметки, устаревшие отметки', () => {

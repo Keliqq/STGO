@@ -1,6 +1,14 @@
 /**
  * Все магические числа движка. У каждого — источник; неподтверждённые помечены `// ASSUMPTION: A<n>`
  * и описаны в docs/ASSUMPTIONS.md. Сверка с экспортом героев — src/engine/stats.fixture.test.ts.
+ *
+ * Где что подгонять:
+ *   · числа (коэффициенты, пороги, шаги, бюджеты) — этот файл;
+ *   · сами формулы (кривая DEF, уклонение, крит врага, суммирование %, рост базы, эскалация…) — formulas.ts;
+ *   · параметры, которые крутит калибровка по отметкам «проходит / не проходит», — CombatModel (combat.ts)
+ *     и StatModel (stats.ts); значения по умолчанию у обоих берутся отсюда.
+ * Разделы: статы предметов и героя → бой → оптимизатор → ограничения подбора → веса статов и семена →
+ * навыки и кубики → план ролла.
  */
 
 /**
@@ -76,9 +84,6 @@ export const GOLD_ELEMENT_COUNTS_FOR_ANY_HERO = true
 // ASSUMPTION: A23
 export const LCOG_CHESTS = ['Luxurious Chest', 'Opulent Chest', 'Platinum Chest'] as const
 
-/** Число слотов экипировки у героя. Источник: лист HEROES, Equipment Slot 1–6. */
-export const EQUIPMENT_SLOTS = 6
-
 /**
  * Бонус сродства стихии усиливает: 'stone' — только статы камня, 'enchant' — камень и дух в этом предмете,
  * 'all' — ещё и сам предмет. Сверка (RMS ATK/DEF): stone 2,8/2,1%, enchant 2,2/2,1%, all ×1.5 — 5,1/5,4%.
@@ -135,9 +140,10 @@ export const DEF_MITIGATION = { at50: 0.5, at70: 0.3, at75: 0.25 } as const
 // ASSUMPTION: A31 — точный шанс по квесту неизвестен, берём нижнюю границу.
 export const AOE_CHANCE = 0.2
 /**
- * Множитель урона отряда, если стихийный барьер не пробит (A9).
+ * Множитель урона отряда, если стихийный барьер не пробит. Источник: ST-Central, «Hero Academia» →
+ * Elemental Barriers: «If the barrier's health is higher than the elemental value of your party then it will be
+ * active, causing you to do 80% less damage during the entire quest» → ×0.2 (A9, величина подтверждена).
  */
-// ASSUMPTION: A9 — точная механика барьера в данных не описана.
 export const BARRIER_UNBROKEN_DMG_FACTOR = 0.2
 /**
  * Мана-щит восстанавливается полностью после N подряд раундов без получения урона.
@@ -181,6 +187,17 @@ export const NEGATIVE_EVA_ENEMY_CRIT_PER_PP = 0.0025
 // ASSUMPTION: A59 — в игре не проверено; additive принят по указанию владельца.
 export const NEGATIVE_EVA_CRIT_MODE: 'additive' | 'absolute' = 'additive'
 /**
+ * Как % из боя (ауры чемпиона, условные навыки: «when HP below», «vs bosses», «first N rounds»)
+ * складываются с % карточки героя (формула — formulas.ts → combatStat):
+ *  · `pooled` — Combat Compendium: «All non-specific ATK modifiers are pooled and applied at the very end»,
+ *    ATK = (база + семена + предметы + плоские) × (1 + Σ всех %);
+ *  · `multiplicative` — % боя умножаются поверх стата карточки (модель до сессии 22).
+ * Разница заметная: +215% карточки и аура +20% — ×3.35 (pooled) против ×3.78 (multiplicative).
+ * Параметр калибровки (calibration.ts, вариант `pct-multiplicative`).
+ */
+// ASSUMPTION: A62 — в Compendium суммирование показано на навыках героя и духа; ауры чемпиона — по аналогии.
+export const PCT_STACKING: 'pooled' | 'multiplicative' = 'pooled'
+/**
  * «+40% of total Threat is added as an attack multiplier» (Chieftain): трактовка —
  * множитель ATK = 1 + 0.4 × (угроза / 100).
  */
@@ -211,8 +228,8 @@ export const RANDOM_BONUS_EXPECTED_FACTOR = 0.5
  * «If the party is defeated, allows an immediate second attempt at the quest with a +N% power bonus»
  * (Fateweaver): «power bonus» трактуем как множитель ATK отряда во второй попытке.
  */
-// ASSUMPTION: A44 — что именно усиливает «power bonus», в данных не описано.
-export const SECOND_ATTEMPT_BONUS_STAT = 'atk' as const
+// ASSUMPTION: A44 — что именно усиливает «power bonus», в данных не описано. Реализация — множитель ATK
+// отряда во второй попытке (combat.ts → runAttempt); отдельной константы нет: другой трактовки движок не умеет.
 
 // ─────────────────────────── Оптимизатор ───────────────────────────
 
@@ -221,7 +238,7 @@ export const SECOND_ATTEMPT_BONUS_STAT = 'atk' as const
  * изменения формул или спец-механик старые записи кэша не отдаются (данные при этом те же).
  * Поднимать при любом изменении, влияющем на win rate (формулы, механики классов, ступени навыков).
  */
-export const ENGINE_MODEL_VERSION = 15
+export const ENGINE_MODEL_VERSION = 16
 
 /**
  * Топ-K предметов на слот после отсева по quickScore. Ранжирование по Спирмену (0,92) надёжно,
@@ -259,6 +276,18 @@ export const OPTIMIZER_CRN_SEED = 42
 // Период уступки событийному циклу воркера (обработка cancel()); меньше — лишние ~мс на симуляцию.
 export const OPTIMIZER_YIELD_INTERVAL_MS = 25
 export const OPTIMIZER_BEAM = 10
+/** Beam хранит до OPTIMIZER_BEAM × N кандидатов, потом обрезается до OPTIMIZER_BEAM. */
+export const OPTIMIZER_BEAM_SLACK = 4
+/**
+ * Ролевой тай-брейк спуска: quickScore в пределах ±tol считаются равными, и выбор решает роль
+ * (танк — DEF до порога 75% и угроза, ДД — ATK и HP). Ранжирование quickScore надёжно только по рангу.
+ */
+// ASSUMPTION: A37
+export const OPTIMIZER_ROLE_TIE_TOL = 0.01
+/** Проходов совместной доводки по quickScore / локального поиска / симуляционной доводки (до сходимости). */
+export const OPTIMIZER_QUICK_PASSES = 3
+export const OPTIMIZER_LOCAL_PASSES = 2
+export const OPTIMIZER_SIM_PASSES = 4
 
 // ─────────────────────────── Ограничения подбора по умолчанию ───────────────────────────
 // Источник: требования пользователя (сессия 11) — всё покупается на рынке, но по умолчанию
@@ -293,6 +322,32 @@ export const VERDICT_SURE_MIN = 0.9
 export const VERDICT_LIKELY_MIN = 0.7
 export const VERDICT_RISKY_MIN = 0.4
 
+// ─────────────────────────── Калибровка по отметкам ───────────────────────────
+
+/**
+ * Вес Brier по смерти героев в цели подгонки (`calibration.ts → calibrationObjective`):
+ * цель = Brier исхода + вес × Brier смертей. Игра после боя показывает только исход и погибших.
+ */
+// ASSUMPTION: A64 — равный вес исхода и смертей выбран без данных: оба — Brier одной шкалы 0..1.
+export const CALIBRATION_DEATH_BRIER_WEIGHT = 1
+
+/**
+ * «Что отметить» (`calibration.ts → questsToCheck`): прогонов на квест и вариант допущений.
+ * Варианты одного квеста идут на общем seed, поэтому разброс — эффект допущения, а шум
+ * (±3,5 п.п. при 200 прогонах на абсолютный win rate) на разнице вариантов заметно меньше.
+ * 138 квестов × 21 модель × 200 прогонов — около 6 с в воркере (замер на отряде из 3 героев фикстуры).
+ */
+// ASSUMPTION: A64 — число прогонов выбрано по времени расчёта, не по данным.
+export const CHECK_SUGGEST_RUNS = 200
+/** Сколько квестов показать в «Что отметить». */
+export const CHECK_SUGGEST_TOP = 10
+/**
+ * Минимальный разброс win rate (0.05 = 5 п.п.), с которого квест попадает в «Что отметить»:
+ * если варианты дают 100 % и 99 %, одна бинарная отметка их почти никогда не различит.
+ */
+// ASSUMPTION: A64 — порог выбран «на глаз», данных нет.
+export const CHECK_SUGGEST_MIN_SPREAD = 0.05
+
 // ─────────────────────────── Веса статов и семена силы ───────────────────────────
 // Веса статов (src/engine/statWeights.ts) измеряются симуляцией на том же наборе, что и результат
 // подбора, на общих seed (CRN): «+1% крита» — прибавка 0.01 к доле крита и т. д. Шаги заданы
@@ -321,14 +376,25 @@ export const STAT_WEIGHT_THREAT = 10
 // ASSUMPTION: A56 — величины ослабления подобраны так, чтобы зонд попадал в средний win rate.
 export const WEIGHTS_PROBE_FACTORS: readonly number[] = [4, 8, 16, 32, 64, 128, 256]
 /**
- * Сколько раундов урона отряда должен выдержать монстр-зонд: HP зонда = урон отряда за раунд ×
- * это число. Так «непобедимый» квест становится проходимым и веса статов перестают быть нулями.
+ * Урон монстра в зонде ослабляется мягче, чем HP: делится на factor^PROBE_DMG_EXPONENT (0.5 — корень),
+ * иначе зонд превращается в прогулку, где защитные статы не нужны.
  */
 // ASSUMPTION: A56 — эвристика, игровых данных о зондах нет.
-export const PROBE_ROUNDS_OF_DAMAGE = 2
-/** Доля базового урона монстра в зонде «по урону»: бой должен остаться опасным. */
+export const PROBE_DMG_EXPONENT = 0.5
+/** Перебор зондов идёт на укороченных прогонах: max(PROBE_MIN_RUNS, runs × PROBE_RUNS_SHARE). */
+export const PROBE_MIN_RUNS = 100
+export const PROBE_RUNS_SHARE = 0.25
+/** Штраф ранга зонду с win rate вне [PROBE_WIN_RATE_MIN, PROBE_WIN_RATE_MAX] (в единицах расстояния до 50 %). */
 // ASSUMPTION: A56
-export const PROBE_DMG_SHARE = 0.4
+export const PROBE_OUT_OF_RANGE_PENALTY = 0.25
+/**
+ * Win rate считается «насыщенным» (0% или 100%) за пределами [WEIGHT_SATURATED_LOW, WEIGHT_SATURATED_HIGH]:
+ * тогда веса показываются в уроне за раунд / мин. HP, а не в п.п. win rate.
+ */
+export const WEIGHT_SATURATED_LOW = 0.01
+export const WEIGHT_SATURATED_HIGH = 0.99
+/** Подсказка «ДД принимает удары чаще танка» — если его доля атак выше доли танка больше чем на это. */
+export const THREAT_WARNING_MARGIN = 0.05
 /**
  * Границы win rate зонда, в которых веса считаются честными, и цель выбора зонда (ближе к 50 %).
  * У 0 % и 100 % шаг стата переворачивает исход целиком (вклад одного прогона из N).
@@ -339,13 +405,11 @@ export const PROBE_WIN_RATE_MAX = 0.9
 export const PROBE_TARGET_WIN_RATE = 0.5
 
 /**
- * Сколько базового стата даёт одно семя силы (Seed of Attack/Health/Defense).
- * В данных таблицы семян нет (A28: в экспорте TitansDB колонки 14–17 и 38–40 нулевые, величины
- * семян неизвестны), поэтому значения — параметр: при появлении эталона (импорт героя с семенами
- * или экран игры) заменить на измеренные. Плоская прибавка к БАЗЕ, то есть до процентных
- * модификаторов — как в формуле статов (stats.ts: база + семена + вклад предметов).
+ * Сколько базового стата даёт одно семя силы. Источник: ST-Central, «Hero Academia» → Seeds
+ * (https://st-central.net/hero-academia/, изменено 25.05.2026): «Seeds of Power (red) give +4 ATK,
+ * Seeds of Vitality (green) give +1 HP, Seeds of Resistance (blue) give +4 DEF». Плоская прибавка к БАЗЕ,
+ * до процентных модификаторов (Compendium: «Base ATK + Seed ATK»). До сессии 22 было допущение 1/1/1 (A55).
  */
-// ASSUMPTION: A55 — величина прибавки от семени в данных не подтверждена.
 export const SEED_STAT_PER_SEED: Readonly<Record<'atk' | 'hp' | 'def', number>> = { atk: 1, hp: 1, def: 1 }
 
 // ─────────────────────────── Рекомендации по навыкам ───────────────────────────

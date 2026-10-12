@@ -152,6 +152,16 @@ describe('оптимизатор: детерминизм и режимы', () =>
     expect(res.objective).toBe(Math.min(...res.perQuest.map((p) => p.winRate)))
   })
 
+  it('прирост «к надетому» = win rate найденного − win rate надетого (надетый симулируется)', async () => {
+    const input = baseInput(heroes[0])
+    const res = await runOptimizer(data, input)
+    const fs = [fighterFromHero(heroes[0], data)]
+    const worn = simulateTeam(fs, input.quests[0].quest, { runs: input.simRuns, seed: 42 }).winRate
+    expect(res.improvement).toBeCloseTo(res.winRate - worn, 10)
+    // Надетый набор — тоже кандидат: найденный по симуляции не хуже него.
+    expect(res.improvement).toBeGreaterThanOrEqual(0)
+  })
+
   it('отмена возвращает частичный результат с флагом', async () => {
     const res = await runOptimizer(data, baseInput(heroes[0]), { shouldCancel: () => true })
     expect(res.cancelled).toBe(true)

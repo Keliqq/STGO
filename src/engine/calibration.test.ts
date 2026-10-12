@@ -11,7 +11,11 @@ import { importTitansDb } from '../data/titansdb.ts'
 import type { HeroInstance, Quest } from '../data/types.ts'
 import { fixtureGameData } from '../test/fixtures.ts'
 import {
+  calibrationObjective,
   calibrationSummary,
+  deathPredictions,
+  MODEL_VARIANTS,
+  questsToCheck,
   fixtureStatRms,
   FIXTURE_RMS_GUARD,
   groupStats,
@@ -86,6 +90,7 @@ describe('метрики калибровки', () => {
   it('пустой список — нули, а не NaN', () => {
     expect(calibrationSummary([])).toEqual({
       n: 0, matched: 0, agreement: 0, brier: 0, agreementStored: 0, brierStored: 0, passRate: 0, meanPredicted: 0, bias: 0,
+      deathN: 0, deathBrier: 0, deathAgreement: 0,
     })
   })
 
@@ -131,6 +136,103 @@ describe('метрики калибровки', () => {
     // Смена seed меняет поток случайности. Сравниваем весь набор метрик, а не только win rate:
     // на 200 прогонах win rate двух разных seed может совпасть случайно (раунды и урон — нет).
     expect(c.metrics).not.toEqual(a.metrics)
+  })
+})
+
+describe('смерть героев: отметка «кто погиб» против доли смертей в симуляции', () => {
+  const beowulf = (): HeroInstance => {
+    const h = heroes.find((x) => x.name !== 'Антуан')
+    if (!h) throw new Error('нет второго героя')
+    return h
+  }
+
+  it('без deadHeroes смерти неизвестны: в Brier смертей отметка не входит', () => {
+    const r = runPrediction(input(), data, { runs: 20, seed: 1 })
+    expect(r.deaths).toBeNull()
+    const s = calibrationSummary([r])
+    expect(s.deathN).toBe(0)
+    expect(s.deathBrier).toBe(0)
+    expect(calibrationObjective(s)).toBe(s.brier)
+  })
+
+  it('погибшие сопоставляются по имени; Brier смертей — по каждому бойцу', () => {
+    const second = beowulf()
+    // Непобедимый квест с огромным уроном: в симуляции гибнут все (доля смертей 1).
+    const deadly = quest({ monsterHp: 1e12, monsterDmg: 1e9, monsterAoe: 1e9 })
+    const r = runPrediction(
+      input({ check: check({ passed: false, teamLabel: `Антуан + ${second.name}`, deadHeroes: [' антуан '] }), quest: deadly, heroes: [antoine(), second] }),
+      data,
+      { runs: 20, seed: 1 },
+    )
+    expect(r.deaths).toEqual([
+      { name: 'Антуан', predicted: 1, outcome: 1 },
+      { name: second.name, predicted: 1, outcome: 0 },
+    ])
+    const s = calibrationSummary([r])
+    expect(s.deathN).toBe(2)
+    // (1−1)² + (1−0)² = 1 → 0.5 на бойца; верно 1 из 2.
+    expect(s.deathBrier).toBeCloseTo(0.5, 9)
+    expect(s.deathAgreement).toBe(0.5)
+    expect(calibrationObjective(s)).toBeCloseTo(s.brier + 0.5, 9)
+  })
+
+  it('deathPredictions: [] — «никто не погиб», а не «неизвестно»', () => {
+    const metrics = { runs: 10, winRate: 1, avgRounds: 1, avgDamagePerRound: 0, avgMinSurvivorHpPct: 1, survival: [{ name: 'A', rate: 0.7, deathRate: 0.3 }] }
+    expect(deathPredictions(check({ deadHeroes: [] }), metrics)).toEqual([{ name: 'A', predicted: 0.3, outcome: 0 }])
+    expect(deathPredictions(check(), metrics)).toBeNull()
+  })
+})
+
+describe('«что отметить»: квесты, где варианты допущений расходятся сильнее всего', () => {
+  const quests = [
+    quest({ id: 'Easy|boss|Easy', monsterHp: 1, monsterDmg: 0 }), // все варианты: 100 %
+    quest({ id: 'Edge|boss|Extreme', monsterHp: 30000, monsterDmg: 90 }),
+    quest({ id: 'Wall|boss|Extreme', monsterHp: 1e12, monsterDmg: 0 }), // все варианты: 0 %
+    quest({ id: 'Hard|boss|Extreme', monsterHp: 60000, monsterDmg: 150 }),
+  ]
+  const variants = [
+    { id: 'enemy-crit-0.25', label: 'крит врага 25 %', assumption: 'A30', combat: { enemyCritChance: 0.25 } },
+    { id: 'aoe-0', label: 'AoE выключено', assumption: 'A31', combat: { aoeChance: 0 } },
+    { id: 'hp-growth-0', label: 'рост базы HP выключен', assumption: 'A8', stat: { hpGrowthMult: 0 } },
+  ]
+
+  it('квесты, где все варианты сходятся, в список не попадают; порядок — по разбросу', () => {
+    let progress = 0
+    const top = questsToCheck({ data, quests, heroes: [antoine()], variants, runs: 200, seed: 3, minSpread: 0, onProgress: (d) => (progress = d) })
+    expect(progress).toBe(quests.length)
+    const ids = top.map((t) => t.quest.id)
+    expect(ids).not.toContain('Easy|boss|Easy')
+    expect(ids).not.toContain('Wall|boss|Extreme')
+    expect(top.length).toBeGreaterThan(0)
+    for (let i = 1; i < top.length; i++) expect(top[i - 1].spread).toBeGreaterThanOrEqual(top[i].spread)
+    for (const t of top) {
+      expect(t.byVariant.map((b) => b.id)).toEqual(variants.map((v) => v.id))
+      const all = [t.baseWinRate, ...t.byVariant.map((b) => b.winRate)]
+      expect(t.spread).toBeCloseTo(Math.max(...all) - Math.min(...all), 9)
+      // Подпись — вариант, дальше всех ушедший от базовой модели.
+      const far = Math.max(...t.byVariant.map((b) => Math.abs(b.winRate - t.baseWinRate)))
+      expect(Math.abs(t.variantWinRate - t.baseWinRate)).toBeCloseTo(far, 9)
+      expect(variants.map((v) => v.id)).toContain(t.variant.id)
+    }
+  })
+
+  it('общий seed: вариант, совпадающий с базовой моделью, даёт ровно её win rate (шум не создаёт разброса)', () => {
+    const same = [{ id: 'same', label: 'то же, что база', assumption: '—', combat: {} }]
+    expect(questsToCheck({ data, quests, heroes: [antoine()], variants: same, runs: 100, seed: 9 })).toEqual([])
+  })
+
+  it('квесты с разбросом ниже minSpread отбрасываются: бинарная отметка их не различит', () => {
+    const all = questsToCheck({ data, quests, heroes: [antoine()], variants, runs: 200, seed: 3, minSpread: 0 })
+    const strict = questsToCheck({ data, quests, heroes: [antoine()], variants, runs: 200, seed: 3, minSpread: 0.2 })
+    expect(strict.every((t) => t.spread >= 0.2)).toBe(true)
+    expect(strict.length).toBeLessThanOrEqual(all.length)
+    expect(questsToCheck({ data, quests, heroes: [antoine()], variants, runs: 200, seed: 3, minSpread: 1.01 })).toEqual([])
+  })
+
+  it('по умолчанию берёт все варианты MODEL_VARIANTS, кроме базового, и не больше top квестов', () => {
+    const top = questsToCheck({ data, quests: quests.slice(1, 2), heroes: [antoine()], runs: 20, seed: 1, top: 1 })
+    expect(top.length).toBeLessThanOrEqual(1)
+    if (top[0]) expect(top[0].byVariant).toHaveLength(MODEL_VARIANTS.length - 1)
   })
 })
 

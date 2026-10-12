@@ -277,7 +277,7 @@ function OptimizePage() {
     engineRef.current?.cancel()
   }
 
-  async function markReality(passed: boolean): Promise<void> {
+  async function markReality(passed: boolean, deadHeroes: string[]): Promise<void> {
     const quest = result?.ctx.quest
     if (!result || !quest) return
     const next = await addRealityCheck({
@@ -290,6 +290,8 @@ function OptimizePage() {
       createdAt: new Date().toISOString(),
       // Версия модели боя: по ней «Данные» показывают, какие отметки сделаны до правки формул.
       modelVersion: ENGINE_MODEL_VERSION,
+      // Кто погиб — второй (после исхода) сигнал, который игра показывает после боя.
+      deadHeroes,
     })
     setChecks(next)
   }
@@ -562,7 +564,7 @@ function OptimizePage() {
                     ? { questLabel: questLabel(result.ctx.quest), teamLabel: result.ctx.teamLabel, simWinRate: result.res.winRate }
                     : null
                 }
-                onMark={(passed) => void markReality(passed)}
+                onMark={(passed, dead) => void markReality(passed, dead)}
               />
             </div>
           </details>

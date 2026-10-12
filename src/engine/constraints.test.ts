@@ -169,6 +169,16 @@ describe('сценарии +1 тир / +1 качество', () => {
     expect(top).toEqual([])
   })
 
+  it('+1 тир поднимает и потолки героев (иначе min(свой, отряда) оставлял прежний тир)', async () => {
+    const res = await runOptimizer(data, input)
+    const withPerHero: OptimizerInput = {
+      ...input,
+      constraints: { ...input.constraints, perHero: [{ hero: 0, maxItemTier: 8, maxStoneTier: 9 }] },
+    }
+    const tier = upgradeScenarios(data, withPerHero, res).find((s) => s.kind === 'tier')!
+    expect(capForHero(tier.input.constraints, 0).maxItemTier).toBe(9)
+  })
+
   it('+1 качество не ухудшает цель, замены — относительно найденного набора', async () => {
     const res = await runOptimizer(data, input)
     const q = upgradeScenarios(data, input, res).find((s) => s.kind === 'quality')!

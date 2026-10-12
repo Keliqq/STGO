@@ -10,13 +10,17 @@
  *  3) подбираем 2–3 самых влиятельных параметра, не ломая сверку статов по fixtures/heroes.txt.
  *
  * Модуль чистый: без DOM, без ввода-вывода (скрипт `scripts/calibrate.ts` — обёртка).
- * Допущение метода: игровая метка бинарная («прошёл / не прошёл»), поэтому Brier score считается
- * по бинарному исходу отметки, а не по доле выживших в игре.
+ * Допущение метода: игра после боя показывает только «прошёл / не прошёл» и кто погиб. Поэтому
+ * Brier score считается (а) по бинарному исходу и (б) по смерти каждого героя (если она отмечена),
+ * а не по доле HP или раундам — их в игре не видно.
+ *
+ * 4) «что отметить»: квесты, где варианты допущений сильнее всего расходятся по win rate для
+ *    текущих героев (`questsToCheck`) — бой там лучше всего различит варианты.
  */
 import type { Champion, GameData, HeroInstance, Quest } from '../data/types.ts'
 import type { RealityCheck } from '../data/realityChecks.ts'
-import { DEFAULT_SIM_RUNS } from './constants.ts'
-import { type CombatModel, fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
+import { CALIBRATION_DEATH_BRIER_WEIGHT, CHECK_SUGGEST_MIN_SPREAD, CHECK_SUGGEST_RUNS, CHECK_SUGGEST_TOP, DEFAULT_SIM_RUNS } from './constants.ts'
+import { type CombatModel, fighterFromChampion, resolveCombatModel, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
 import { calcStats, DEFAULT_MODEL, effectiveClass, MAIN_STATS, type MainStat, type StatModel } from './stats.ts'
 
 /** Эталонные статы героя из экспорта TitansDB (fixtures/heroes.txt) — для проверки сверки. */
@@ -89,6 +93,29 @@ export interface PredictionRecord {
   error: -1 | 0 | 1
   /** Что сохранила отметка в момент постановки (win rate «тогда») — для сравнения с пересчётом. */
   storedWinRate: number
+  /** Смерть каждого бойца: предсказание и отметка; null — кто погиб, в отметке неизвестно. */
+  deaths: DeathPrediction[] | null
+}
+
+/** Смерть одного бойца в бою отметки: доля боёв симуляции, где он погиб, против отметки. */
+export interface DeathPrediction {
+  name: string
+  /** Доля прогонов симуляции, где боец погиб (SimMetrics.survival[].deathRate). */
+  predicted: number
+  /** 1 — в игре погиб, 0 — выжил. */
+  outcome: 0 | 1
+}
+
+const normName = (s: string): string => s.trim().toLowerCase()
+
+/**
+ * Пары «предсказание смерти ↔ отметка» по бойцам отряда. Бойцы сопоставляются по имени
+ * (в отметке — имена из `teamLabel`); отметка без `deadHeroes` — null (неизвестно).
+ */
+export function deathPredictions(check: RealityCheck, metrics: SimMetrics): DeathPrediction[] | null {
+  if (check.deadHeroes === undefined) return null
+  const dead = new Set(check.deadHeroes.map(normName))
+  return metrics.survival.map((s) => ({ name: s.name, predicted: s.deathRate, outcome: dead.has(normName(s.name)) ? 1 : 0 }))
 }
 
 /** Симуляция одного квеста для героев и чемпиона одной отметки. */
@@ -118,6 +145,7 @@ export function runPrediction(input: PredictionInput, data: GameData, options: P
     matched: predictionMatches(check, predicted),
     error: predictionError(check, predicted),
     storedWinRate: check.simWinRate,
+    deaths: deathPredictions(check, metrics),
   }
 }
 
@@ -228,13 +256,22 @@ export interface CalibrationSummary {
   meanPredicted: number
   /** Систематическая ошибка в долях: over − under. */
   bias: number
+  /** Сколько пар «боец ↔ отметка смерти» (только отметки, где известно, кто погиб). */
+  deathN: number
+  /** Brier по смерти каждого бойца: mean((доля смертей в симуляции − погиб)²); 0 при deathN = 0. */
+  deathBrier: number
+  /** Доля верных по смерти при пороге 50 %: «погиб» ↔ доля смертей ≥ 50 %. */
+  deathAgreement: number
 }
 
 export function calibrationSummary(records: PredictionRecord[]): CalibrationSummary {
   const n = records.length
   if (n === 0) {
-    return { n: 0, matched: 0, agreement: 0, brier: 0, agreementStored: 0, brierStored: 0, passRate: 0, meanPredicted: 0, bias: 0 }
+    return { n: 0, matched: 0, agreement: 0, brier: 0, agreementStored: 0, brierStored: 0, passRate: 0, meanPredicted: 0, bias: 0, deathN: 0, deathBrier: 0, deathAgreement: 0 }
   }
+  let deathN = 0
+  let deathBrier = 0
+  let deathMatched = 0
   let matched = 0
   let matchedStored = 0
   let brier = 0
@@ -253,6 +290,11 @@ export function calibrationSummary(records: PredictionRecord[]): CalibrationSumm
     predicted += r.predicted
     outcome += o
     bias += predictionError(r.check, r.predicted)
+    for (const d of r.deaths ?? []) {
+      deathN++
+      deathBrier += (d.predicted - d.outcome) ** 2
+      if ((d.outcome === 1) === (d.predicted >= 0.5)) deathMatched++
+    }
   }
   return {
     n,
@@ -264,6 +306,9 @@ export function calibrationSummary(records: PredictionRecord[]): CalibrationSumm
     passRate: outcome / n,
     meanPredicted: predicted / n,
     bias: bias / n,
+    deathN,
+    deathBrier: deathN > 0 ? deathBrier / deathN : 0,
+    deathAgreement: deathN > 0 ? deathMatched / deathN : 0,
   }
 }
 
@@ -342,14 +387,8 @@ export interface ModelVariant {
   combat?: CombatModel
 }
 
-const DEFAULT_COMBAT: Required<{ [K in keyof CombatModel]-?: CombatModel[K] }> = {
-  mitigation: { at50: 0.5, at70: 0.3, at75: 0.25 },
-  enemyDmgMaxFactor: 1.5,
-  enemyCritChance: 0.1,
-  aoeChance: 0.2,
-  barrierUnbrokenFactor: 0.2,
-  negativeEvaCrit: 'additive',
-}
+// Значения по умолчанию — из constants.ts (через resolveCombatModel), а не копией чисел.
+const DEFAULT_COMBAT: Required<{ [K in keyof CombatModel]-?: CombatModel[K] }> = resolveCombatModel()
 
 /** Допущения, проверяемые вариантом: сверка статов (A5–A8, A25) и симулятор (A9, A30, A31). */
 export const MODEL_VARIANTS: ModelVariant[] = [
@@ -373,7 +412,8 @@ export const MODEL_VARIANTS: ModelVariant[] = [
   { id: 'affinity-none', label: 'бонус сродства ×1 (выключен)', assumption: 'A6', stat: { elementAffinity: 1, spiritAffinity: 1 } },
   { id: 'affinity-2', label: 'бонус сродства ×2 (стихия и дух)', assumption: 'A6', stat: { elementAffinity: 2, spiritAffinity: 2 } },
   { id: 'affinity-scope-stone', label: 'сродство усиливает только камень (AFFINITY_SCOPE = stone)', assumption: 'A6', stat: { affinityScope: 'stone' } },
-  { id: 'spirit-plus-never', label: '«+»-версия духа не включается (SPIRIT_PLUS_RULE = never)', assumption: 'A5', stat: { spiritAffinity: 1 } },
+  // SPIRIT_PLUS_RULE в StatModel не входит — вариант проверяет только усиление статов духа сродством.
+  { id: 'spirit-affinity-off', label: 'сродство духа не усиливает его статы (SPIRIT_AFFINITY_MULTIPLIER = 1)', assumption: 'A5', stat: { spiritAffinity: 1 } },
 
   // база HP героя (A8)
   { id: 'hp-growth-0', label: 'рост базы HP выключен (база = статы 1-го уровня)', assumption: 'A8', stat: { hpGrowthMult: 0 } },
@@ -402,6 +442,12 @@ export const MODEL_VARIANTS: ModelVariant[] = [
   },
   { id: 'barrier-0.1', label: 'непробитый барьер: урон отряда ×0.1', assumption: 'A9', combat: { barrierUnbrokenFactor: 0.1 } },
   { id: 'barrier-0.4', label: 'непробитый барьер: урон отряда ×0.4', assumption: 'A9', combat: { barrierUnbrokenFactor: 0.4 } },
+  {
+    id: 'pct-multiplicative',
+    label: '% боя (ауры, условные навыки) умножаются поверх % карточки, а не суммируются',
+    assumption: 'A62',
+    combat: { pctStacking: 'multiplicative' },
+  },
   {
     id: 'negative-eva-absolute',
     label: 'крит по отрицательному EVA задаёт шанс сам (0 EVA на Extreme → 5%, а не 15%)',
@@ -472,6 +518,8 @@ export interface SensitivityRow {
   agreementDeltaPp: number
   /** Выигрыш по Brier относительно базовой модели (положительный — лучше). */
   brierDelta: number
+  /** Выигрыш по Brier смертей героев относительно базовой модели (0, если погибшие нигде не отмечены). */
+  deathBrierDelta: number
   /** Ошибка сверки статов по fixtures/heroes.txt (RMS, доли): насколько вариант ломает стат-модель. */
   fixtureRms: Record<MainStat, number>
 }
@@ -513,6 +561,7 @@ export function sensitivityAnalysis(args: SensitivityArgs): SensitivityRow[] {
       summary: calibrationSummary(records),
       agreementDeltaPp: 0,
       brierDelta: 0,
+      deathBrierDelta: 0,
       fixtureRms: args.fixture ? fixtureStatRms(args.fixture, model) : { atk: 0, def: 0, hp: 0 },
     })
     args.onVariant?.(variant.id, i + 1, variants.length)
@@ -522,14 +571,15 @@ export function sensitivityAnalysis(args: SensitivityArgs): SensitivityRow[] {
     for (const r of rows) {
       r.agreementDeltaPp = (r.summary.agreement - base.summary.agreement) * 100
       r.brierDelta = base.summary.brier - r.summary.brier
+      r.deathBrierDelta = base.summary.deathBrier - r.summary.deathBrier
     }
   }
   return rows
 }
 
-/** Варианты, сильнее всего меняющие ошибку (Brier и согласие), — от самого влиятельного. */
+/** Варианты, сильнее всего меняющие ошибку (Brier исхода и смертей, согласие), — от самого влиятельного. */
 export function rankInfluence(rows: SensitivityRow[]): SensitivityRow[] {
-  const influence = (r: SensitivityRow): number => Math.abs(r.brierDelta) + Math.abs(r.agreementDeltaPp) / 100
+  const influence = (r: SensitivityRow): number => Math.abs(r.brierDelta) + Math.abs(r.deathBrierDelta) + Math.abs(r.agreementDeltaPp) / 100
   return [...rows].filter((r) => r.id !== 'base').sort((a, b) => influence(b) - influence(a))
 }
 
@@ -645,6 +695,8 @@ export interface TunedKnob {
   to: number
   brierBefore: number
   brierAfter: number
+  deathBrierBefore: number
+  deathBrierAfter: number
   agreementBefore: number
   agreementAfter: number
 }
@@ -676,8 +728,14 @@ export interface TuningArgs {
 }
 
 /**
+ * Цель подгонки: Brier исхода + Brier смертей героев (с весом CALIBRATION_DEATH_BRIER_WEIGHT).
+ * Пока погибшие не отмечены ни в одной отметке, deathBrier = 0 и цель — просто Brier исхода.
+ */
+export const calibrationObjective = (s: CalibrationSummary): number => s.brier + CALIBRATION_DEATH_BRIER_WEIGHT * s.deathBrier
+
+/**
  * Координатный спуск по самым влиятельным параметрам: крутим по одному и принимаем ход,
- * если Brier падает и сверка статов не выходит за FIXTURE_RMS_GUARD от базовой модели.
+ * если цель (`calibrationObjective`) падает и сверка статов не выходит за FIXTURE_RMS_GUARD от базовой модели.
  * Число крутилок ограничено (по умолчанию 3) — «подгоняем не больше 2–3 параметров».
  */
 export function tuneParameters(args: TuningArgs): TuningResult {
@@ -739,11 +797,11 @@ export function tuneParameters(args: TuningArgs): TuningResult {
           args.onStep?.(`${knob.id} = ${rounded}: сверка статов выходит за допуск — ход отклонён`)
           break
         }
-        if (ev.summary.brier < best.summary.brier - 1e-9) best = { value: rounded, ...ev }
+        if (calibrationObjective(ev.summary) < calibrationObjective(best.summary) - 1e-9) best = { value: rounded, ...ev }
         else break
       }
     }
-    if (best.value !== from && before.brier - best.summary.brier >= minGain) {
+    if (best.value !== from && calibrationObjective(before) - calibrationObjective(best.summary) >= minGain) {
       current = { ...current, [knob.id]: best.value }
       currentEval = { summary: best.summary, rms: best.rms }
       tuned.push({
@@ -754,6 +812,8 @@ export function tuneParameters(args: TuningArgs): TuningResult {
         to: best.value,
         brierBefore: before.brier,
         brierAfter: best.summary.brier,
+        deathBrierBefore: before.deathBrier,
+        deathBrierAfter: best.summary.deathBrier,
         agreementBefore: before.agreement,
         agreementAfter: best.summary.agreement,
       })
@@ -772,4 +832,105 @@ export function tuneParameters(args: TuningArgs): TuningResult {
     fixtureRmsAfter: currentEval.rms,
     improved: tuned.length > 0,
   }
+}
+
+// ───────────────────────────── что отметить ─────────────────────────────
+
+/** Квест, где варианты допущений сильнее всего расходятся по win rate, — кандидат на отметку. */
+export interface QuestCheckSuggestion {
+  quest: Quest
+  /** Win rate базовой модели. */
+  baseWinRate: number
+  /** Разброс win rate: максимум − минимум по базовой модели и всем вариантам. */
+  spread: number
+  /** Вариант, дальше всех ушедший от базовой модели: его этот бой проверит лучше всего. */
+  variant: { id: string; label: string; assumption: string }
+  variantWinRate: number
+  /** Win rate каждого варианта (без базового). */
+  byVariant: { id: string; winRate: number }[]
+}
+
+export interface QuestsToCheckArgs {
+  data: GameData
+  quests: Quest[]
+  /** Текущие герои отряда (как надеты сейчас). */
+  heroes: HeroInstance[]
+  champion?: { champion: Champion; rank: number } | null
+  /** Варианты допущений (по умолчанию MODEL_VARIANTS без базового). */
+  variants?: ModelVariant[]
+  /** Прогонов на квест и вариант (по умолчанию CHECK_SUGGEST_RUNS). */
+  runs?: number
+  seed?: number
+  /** Сколько квестов вернуть (по умолчанию CHECK_SUGGEST_TOP). */
+  top?: number
+  /** Минимальный разброс win rate (по умолчанию CHECK_SUGGEST_MIN_SPREAD). */
+  minSpread?: number
+  useReference?: boolean
+  onProgress?: (done: number, total: number) => void
+  shouldCancel?: () => boolean
+}
+
+/**
+ * «Что отметить»: для текущих героев прогоняем каждый квест базовой моделью и каждым вариантом
+ * допущений и ранжируем квесты по разбросу win rate. Бинарная отметка различает варианты тем лучше,
+ * чем дальше их предсказания друг от друга: где все варианты говорят «≈ 100 %», отметка ничего не скажет.
+ *
+ * Все варианты одного квеста гоняются на одном seed (общие случайные числа): разница между ними —
+ * эффект допущения, а не шум Монте-Карло. (В анализе чувствительности наоборот — там seed разный,
+ * чтобы не подгонять модель под один поток случайных чисел.)
+ */
+export function questsToCheck(args: QuestsToCheckArgs): QuestCheckSuggestion[] {
+  const variants = (args.variants ?? MODEL_VARIANTS).filter((v) => v.id !== 'base')
+  const runs = args.runs ?? CHECK_SUGGEST_RUNS
+  const seed = (args.seed ?? 1) >>> 0
+  const champion = args.champion ?? null
+  const useRef = args.useReference === undefined ? {} : { useReference: args.useReference }
+  const teamFor = (variant: ModelVariant | null): Fighter[] => {
+    const model = variant ? variantModel(variant) : DEFAULT_MODEL
+    const team = args.heroes.map((h) => fighterFromHero(h, args.data, { model, ...useRef }))
+    if (champion) team.push(fighterFromChampion(champion.champion, champion.rank, args.data))
+    return team
+  }
+  // Команды по вариантам собираются один раз: от квеста статы героев не зависят.
+  const baseTeam = teamFor(null)
+  const teams = variants.map((v) => (v.stat ? teamFor(v) : baseTeam))
+  const total = args.quests.length
+  const out: QuestCheckSuggestion[] = []
+  for (let qi = 0; qi < total; qi++) {
+    if (qi > 0 && args.shouldCancel?.()) break
+    const quest = args.quests[qi]
+    const qSeed = seed + qi * 7919
+    const baseWinRate = simulateTeam(baseTeam, quest, { runs, seed: qSeed }).winRate
+    const byVariant = variants.map((v, i) => ({ id: v.id, winRate: simulateTeam(teams[i], quest, { runs, seed: qSeed, model: v.combat }).winRate }))
+    let lo = baseWinRate
+    let hi = baseWinRate
+    let farthest = -1
+    let farDelta = -1
+    byVariant.forEach((b, i) => {
+      lo = Math.min(lo, b.winRate)
+      hi = Math.max(hi, b.winRate)
+      const d = Math.abs(b.winRate - baseWinRate)
+      if (d > farDelta) {
+        farDelta = d
+        farthest = i
+      }
+    })
+    if (farthest >= 0) {
+      const v = variants[farthest]
+      out.push({
+        quest,
+        baseWinRate,
+        spread: hi - lo,
+        variant: { id: v.id, label: v.label, assumption: v.assumption },
+        variantWinRate: byVariant[farthest].winRate,
+        byVariant,
+      })
+    }
+    args.onProgress?.(qi + 1, total)
+  }
+  // При равном разбросе — квест, где базовая модель ближе к 50 %: исход там менее предсказуем.
+  return out
+    .filter((s) => s.spread > 0 && s.spread >= (args.minSpread ?? CHECK_SUGGEST_MIN_SPREAD))
+    .sort((a, b) => b.spread - a.spread || Math.abs(a.baseWinRate - 0.5) - Math.abs(b.baseWinRate - 0.5))
+    .slice(0, args.top ?? CHECK_SUGGEST_TOP)
 }
