@@ -41,6 +41,7 @@ export const KEYS = {
   breakpoints: 'breakpoints',
   settings: 'settings',
   heroes: 'heroes',
+  teams: 'teams',
   // 'inventory' — инвентарь до сессии 11; запись в старых базах остаётся и игнорируется.
   realityChecks: 'realityChecks',
   optimizeCache: 'optimizeCache',

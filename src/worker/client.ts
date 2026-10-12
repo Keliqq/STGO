@@ -12,6 +12,7 @@ import type { Fighter, SimMetrics } from '../engine/combat.ts'
 import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
 import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
 import type { SeedAdvice, StatWeightsResult } from '../engine/statWeights.ts'
+import type { TeamRunMember, TeamRunResult } from '../engine/teamRunner.ts'
 import type { GameData, HeroInstance, Quest } from '../data/types.ts'
 import { ENGINE_MODEL_VERSION } from '../engine/constants.ts'
 import { idbStore, KEYS, type KeyValueStore } from '../data/storage.ts'
@@ -47,6 +48,14 @@ export interface Engine {
     champion: { name: string; rank: number } | null,
     onProgress?: (done: number, total: number) => void,
   ): Promise<QuestCheckSuggestion[]>
+  /** Прогон команды по её квестам: win rate, гибель каждого участника, раунды, барьер, доли ударов (в воркере). */
+  runTeam(
+    members: TeamRunMember[],
+    quests: Quest[],
+    data: GameData,
+    opts?: { seed?: number; runs?: number },
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<TeamRunResult>
   /**
    * Оптимизатор. Сначала кэш IndexedDB по хешу входа; промах — расчёт в воркере, затем запись в кэш.
    * Отменённые результаты не кэшируются.
@@ -96,6 +105,8 @@ export function createEngine(store: KeyValueStore = idbStore): Engine {
     statWeights: (data, heroes, champion, quest, runs) => remote.statWeights(data, heroes, champion, quest, runs),
     questsToCheck: (data, quests, heroes, champion, onProgress) =>
       remote.questsToCheck(data, quests, heroes, champion, onProgress ? Comlink.proxy(onProgress) : undefined),
+    runTeam: (members, quests, data, opts, onProgress) =>
+      remote.runTeam(members, quests, data, opts ?? {}, onProgress ? Comlink.proxy(onProgress) : undefined),
     optimize: async (data, input, onProgress) => {
       const hash = optimizerInputHash(data, input)
       const cache = await cacheRead(store)

@@ -15,6 +15,7 @@ import { Route as GuideRouteImport } from './routes/guide'
 import { Route as HeroesRouteImport } from './routes/heroes'
 import { Route as OptimizeRouteImport } from './routes/optimize'
 import { Route as RollRouteImport } from './routes/roll'
+import { Route as TeamsRouteImport } from './routes/teams'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +47,11 @@ const RollRoute = RollRouteImport.update({
   path: '/roll',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamsRoute = TeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/heroes': typeof HeroesRoute
   '/optimize': typeof OptimizeRoute
   '/roll': typeof RollRoute
+  '/teams': typeof TeamsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/heroes': typeof HeroesRoute
   '/optimize': typeof OptimizeRoute
   '/roll': typeof RollRoute
+  '/teams': typeof TeamsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,13 +79,23 @@ export interface FileRoutesById {
   '/heroes': typeof HeroesRoute
   '/optimize': typeof OptimizeRoute
   '/roll': typeof RollRoute
+  '/teams': typeof TeamsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/data' | '/guide' | '/heroes' | '/optimize' | '/roll'
+  fullPaths:
+    '/' | '/data' | '/guide' | '/heroes' | '/optimize' | '/roll' | '/teams'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/data' | '/guide' | '/heroes' | '/optimize' | '/roll'
-  id: '__root__' | '/' | '/data' | '/guide' | '/heroes' | '/optimize' | '/roll'
+  to: '/' | '/data' | '/guide' | '/heroes' | '/optimize' | '/roll' | '/teams'
+  id:
+    | '__root__'
+    | '/'
+    | '/data'
+    | '/guide'
+    | '/heroes'
+    | '/optimize'
+    | '/roll'
+    | '/teams'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -87,6 +105,7 @@ export interface RootRouteChildren {
   HeroesRoute: typeof HeroesRoute
   OptimizeRoute: typeof OptimizeRoute
   RollRoute: typeof RollRoute
+  TeamsRoute: typeof TeamsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -133,6 +152,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RollRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/teams': {
+      id: '/teams'
+      path: '/teams'
+      fullPath: '/teams'
+      preLoaderRoute: typeof TeamsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -143,6 +169,7 @@ const rootRouteChildren: RootRouteChildren = {
   HeroesRoute: HeroesRoute,
   OptimizeRoute: OptimizeRoute,
   RollRoute: RollRoute,
+  TeamsRoute: TeamsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

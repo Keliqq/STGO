@@ -10,6 +10,7 @@ import { SEED_STAT_PER_SEED } from '../engine/constants.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult, type QuestWeight } from '../engine/optimizer.ts'
 import { rerollAdvice, type SkillAdviceOptions, type SkillAdviceResult } from '../engine/skills.ts'
 import { seedAdvice, statWeights, type SeedAdvice, type StatWeightsResult } from '../engine/statWeights.ts'
+import { runTeam, type TeamRunMember, type TeamRunResult } from '../engine/teamRunner.ts'
 
 let cancelled = false
 
@@ -99,6 +100,30 @@ const api = {
       onProgress: onProgress ? (done, total) => void onProgress(done, total) : undefined,
       shouldCancel: () => cancelled,
     })
+  },
+  /**
+   * Прогон сохранённой команды по её квестам («Команды»): win rate, гибель каждого бойца, раунды,
+   * барьер и доли ударов босса. Бойцы собираются здесь из состава команды — на главном потоке
+   * остаётся только отрисовка.
+   */
+  async runTeam(
+    members: TeamRunMember[],
+    quests: Quest[],
+    data: GameData,
+    opts: { seed?: number; runs?: number },
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<TeamRunResult> {
+    cancelled = false
+    let done = 0
+    return runTeam(members, quests, data, (fighters, quest, o) => {
+      const m = simulateTeam(fighters, quest, {
+        ...o,
+        onProgress: onProgress ? (d) => void onProgress(done + d, (opts.runs ?? 0) * quests.length) : undefined,
+        shouldCancel: () => cancelled,
+      })
+      done += o.runs
+      return Promise.resolve(m)
+    }, opts)
   },
   cancel(): void {
     cancelled = true

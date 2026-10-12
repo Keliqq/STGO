@@ -9,6 +9,7 @@ import { BREAKPOINTS_SOURCE } from '#/data/breakpoints.ts'
 import { loadHeroes } from '#/data/heroStore.ts'
 import { classIconId, elementIconId, skillIconId, typeIconId } from '#/data/images.ts'
 import { loadRealityChecks } from '#/data/realityChecks.ts'
+import { loadTeams } from '#/data/teams.ts'
 import { questsWithCaps } from '#/data/sync.ts'
 import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
@@ -51,14 +52,14 @@ function TtlSetting() {
   )
 }
 
-async function loadCounts(): Promise<{ heroes: number; checks: number }> {
-  const [h, c] = await Promise.all([loadHeroes(), loadRealityChecks()])
-  return { heroes: h.heroes.length, checks: c.checks.length }
+async function loadCounts(): Promise<{ heroes: number; checks: number; teams: number }> {
+  const [h, c, t] = await Promise.all([loadHeroes(), loadRealityChecks(), loadTeams()])
+  return { heroes: h.heroes.length, checks: c.checks.length, teams: t.teams.length }
 }
 
-/** Резервная копия: герои и отметки «проходит/не проходит» одним JSON-файлом. */
+/** Резервная копия: герои, команды и отметки «проходит/не проходит» одним JSON-файлом. */
 function BackupSection() {
-  const [counts, setCounts] = useState<{ heroes: number; checks: number }>({ heroes: 0, checks: 0 })
+  const [counts, setCounts] = useState<{ heroes: number; checks: number; teams: number }>({ heroes: 0, checks: 0, teams: 0 })
   const [report, setReport] = useState<string | null>(null)
 
   useEffect(() => {
@@ -73,7 +74,7 @@ function BackupSection() {
     }
     setReport(
       `Импортировано: героев добавлено ${r.heroesAdded}, обновлено ${r.heroesUpdated}; ` +
-        `всего — героев ${r.counts.heroes}, отметок ${r.counts.realityChecks}.`,
+        `всего — героев ${r.counts.heroes}, команд ${r.counts.teams}, отметок ${r.counts.realityChecks}.`,
     )
     setCounts(await loadCounts())
   }
@@ -83,8 +84,8 @@ function BackupSection() {
       title="Резервная копия"
       description={
         <>
-          В файл попадают герои ({counts.heroes}) и отметки «проходит/не проходит» ({counts.checks}). Импорт объединяет с текущими
-          данными: герои обновляются по имени и классу, отметки добавляются.
+          В файл попадают герои ({counts.heroes}), команды ({counts.teams}) и отметки «проходит/не проходит» ({counts.checks}).
+          Импорт объединяет с текущими данными: герои обновляются по имени и классу, команды — по id, отметки добавляются.
         </>
       }
     >

@@ -18,7 +18,8 @@
  *
  * Детерминизм: свой mulberry32, seed на прогон = seed + номер прогона. Никакого Math.random.
  */
-import type { Champion, ClassGroup, DefCaps, Element, GameData, HeroInstance, Quest, Skill, SkillEffect } from '../data/types.ts'
+import type { Champion, ClassGroup, DefCaps, Element, GameData, HeroInstance, Quality, Quest, Skill, SkillEffect } from '../data/types.ts'
+import { applyQuality } from './quality.ts'
 import {
   AOE_CHANCE,
   BARRIER_UNBROKEN_DMG_FACTOR,
@@ -30,6 +31,7 @@ import {
   MAX_ROUNDS,
   NEGATIVE_EVA_CRIT_MODE,
   PCT_STACKING,
+  SPIRIT_PLUS_RULE,
 } from './constants.ts'
 import {
   combatStat,
@@ -433,8 +435,88 @@ export function fighterFromHero(hero: HeroInstance, data: GameData, options: Cal
   }
 }
 
-/** Боец-чемпион: база + награды рангов (накопительно, A14), стихия по Element Breakpoints (A13), лидерский навык по рангу. */
-export function fighterFromChampion(champion: Champion, rank: number, data: GameData): Fighter {
+/**
+ * Экипировка чемпиона. Чемпион не носит «слотов класса» (у него их нет ни в HEROES, ни в CHAMPIONS):
+ * игра даёт ему два предмета поддержки отряда — аурасонг (`Aurasong`) и фамильяра (`Familiar`),
+ * а в фамильяра вставляется дух. Правила игры описаны в ASSUMPTIONS A67.
+ */
+export interface ChampionBuild {
+  /** Имя чемпиона (`Champion.name`). */
+  champion: string
+  rank: number
+  /** Аурасонг — предмет даёт DEF/HP, навык типа `Aurasong` с тем же именем усиливает весь отряд. */
+  aura?: { item: string; quality: Quality } | null
+  /** Фамильяр — DEF/HP/ATK-предмет; в него вставляется дух. */
+  familiar?: { item: string; quality: Quality } | null
+  /** Дух в фамильяре (`Enchant.name`); его навык действует на носителя, «+»-версия — по сродству (A5). */
+  spirit?: string | null
+}
+
+/** Только предметы экипировки чемпиона — то, что нужно сборке статов и навыков (`championEquipment`). */
+export type ChampionEquipment = Pick<ChampionBuild, 'aura' | 'familiar' | 'spirit'>
+
+/** Что не удалось найти в данных при сборке чемпиона — показывается в UI, а не теряется молча. */
+export interface ChampionBuildNotes {
+  missingAura: string | null
+  missingFamiliar: string | null
+  missingSpirit: string | null
+}
+
+/**
+ * Статы и навыки экипировки чемпиона. Навык аурасонга ищется по имени предмета в SKILLS
+ * (у этих предметов `Type = Aurasong`, `Name` совпадает с предметом; у BLUEPRINTS своего поля нет).
+ * Навык духа даётся по тем же правилам сродства, что и у героя (A5): «+»-версия — если `Spirit Affinity`
+ * фамильяра совпадает с навыком духа.
+ */
+export function championEquipment(build: ChampionEquipment | null | undefined, data: GameData): { stats: { atk: number; def: number; hp: number }; skills: Skill[]; notes: ChampionBuildNotes } {
+  const skills: Skill[] = []
+  const notes: ChampionBuildNotes = { missingAura: null, missingFamiliar: null, missingSpirit: null }
+  const stats = { atk: 0, def: 0, hp: 0 }
+  if (!build) return { stats, skills, notes }
+
+  const gear = (slot: { item: string; quality: Quality } | null | undefined, what: 'aura' | 'familiar'): void => {
+    if (!slot?.item) return
+    const item = data.items.find((i) => i.name === slot.item)
+    if (!item) {
+      if (what === 'aura') notes.missingAura = slot.item
+      else notes.missingFamiliar = slot.item
+      return
+    }
+    const st = applyQuality(item.stats.Normal, slot.quality)
+    stats.atk += st.atk
+    stats.def += st.def
+    stats.hp += st.hp
+    if (what === 'aura') {
+      // ASSUMPTION: A67 — связь аурасонга с навыком — по имени предмета (у BLUEPRINTS нет колонки навыка).
+      const aura = data.skills.find((s) => s.type === 'Aurasong' && s.name === item.name)
+      if (aura) skills.push(aura)
+    }
+  }
+  gear(build.aura, 'aura')
+  gear(build.familiar, 'familiar')
+
+  if (build.spirit) {
+    const spirit = data.enchants.find((e) => e.name === build.spirit)
+    if (!spirit) {
+      notes.missingSpirit = build.spirit
+    } else if (spirit.skill) {
+      const familiar = build.familiar?.item ? data.items.find((i) => i.name === build.familiar?.item) : undefined
+      const base = data.skills.find((s) => s.id === spirit.skill)
+      const plus = spirit.skillPlus ? data.skills.find((s) => s.id === spirit.skillPlus) : undefined
+      const usePlus = SPIRIT_PLUS_RULE === 'affinity' && !!familiar && !!base && familiar.spiritAffinity === base.name
+      const sk = usePlus && plus ? plus : base
+      if (sk) skills.push(sk)
+    }
+  }
+  return { stats, skills, notes }
+}
+
+/**
+ * Боец-чемпион: база + награды рангов (накопительно, A14), стихия по Element Breakpoints (A13),
+ * лидерский навык по рангу + экипировка (`ChampionBuild`): статы аурасонга и фамильяра, навык аурасонга
+ * (эффекты «to the party» движок раскладывает на всех — `prepare`) и навык вставленного духа.
+ */
+export function fighterFromChampion(champion: Champion, rank: number, data: GameData, build?: ChampionBuild | null): Fighter {
   let hp = champion.base.hp
   let atk = champion.base.atk
   let def = champion.base.def
@@ -449,7 +531,13 @@ export function fighterFromChampion(champion: Champion, rank: number, data: Game
     if (r.leaderSkill) leader = findSkill(data, r.leaderSkill) ?? leader
   }
   if (!leader && champion.leaderSkills.length > 0) leader = data.skills.find((s) => s.id === champion.leaderSkills[0])
-  const skills = leader ? [leader] : []
+  const gear = championEquipment(build, data)
+  atk += gear.stats.atk
+  def += gear.stats.def
+  hp += gear.stats.hp
+  // Экипировка собрана без найденных предметов (build с несуществующим именем) — это не ошибка: чемпион
+  // просто без ауры. О ненайденном сообщает `championEquipment(...).notes` (UI) и оптимизатор (предупреждение).
+  const skills = [...(leader ? [leader] : []), ...gear.skills]
   let elementValue = 0
   for (const bp of data.championElementBreakpoints) if (bp.rank <= rank && bp.value != null) elementValue = Math.max(elementValue, bp.value)
   const specials = parseSpecials(skills)

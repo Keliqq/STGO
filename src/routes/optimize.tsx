@@ -40,7 +40,38 @@ import { SkillAdviceView } from '#/ui/optimize/SkillAdviceView.tsx'
 import { UpgradeView, type UpgradeRow } from '#/ui/optimize/UpgradeView.tsx'
 import { DraftBadge } from '#/ui/heroes/heroStatTable.tsx'
 
-export const Route = createFileRoute('/optimize')({ component: OptimizePage })
+const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+
+export interface OptimizeSearch {
+  heroes?: string
+  champion?: string
+  rank?: string
+  aura?: string
+  auraQuality?: string
+  familiar?: string
+  familiarQuality?: string
+  spirit?: string
+  quest?: string
+}
+
+export const Route = createFileRoute('/optimize')({
+  // Переход со страницы «Команды»: состав команды и её чемпион приходят в ссылке.
+  validateSearch: (search: Record<string, unknown>): OptimizeSearch => ({
+    heroes: str(search.heroes),
+    champion: str(search.champion),
+    rank: str(search.rank),
+    aura: str(search.aura),
+    auraQuality: str(search.auraQuality),
+    familiar: str(search.familiar),
+    familiarQuality: str(search.familiarQuality),
+    spirit: str(search.spirit),
+    quest: str(search.quest),
+  }),
+  component: OptimizePage,
+})
+
+/** Максимум героев в отряде: `Maximum Party Size` локации может быть 5 (A67), но не больше 5 в правилах игры. */
+const MAX_HEROES = 5
 
 const DIFFS = ['Easy', 'Medium', 'Hard', 'Extreme'] as const
 
@@ -99,6 +130,7 @@ function OverrideNumber({ value, auto, min, onChange }: { value: number | null; 
 
 function OptimizePage() {
   const data = useGameData()
+  const search = Route.useSearch()
   const engineRef = useRef<Engine | null>(null)
   useEffect(() => {
     engineRef.current = createEngine()
@@ -108,19 +140,22 @@ function OptimizePage() {
   const [heroes, setHeroes] = useState<HeroInstance[]>([])
   const [checks, setChecks] = useState<RealityCheck[]>([])
   const [overrides, setOverrides] = useState<ConstraintOverrides>(NO_OVERRIDES)
-  useEffect(() => {
-    void loadHeroes().then((r) => setHeroes(r.heroes))
-    void loadRealityChecks().then((r) => setChecks(r.checks))
-    void loadConstraintOverrides().then(setOverrides)
-  }, [])
+  /** Экипировка чемпиона, изменённая пользователем в форме (null — берётся из ссылки, если она есть). */
+  const [champGearEdit, setChampGearEdit] = useState<{ aura: string; auraQuality: Quality; familiar: string; familiarQuality: Quality; spirit: string } | null>(null)
 
-  const [selHeroes, setSelHeroes] = useState<string[]>([])
-  const [champ, setChamp] = useState('')
-  const [champRank, setChampRank] = useState(1)
+  /**
+   * Переход со страницы «Команды»: состав, чемпион, его экипировка и целевой квест приходят в ссылке
+   * и берутся как начальные значения. Ничего не «докладывается» эффектом: состав — это id героев
+   * (сопоставление с загруженными героями делает `selectedTeam`), а квест — id, из которого
+   * сложность и тип выводятся, когда данные загрузились.
+   */
+  const [selHeroes, setSelHeroes] = useState<string[]>(() => (search.heroes ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, MAX_HEROES))
+  const [champ, setChamp] = useState(() => search.champion ?? '')
+  const [champRank, setChampRank] = useState(() => Math.max(1, Math.min(20, Number(search.rank) || 1)))
   const [mode, setMode] = useState<'quest' | 'universal'>('quest')
-  const [questId, setQuestId] = useState('')
-  const [questDiff, setQuestDiff] = useState<string>('Hard')
-  const [questVariant, setQuestVariant] = useState<'normal' | 'boss'>('boss')
+  const [questId, setQuestId] = useState(() => search.quest ?? '')
+  /** Сложность и тип, выбранные пользователем до того, как найден квест (иначе — из самого квеста). */
+  const [questPending, setQuestPending] = useState<{ diff: string; variant: 'normal' | 'boss' } | null>(null)
   const [uniDiff, setUniDiff] = useState<string>('Hard')
   const [uniVariant, setUniVariant] = useState<'normal' | 'boss'>('boss')
   const [uniAreas, setUniAreas] = useState<string[]>([])
@@ -142,22 +177,35 @@ function OptimizePage() {
   const [applied, setApplied] = useState<Set<string>>(() => new Set())
   const [applyNote, setApplyNote] = useState<string | null>(null)
 
+  useEffect(() => {
+    void loadHeroes().then((r) => setHeroes(r.heroes))
+    void loadRealityChecks().then((r) => setChecks(r.checks))
+    void loadConstraintOverrides().then(setOverrides)
+  }, [])
+
   const quests = useMemo(() => (data ? questsWithCaps(data).quests : []), [data])
   const questAreas = useMemo(() => [...new Set(quests.map((q) => q.area))], [quests])
   const selectedQuest = useMemo(() => quests.find((q) => q.id === questId) ?? null, [quests, questId])
+  /** Сложность и тип текущего квеста: из самого квеста, иначе — из выбора пользователя (пока квеста нет). */
+  const questDiff = selectedQuest?.difficulty ?? questPending?.diff ?? 'Hard'
+  const questVariant = selectedQuest?.variant ?? questPending?.variant ?? 'boss'
   const pickQuestParams = (diff: string, variant: 'normal' | 'boss') => {
-    setQuestDiff(diff)
-    setQuestVariant(variant)
     const area = selectedQuest?.area
-    setQuestId(quests.find((q) => q.area === area && q.difficulty === diff && q.variant === variant)?.id ?? '')
+    const q = area ? quests.find((x) => x.area === area && x.difficulty === diff && x.variant === variant) : undefined
+    if (q) {
+      setQuestId(q.id)
+      setQuestPending(null)
+      return
+    }
+    setQuestPending({ diff, variant })
+    setQuestId('')
   }
   const pickQuestArea = (area: string) => {
     const inArea = quests.filter((q) => q.area === area)
     const q = inArea.find((x) => x.difficulty === questDiff && x.variant === questVariant) ?? inArea[0]
     if (!q) return
     setQuestId(q.id)
-    setQuestDiff(q.difficulty)
-    setQuestVariant(q.variant)
+    setQuestPending(null)
   }
   const spirits = useMemo(() => (data ? data.enchants.filter((e) => e.kind === 'spirit').map((e) => e.name) : []), [data])
   const uniAreaList = useMemo(
@@ -170,6 +218,31 @@ function OptimizePage() {
   const tierNote = useMemo(() => (cons ? perHeroTierNote(selectedTeam, cons) : []), [cons, selectedTeam])
   const hasOverrides = Object.values(overrides).some((v) => v !== null)
 
+  /**
+   * Экипировка чемпиона из ссылки, проверенная по текущим данным (чего нет в данных — то пусто).
+   * Значение пользователя (`champGearEdit`) важнее: формула один раз, дальше выбор живёт в состоянии.
+   */
+  const champGearFromLink = useMemo(() => {
+    if (!data || !champ || search.champion !== champ) return null
+    return {
+      aura: data.items.some((i) => i.name === search.aura) ? (search.aura ?? '') : '',
+      auraQuality: (search.auraQuality as Quality) || 'Normal',
+      familiar: data.items.some((i) => i.name === search.familiar) ? (search.familiar ?? '') : '',
+      familiarQuality: (search.familiarQuality as Quality) || 'Normal',
+      spirit: data.enchants.some((e) => e.name === search.spirit) ? (search.spirit ?? '') : '',
+    }
+  }, [data, champ, search])
+  const champGear = champGearEdit ?? champGearFromLink
+  /** Изменить экипировку чемпиона в форме (дальше значение важнее ссылки). */
+  const setChampGear = (patch: Partial<{ aura: string; auraQuality: Quality; familiar: string; familiarQuality: Quality; spirit: string }>): void =>
+    setChampGearEdit({
+      aura: patch.aura ?? '',
+      auraQuality: patch.auraQuality ?? 'Normal',
+      familiar: patch.familiar ?? '',
+      familiarQuality: patch.familiarQuality ?? 'Normal',
+      spirit: patch.spirit ?? '',
+    })
+
   /** Выбранные ограничения сразу сохраняются (IndexedDB) и подхватываются при следующем визите. */
   function updateOverrides(patch: Partial<ConstraintOverrides>): void {
     const next = { ...overrides, ...patch }
@@ -180,7 +253,7 @@ function OptimizePage() {
   function buildInput(): OptimizerInput | string {
     if (!data || !cons) return 'Данные ещё не загружены.'
     if (selectedTeam.length === 0) return 'Выберите хотя бы одного героя.'
-    if (selectedTeam.length > 3) return 'Не больше трёх героев.'
+    if (selectedTeam.length > MAX_HEROES) return `Не больше ${MAX_HEROES} героев.`
     const level = levelOverride === '' ? null : Math.max(1, Number(levelOverride) || 1)
     const hs = level ? selectedTeam.map((h) => ({ ...h, level })) : selectedTeam
     let qs: { quest: Quest; weight: number }[]
@@ -195,9 +268,20 @@ function OptimizePage() {
         .map((q) => ({ quest: q, weight: 1 }))
       if (qs.length === 0) return 'Под фильтр не попал ни один квест.'
     }
+    const rank = Math.max(1, champRank)
     return {
       heroes: hs,
-      champion: champ ? { name: champ, rank: Math.max(1, champRank) } : null,
+      champion: champ ? { name: champ, rank } : null,
+      // Экипировка чемпиона (A67) — та же, что в прогоне команды: иначе подбор считал бы другого чемпиона.
+      championBuild: champ
+        ? {
+            champion: champ,
+            rank,
+            aura: champGear?.aura ? { item: champGear.aura, quality: champGear.auraQuality } : null,
+            familiar: champGear?.familiar ? { item: champGear.familiar, quality: champGear.familiarQuality } : null,
+            spirit: champGear?.spirit || null,
+          }
+        : null,
       mode,
       quests: qs,
       robust,
@@ -337,7 +421,7 @@ function OptimizePage() {
 
   return (
     <Page title="Подбор экипировки" description="Выберите отряд, цель и ограничения — симуляция боя в фоне подберёт предметы, стихии и духов.">
-      <Section title="Отряд" description="До трёх героев и чемпион.">
+      <Section title="Отряд" description={`До ${MAX_HEROES} героев и чемпион. Размер отряда ограничивает локация: 3/4/5 (Maximum Party Size).`}>
         <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {heroes.map((h) => {
             const on = selHeroes.includes(h.id)
@@ -356,7 +440,7 @@ function OptimizePage() {
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <Field label="Чемпион" hint="Чемпион даёт отряду бонус своей стихии и ранговые способности. Ранг ниже — слабее бонус.">
-            <NativeSelect value={champ} onChange={(e) => setChamp(e.target.value)}>
+            <NativeSelect aria-label="Чемпион" value={champ} onChange={(e) => setChamp(e.target.value)}>
               <NativeSelectOption value="">— без чемпиона —</NativeSelectOption>
               {data.champions.map((c) => (
                 <NativeSelectOption key={c.name} value={c.name}>
@@ -366,8 +450,100 @@ function OptimizePage() {
             </NativeSelect>
           </Field>
           <Field label="Ранг" hint="Ранг чемпиона от 1 до 20. Без выбранного чемпиона поле неактивно.">
-            <Input type="number" min={1} max={20} className="w-20" value={champRank} onChange={(e) => setChampRank(Number(e.target.value))} disabled={!champ} />
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              aria-label="Ранг"
+              className="w-20"
+              value={champRank}
+              onChange={(e) => setChampRank(Number(e.target.value))}
+              disabled={!champ}
+            />
           </Field>
+          <label className="flex items-center gap-2 text-sm">
+            <Tip text="Аурасонг даёт чемпиону DEF/HP, а его навык — бонус ВСЕМУ отряду (A67).">
+              <span className="text-muted-foreground">Аура чемпиона</span>
+            </Tip>
+            <NativeSelect
+              className="w-48"
+              aria-label="Аура чемпиона"
+              disabled={!champ}
+              value={champGear?.aura ?? ''}
+              onChange={(e) => setChampGear({ ...champGear, aura: e.target.value })}
+            >
+              <NativeSelectOption value="">— без ауры —</NativeSelectOption>
+              {data.items
+                .filter((i) => i.type === 'Aurasong')
+                .map((i) => (
+                  <NativeSelectOption key={i.name} value={i.name}>
+                    {i.name} (T{i.tier})
+                  </NativeSelectOption>
+                ))}
+            </NativeSelect>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Tip text="Качество меняет только DEF/HP предмета — силу ауры оно не меняет (A67).">
+              <span className="text-muted-foreground">Качество ауры</span>
+            </Tip>
+            <NativeSelect
+              className="w-32"
+              aria-label="Качество ауры"
+              disabled={!champ || !champGear?.aura}
+              value={champGear?.auraQuality ?? 'Normal'}
+              onChange={(e) => setChampGear({ ...champGear, auraQuality: e.target.value as Quality })}
+            >
+              {QUALITIES.map((q) => (
+                <NativeSelectOption key={q} value={q}>
+                  {q}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Tip text="Фамильяр добавляет чемпиону ATK/DEF/HP; в него вставляется дух (A67).">
+              <span className="text-muted-foreground">Фамильяр</span>
+            </Tip>
+            <NativeSelect className="w-48" aria-label="Фамильяр" disabled={!champ} value={champGear?.familiar ?? ''} onChange={(e) => setChampGear({ ...champGear, familiar: e.target.value })}>
+              <NativeSelectOption value="">— без фамильяра —</NativeSelectOption>
+              {data.items
+                .filter((i) => i.type === 'Familiar')
+                .map((i) => (
+                  <NativeSelectOption key={i.name} value={i.name}>
+                    {i.name} (T{i.tier})
+                  </NativeSelectOption>
+                ))}
+            </NativeSelect>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Качество фамильяра</span>
+            <NativeSelect
+              className="w-32"
+              aria-label="Качество фамильяра"
+              disabled={!champ || !champGear?.familiar}
+              value={champGear?.familiarQuality ?? 'Normal'}
+              onChange={(e) => setChampGear({ ...champGear, familiarQuality: e.target.value as Quality })}
+            >
+              {QUALITIES.map((q) => (
+                <NativeSelectOption key={q} value={q}>
+                  {q}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Tip text="Навык духа действует на носителя (чемпиона); «+»-версия включается сродством фамильяра (A5, A67).">
+              <span className="text-muted-foreground">Дух в фамильяре</span>
+            </Tip>
+            <NativeSelect className="w-48" aria-label="Дух в фамильяре" disabled={!champ} value={champGear?.spirit ?? ''} onChange={(e) => setChampGear({ ...champGear, spirit: e.target.value })}>
+              <NativeSelectOption value="">— без духа —</NativeSelectOption>
+              {spirits.map((s) => (
+                <NativeSelectOption key={s} value={s}>
+                  {s}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
           <Field label="Уровень героев (пусто = как у героя)" hint="Посчитать так, будто все герои этого уровня — например, чтобы узнать, как отряд справится после прокачки. Пусто — берётся уровень из импорта.">
             <Input type="number" min={1} max={99} className="w-20" value={levelOverride} onChange={(e) => setLevelOverride(e.target.value)} />
           </Field>
@@ -610,3 +786,4 @@ function OptimizePage() {
     </Page>
   )
 }
+

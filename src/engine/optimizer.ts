@@ -41,7 +41,7 @@ import {
   OPTIMIZER_TOP_K,
   OPTIMIZER_YIELD_INTERVAL_MS,
 } from './constants.ts'
-import { barrierBroken, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
+import { barrierBroken, championEquipment, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type ChampionBuild, type Fighter, type SimMetrics } from './combat.ts'
 import { maxItemTierFor } from './formulas.ts'
 import { quickScore } from './score.ts'
 import { partyElementBonusPct, STAT_WEIGHT_STATS, statWeights, type StatWeightStat, type StatWeightsResult } from './statWeights.ts'
@@ -112,9 +112,15 @@ export interface QuestWeight {
 }
 
 export interface OptimizerInput {
-  /** 1–3 героя. Уровень и «Душа» задаются в самих HeroInstance (или через titanSoul ниже). */
+  /** 1–`Maximum Party Size` локации героев (правило игры — A67), но не больше 5. Уровень и «Душа» — в самих HeroInstance. */
   heroes: HeroInstance[]
   champion?: { name: string; rank: number } | null
+  /**
+   * Экипировка чемпиона: аурасонг, фамильяр и дух в нём (A67). Задаётся командой («Команды»):
+   * тот же чемпион, что и в прогоне команды, иначе win rate подбора разошёлся бы с прогоном.
+   * Ранг берётся отсюда; `champion.rank` — значение по умолчанию, если `championBuild` нет.
+   */
+  championBuild?: ChampionBuild | null
   mode: 'quest' | 'universal'
   /** В режиме `quest` — один квест; в `universal` — список локаций с весами. */
   quests: QuestWeight[]
@@ -416,7 +422,18 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
 
   const champion = input.champion ? data.champions.find((c) => c.name === input.champion?.name) : undefined
   if (input.champion && !champion) warnings.push(`Чемпион «${input.champion.name}» не найден в данных — без чемпиона.`)
-  const champFighter = champion && input.champion ? fighterFromChampion(champion, input.champion.rank, data) : null
+  // Экипировка чемпиона (A67): ранг из championBuild, если он задан, иначе из input.champion.
+  const champBuild: ChampionBuild | null =
+    champion && input.champion
+      ? { ...input.championBuild, champion: champion.name, rank: input.championBuild?.rank ?? input.champion.rank }
+      : null
+  if (champBuild) {
+    const notes = championEquipment(champBuild, data).notes
+    if (notes.missingAura) warnings.push(`Аурасонг «${notes.missingAura}» не найден в данных — чемпион без ауры.`)
+    if (notes.missingFamiliar) warnings.push(`Фамильяр «${notes.missingFamiliar}» не найден в данных — чемпион без фамильяра.`)
+    if (notes.missingSpirit) warnings.push(`Дух «${notes.missingSpirit}» не найден в данных — фамильяр без духа.`)
+  }
+  const champFighter = champion && champBuild ? fighterFromChampion(champion, champBuild.rank, data, champBuild) : null
   const artifacts = new Set(data.items.filter((i) => i.artifactSkill).map((i) => i.name))
   const itemByName = new Map(data.items.map((i) => [i.name, i]))
   const elValue = new Map(data.enchants.filter((e) => e.kind === 'element').map((e) => [e.name, e.elementValue ?? 0]))

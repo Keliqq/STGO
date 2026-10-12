@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+﻿import { expect, test } from '@playwright/test'
 import { importHeroesViaFile, openDetails, pickHero, runOptimize, section, selectByLabel, shot, watchErrors, pickQuest } from './helpers.ts'
 
 test('подбор для одного героя под квест + советы по навыкам + отметка', async ({ page }) => {
@@ -101,7 +101,7 @@ test('подбор для группы в универсальном режим�
   await importHeroesViaFile(page)
   await page.goto('/#/optimize')
   for (const h of ['Антуан', 'Беовульф', 'Эбигейл']) await pickHero(page, h)
-  await selectByLabel(page.getByLabel('Чемпион'), /Argon/)
+  await selectByLabel(page.getByLabel('Чемпион', { exact: true }), /Argon/)
   await page.getByLabel('Ранг').fill('5')
   await page.getByText('Универсальный (все локации фильтра)').click()
   await page.getByLabel('Сложность').selectOption('Easy')
@@ -117,7 +117,7 @@ test('отмена посреди расчёта; тяжёлый расчёт н
   await importHeroesViaFile(page)
   await page.goto('/#/optimize')
   for (const h of ['Антуан', 'Беовульф', 'Эбигейл']) await pickHero(page, h)
-  await selectByLabel(page.getByLabel('Чемпион'), /Argon/)
+  await selectByLabel(page.getByLabel('Чемпион', { exact: true }), /Argon/)
   await page.getByLabel('Ранг').fill('5')
   await pickQuest(page, 'Meteor Zone', 'Extreme', 'boss')
   await page.getByRole('button', { name: 'Подобрать' }).click()

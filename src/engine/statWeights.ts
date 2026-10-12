@@ -52,7 +52,8 @@ export type StatWeightStat = (typeof STAT_WEIGHT_STATS)[number]
 /** Статы защиты: на насыщенных квестах их ценность видна в выживаемости, а не в уроне. */
 export const DEFENSIVE_STATS: readonly StatWeightStat[] = ['hp', 'def', 'eva']
 
-const ELEMENT_RU: Record<string, string> = {
+/** Русские названия стихий для интерфейса (веса статов, барьер, прогон команды). */
+export const ELEMENT_RU: Record<string, string> = {
   Fire: 'Огонь',
   Water: 'Вода',
   Air: 'Воздух',

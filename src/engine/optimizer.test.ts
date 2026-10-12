@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { importTitansDb } from '../data/titansdb.ts'
 import type { HeroInstance, Quality, Quest } from '../data/types.ts'
 import { fixtureGameData } from '../test/fixtures.ts'
-import { fighterFromHero, mulberry32, simulateTeam } from './combat.ts'
+import { fighterFromChampion, fighterFromHero, mulberry32, simulateTeam } from './combat.ts'
 import { OPTIMIZER_TOP_K } from './constants.ts'
 import { defaultConstraints } from './constraints.ts'
 import { maxItemTierFor } from './formulas.ts'
@@ -198,6 +198,48 @@ describe('оптимизатор: детерминизм и режимы', () =>
     const res = await runOptimizer(data, baseInput(heroes[0]), { shouldCancel: () => true })
     expect(res.cancelled).toBe(true)
     expect(res.configs).toHaveLength(1)
+  })
+})
+
+describe('оптимизатор: чемпион с экипировкой (A67)', () => {
+  const argon = data.champions.find((c) => c.name === 'Argon')!
+  const aura = data.items.find((i) => i.type === 'Aurasong' && i.name === 'Aura of Inspiration')!
+  const familiar = data.items.find((i) => i.type === 'Familiar')!
+  const build = {
+    champion: 'Argon',
+    rank: 5,
+    aura: { item: aura.name, quality: 'Normal' as Quality },
+    familiar: { item: familiar.name, quality: 'Normal' as Quality },
+    spirit: null,
+  }
+
+  it('чемпион команды (аура + фамильяр) учитывается в подборе: win rate совпадает с прямым прогоном', async () => {
+    const input = baseInput(heroes[0], { champion: { name: 'Argon', rank: 5 }, championBuild: build, simRuns: 300 })
+    const res = await runOptimizer(data, input)
+    const fighters = [fighterFromHero(applyHeroConfig(heroes[0], res.configs[0]), data), fighterFromChampion(argon, 5, data, build)]
+    const direct = simulateTeam(fighters, input.quests[0].quest, { runs: 300, seed: 42 }).winRate
+    expect(res.winRate).toBeCloseTo(direct, 10)
+  })
+
+  it('без championBuild подбор считает голого чемпиона (как раньше), с ним — экипированного', async () => {
+    const bare = await runOptimizer(data, baseInput(heroes[0], { champion: { name: 'Argon', rank: 5 }, simRuns: 300 }))
+    const geared = await runOptimizer(data, baseInput(heroes[0], { champion: { name: 'Argon', rank: 5 }, championBuild: build, simRuns: 300 }))
+    // Экипировка чемпиона не может ухудшить отряд: аурасонг и фамильяр добавляют статы и ауру.
+    expect(geared.winRate).toBeGreaterThanOrEqual(bare.winRate)
+  })
+
+  it('ненайденная экипировка чемпиона — предупреждение, а не молчаливый пропуск', async () => {
+    const res = await runOptimizer(data, baseInput(heroes[0], {
+      champion: { name: 'Argon', rank: 5 },
+      championBuild: { ...build, aura: { item: 'Нет такой ауры', quality: 'Normal' as Quality } },
+      simRuns: 100,
+    }))
+    expect(res.warnings.some((w) => w.includes('Нет такой ауры'))).toBe(true)
+  })
+
+  it('неизвестный чемпион: подбор идёт без него и предупреждает', async () => {
+    const res = await runOptimizer(data, baseInput(heroes[0], { champion: { name: 'Нет такого', rank: 5 }, simRuns: 100 }))
+    expect(res.warnings.some((w) => w.includes('не найден в данных'))).toBe(true)
   })
 })
 
