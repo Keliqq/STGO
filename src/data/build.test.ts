@@ -22,7 +22,7 @@ describe('buildGameData на фикстурах', () => {
       elementBreakpoints: data.championElementBreakpoints.length,
     }).toEqual({
       items: 1549,
-      enchants: 73,
+      enchants: 77,
       heroClasses: 42,
       heroLevels: 50,
       skills: 621,
@@ -80,7 +80,13 @@ describe('buildGameData на фикстурах', () => {
       stats: { atk: 19, def: 12, hp: 4 },
       iconId: 'turtle',
     })
-    expect(data.enchants.filter((e) => e.kind === 'spirit').every((e) => e.skill && e.skillPlus)).toBe(true)
+    expect(data.enchants.filter((e) => e.kind === 'spirit' && e.skill).every((e) => e.skillPlus)).toBe(true)
+    // Духи, которых ещё нет в листе ENCHANTMENTS, берутся из BLUEPRINTS. Навык опознаётся по иконке
+    // или по первому слову имени; у Tomb-Bound Spirit он назван иначе (Tomb-Born Malevolence) —
+    // связь не выведена, это известный пробел источника, а не ошибка разбора.
+    expect(data.enchants.filter((e) => e.kind === 'spirit' && !e.skill).map((e) => e.name)).toEqual(['Tomb-Bound Spirit'])
+    expect(data.enchants.find((e) => e.name === 'Fresh Spirit')).toMatchObject({ kind: 'spirit', skill: 'Fresh Spirit', skillPlus: 'Fresh Spirit+' })
+    expect(data.enchants.find((e) => e.name === "Mundra's Spirit")?.skill).toBe("Mundra's Spite")
     expect(data.enchants.find((e) => e.name === 'Inferno Element')).toMatchObject({ element: 'Fire', elementValue: 25, tier: 12 })
   })
 

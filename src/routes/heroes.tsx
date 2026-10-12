@@ -161,7 +161,7 @@ function HeroCard({
           )}
         </CardContent>
         <CardFooter className="text-xs text-muted-foreground">
-          База: {stats.breakdown.baseSource === 'reference' ? 'из экспорта (уровень не менялся)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±9% HP)'}
+          База: {stats.breakdown.baseSource === 'reference' ? 'из экспорта (уровень не менялся)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±7% HP)'}
           {hero.reference && hero.reference.level !== hero.level ? ` · эталон с ${hero.reference.level} ур. больше не подходит — уровень изменён` : ''}
         </CardFooter>
         <CardContent>

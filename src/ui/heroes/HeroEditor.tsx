@@ -7,7 +7,7 @@
  *
  * Про уровень: рядом с полем — «носит до T{N}» (HERO LEVELS → Max Item Tier). При понижении уровня
  * предметы выше потолка не удаляются, а подсвечиваются в слотах; база статов при смене уровня теряет
- * эталон экспорта (A8) — об этом прямо сказано в форме: HP приблизительно ±9%.
+ * эталон экспорта (A8) — об этом прямо сказано в форме: HP приблизительно ±7%.
  */
 import { useMemo, useState } from 'react'
 import { Save, Sparkles, X } from 'lucide-react'
@@ -354,7 +354,7 @@ export function HeroEditor({ data, hero, creating = false, onSave, onCancel }: H
             )}
             {stats.value ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                База: {stats.value.breakdown.baseSource === 'reference' ? 'из эталона экспорта (уровень не менялся, A8)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±9% HP)'}
+                База: {stats.value.breakdown.baseSource === 'reference' ? 'из эталона экспорта (уровень не менялся, A8)' : 'модель роста по уровню (≈±3% ATK/DEF, ≈±7% HP)'}
                 {stats.value.breakdown.skills.length > 0 ? ` · навыков действует: ${stats.value.breakdown.skills.length}` : ''}
               </p>
             ) : null}

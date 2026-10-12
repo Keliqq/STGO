@@ -404,10 +404,10 @@ describe('статы пересчитываются сразу (calcStats), ба
     const up = calcStats(leveled, data)
     expect(up.breakdown.baseSource).toBe('model')
     expect(referenceBase(leveled, data)).toBeNull()
-    expect(baseAccuracyNote(leveled)).toContain('±9%')
+    expect(baseAccuracyNote(leveled)).toContain('±7%')
     for (const st of ['atk', 'def', 'hp'] as const) {
       expect(up.breakdown.base[st]).toBeGreaterThan(0)
-      // Модель и эталон расходятся — это и есть та самая неточность (±9% по HP, A8).
+      // Модель и эталон расходятся — это и есть та самая неточность (±7% по HP, A8).
       expect(Math.abs(up.breakdown.base[st] - calcStats(hero, data).breakdown.base[st]) / calcStats(hero, data).breakdown.base[st]).toBeLessThan(1)
     }
     expect(up.breakdown.base.atk).not.toBe(calcStats(hero, data).breakdown.base.atk)
@@ -423,7 +423,8 @@ describe('статы пересчитываются сразу (calcStats), ба
     const hero = blankHero('Soldier', 10)
     const model = calcStats(hero, data)
     const cls = effectiveClass(hero, data)!
-    expect(model.breakdown.base.atk).toBeCloseTo(cls.base.atk * (1 + HERO_LEVEL_STAT_GROWTH.atk.k * 9) + HERO_LEVEL_STAT_GROWTH.atk.c * 9, 6)
+    const g = HERO_LEVEL_STAT_GROWTH.atk
+    expect(model.breakdown.base.atk).toBeCloseTo(cls.base.atk * (1 + g.k[cls.group] * 9 + g.d * 81) + g.c[cls.group] * 9, 6)
   })
 
   it('семена прибавляются к базе напрямую (A55)', () => {

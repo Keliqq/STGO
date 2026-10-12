@@ -15,5 +15,9 @@ todos.json
 # Генерируется scripts/build-snapshot.ts (npm run build / predev / pretest)
 src/data/snapshot.json
 
+# Статы героев по уровням от stcalc.com (автор tadzhx): лицензии нет, только локальная сверка.
+# Скачивание: curl -o fixtures/stcalc-levelstats.json https://stcalc.com/data/levelstats.json (см. A8)
+fixtures/stcalc-levelstats.json
+
 test-results/
 playwright-report/

@@ -14,7 +14,7 @@ import { parseChampions } from './parse/champions.ts'
 import { parseHeroes } from './parse/heroes.ts'
 import { parseQuestLevels } from './parse/questLevels.ts'
 import { parseQuests } from './parse/quests.ts'
-import { checkQuestComponents, parseEnchantments, parseHeroLevels, parseSkills } from './parse/simpleSheets.ts'
+import { checkQuestComponents, parseEnchantments, parseHeroLevels, parseSkills, type EnchantRow } from './parse/simpleSheets.ts'
 import { parseSkillEffects } from './parse/skillEffects.ts'
 import { parseSlots } from './parse/slots.ts'
 import {
@@ -226,9 +226,22 @@ export function buildGameData(raw: RawSheets, options: BuildOptions = {}): GameD
   }
 
   // ── Камни стихий и духи
+  // Лист ENCHANTMENTS отстаёт от BLUEPRINTS: духи, добавленные в игру недавно (Fresh Spirit, Mundra's Spirit,
+  // Spirit Spirit, Tomb-Bound Spirit), есть в BLUEPRINTS, но их ещё нет в ENCHANTMENTS. Существование и статы
+  // берём из BLUEPRINTS (там же, где статы остальных), стихию камней — из ENCHANTMENTS.
+  const enchantRows: EnchantRow[] = [...en.rows]
+  const knownEnchantNames = new Set(en.rows.map((e) => e.name))
+  for (const r of bp.rows) {
+    if (r.type !== 'Enchantment' || knownEnchantNames.has(r.name)) continue
+    if (/element$/i.test(r.name)) {
+      warn(`BLUEPRINTS: камень «${r.name}» есть в BLUEPRINTS, но не в ENCHANTMENTS — стихия и величина неизвестны, пропущен`)
+      continue
+    }
+    enchantRows.push({ row: r.row, name: r.name, kind: 'spirit', element: null, elementValue: null })
+  }
   const spiritSkillByKey = new Map(Object.entries(imageMap.spiritSkills).map(([name, key]) => [key, name]))
   const enchants: Enchant[] = []
-  for (const e of en.rows) {
+  for (const e of enchantRows) {
     const row = bpByName.get(e.name)
     let skill: string | null = null
     let skillPlus: string | null = null

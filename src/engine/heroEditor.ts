@@ -405,7 +405,7 @@ export function applySlots(hero: HeroInstance, slots: readonly HeroSlot[]): Hero
 /**
  * Смена уровня героя. Эталон TitansDB (A8) действует, только пока уровень не менялся, — поэтому при
  * смене уровня он перестаёт участвовать в расчёте: база берётся из модели роста, и точность HP падает
- * (по сверке A8 — примерно ±9%). Если уровень вернули обратно, эталон снова рабочий. Сам эталон
+ * (по сверке A8 — примерно ±7%). Если уровень вернули обратно, эталон снова рабочий. Сам эталон
  * не удаляем: он остаётся памятью об экспорте (требование владельца — «не удалять молча»).
  */
 export interface LevelChange {
@@ -421,7 +421,7 @@ export function changeLevel(hero: HeroInstance, level: number): LevelChange {
 /** Точность базы героя словами — то, что показывается рядом с уровнем (A8). */
 export function baseAccuracyNote(hero: HeroInstance): string | null {
   if (!hero.reference || hero.reference.level === hero.level) return null
-  return `уровень изменён (эталон с ${hero.reference.level} ур.) — база считается моделью роста, HP приблизительно ±9%`
+  return `уровень изменён (эталон с ${hero.reference.level} ур.) — база считается моделью роста, HP приблизительно ±7%`
 }
 
 /** Множитель качества в статах предмета (A7). */

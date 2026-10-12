@@ -57,6 +57,19 @@ const COL = { name: 0, group: 1, hp: 4, atk: 5, def: 6, threat: 7, crit: 8, crit
 /** Смещения внутри блока через `|`. */
 const BLOCK = { titanSoul: 0, className: 2, slotTypes: 3, items: 9, qualities: 15, enchants: 21, spirits: 27, skills: 33, level: 37, stoneElements: 41 } as const
 const BLOCK_MIN_PARTS = 30
+const BLOCK_TAIL = 3 // нулевые колонки сразу после уровня (шанс выжить, Σ ATK%, Σ DEF%)
+
+/**
+ * Индекс колонки уровня внутри блока. Число колонок-навыков в экспорте не постоянно: у Эйми
+ * (`fixtures/heroes-2026-10-12.txt`) после четырёх навыков идёт ещё одна пустая колонка, и уровень
+ * смещается на 38. Поэтому ищем первое целое после блока навыков, за которым стоят три нуля.
+ */
+function findLevelIndex(b: string[]): number {
+  for (let i = BLOCK.skills; i + BLOCK_TAIL < b.length; i++) {
+    if (/^\d+$/.test(b[i]) && b.slice(i + 1, i + 1 + BLOCK_TAIL).every((v) => v === '0')) return i
+  }
+  return BLOCK.level
+}
 
 /** `Name (описание)` → {name, description}. Описание может само содержать скобки. */
 function nameWithDescription(v: string): { name: string; description: string | null } {
@@ -76,6 +89,9 @@ function parseLine(line: string, lineNo: number): TitansDbHero {
   if (blockIdx < 0) throw new Error('нет блока снаряжения (поле с разделителями «|»)')
   const b = cols[blockIdx].split('|').map((s) => s.trim())
   const at = (i: number): string => b[i] ?? ''
+  const levelIdx = findLevelIndex(b)
+  /** Колонки после уровня смещаются вместе с ним (у Эйми, например, на одну). */
+  const tail = (i: number): string => b[levelIdx + 1 + BLOCK_TAIL + i] ?? ''
 
   const slots: TitansDbSlot[] = []
   for (let i = 0; i < 6; i++) {
@@ -90,12 +106,12 @@ function parseLine(line: string, lineNo: number): TitansDbHero {
       item: itemRaw === '' ? null : im ? im[1].trim() : itemRaw,
       itemTier: im ? Number(im[2]) : null,
       quality: at(BLOCK.qualities + i) || null,
-      element: em ? { value: Number(em[1]), tier: Number(em[2]), element: at(BLOCK.stoneElements + i) } : null,
+      element: em ? { value: Number(em[1]), tier: Number(em[2]), element: tail(i) } : null,
       spirit: spiritRaw === '' ? null : nameWithDescription(spiritRaw),
     })
   }
 
-  const skills = [0, 1, 2, 3].map((i) => at(BLOCK.skills + i)).filter((s) => s !== '').map(nameWithDescription)
+  const skills = b.slice(BLOCK.skills, levelIdx).filter((s) => s !== '').map(nameWithDescription)
   const artifactRaw = blockIdx > 0 ? cols[blockIdx - 1].trim() : ''
   const pct = (v: string | undefined, what: string): number => Math.round(parseNumber(v, what) * 1e4) / 1e6
   const pctCol = (v: string | undefined): number => {
@@ -110,7 +126,7 @@ function parseLine(line: string, lineNo: number): TitansDbHero {
     name: (cols[COL.name] ?? '').trim(),
     groupLabel: (cols[COL.group] ?? '').trim(),
     className: at(BLOCK.className),
-    level: parseNumber(at(BLOCK.level), 'уровень'),
+    level: parseNumber(b[levelIdx], 'уровень'),
     titanSoul: /^yes$/i.test(at(BLOCK.titanSoul)),
     slots,
     skills,

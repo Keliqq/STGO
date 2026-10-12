@@ -23,14 +23,21 @@ import {
 
 // ─────────────────────────── статы карточки ───────────────────────────
 
+/** Форма роста базы: база(L) = база₁·(1 + k·x + d·x²) + c·x, x = L − 1. d нет — прежняя линейная форма. */
+export interface LevelGrowth {
+  k: number
+  c: number
+  d?: number
+}
+
 /**
- * База класса на уровне: база₁ × (1 + k·(L−1)) + c·(L−1); база₁ — статы класса из HEROES,
- * k и c — HERO_LEVEL_STAT_GROWTH (подобраны МНК по экспорту героев).
+ * База класса на уровне: база₁·(1 + k·x + d·x²) + c·x; база₁ — статы класса из HEROES,
+ * k, c, d — HERO_LEVEL_STAT_GROWTH (подобраны МНК по экспортам героев, A8).
  */
 // ASSUMPTION: A8
-export function baseStatAtLevel(base1: number, level: number, growth: { k: number; c: number }): number {
+export function baseStatAtLevel(base1: number, level: number, growth: LevelGrowth): number {
   const l = Math.max(1, level) - 1
-  return base1 * (1 + growth.k * l) + growth.c * l
+  return base1 * (1 + growth.k * l + (growth.d ?? 0) * l * l) + growth.c * l
 }
 
 /**

@@ -38,18 +38,33 @@ export const QUALITY_SCALED_STATS = ['atk', 'def', 'hp', 'manaShield'] as const
 export const QUALITY_ROUNDING: 'round' | 'floor' = 'round'
 
 /**
- * Рост базовых ATK/DEF/HP героя с уровнем: база(L) = база₁ × (1 + k·(L−1)) + c·(L−1),
- * база₁ — статы класса из листа HEROES. Прироста по уровням нет ни в HEROES, ни в HERO LEVELS.
- * Подобрано МНК по относительной ошибке итогового стата на fixtures/heroes.txt (18 героев, 12 классов, уровни 23–33)
- * с учётом удвоения духа в Portable Totem Pole (A27): RMS ATK 2,1%, DEF 2,1%, HP 9,0%.
- * У HP разброс по классам большой — гладкая формула его не описывает (см. A8); для импортированных героев
- * база берётся из эталона экспорта (stats.ts → referenceBase).
+ * Рост базовых ATK/DEF/HP героя с уровнем (A8):
+ *   база(L) = база₁ · (1 + k·x + d·x²) + c·x,   x = L − 1,
+ * `база₁` — статы класса из HEROES, `k` и `c` — свои на группу класса (Fighter/Rogue/Spellcaster),
+ * `d` — один на стат. Прироста по уровням нет ни в HEROES, ни в HERO LEVELS: у игры своя ступенчатая
+ * таблица на класс (см. A8, сверка с fixtures/stcalc-levelstats.json).
+ *
+ * Форма выбрана по leave-one-out, коэффициенты — МНК по относительной ошибке итогового стата сразу по обеим
+ * фикстурам (fixtures/heroes.txt — 18 героев, 23–33 ур.; fixtures/heroes-2026-10-12.txt — 19 героев, 31–37 ур.).
+ * Итог: RMS ATK 1,5/1,7%, DEF 1,7/1,6%, HP 5,5/7,3% (старый/новый набор) — было 2,2/3,8%, 2,1/3,3%, 9,1/11,4%.
  */
 // ASSUMPTION: A8
 export const HERO_LEVEL_STAT_GROWTH = {
-  atk: { k: 0.232, c: 7.15 },
-  def: { k: 0.292, c: 4.95 },
-  hp: { k: 0.125, c: 1.2 },
+  atk: {
+    k: { Fighter: -0.0835, Rogue: -0.2336, Spellcaster: -0.1087 },
+    c: { Fighter: 6.6138, Rogue: 9.7244, Spellcaster: 9.317 },
+    d: 0.013,
+  },
+  def: {
+    k: { Fighter: -0.0664, Rogue: -0.2716, Spellcaster: 0.022 },
+    c: { Fighter: 7.4189, Rogue: 9.1805, Spellcaster: 4.5767 },
+    d: 0.0113,
+  },
+  hp: {
+    k: { Fighter: 0.0748, Rogue: -0.143, Spellcaster: -0.0654 },
+    c: { Fighter: 0.1714, Rogue: 5.0211, Spellcaster: 3.2589 },
+    d: 0.0041,
+  },
 } as const
 
 /**
@@ -109,17 +124,20 @@ export const SPIRIT_SKILL_DOUBLING_ITEMS = ['Portable Totem Pole'] as const
 export const TYPED_ITEM_BONUS_STATS: readonly ('atk' | 'def' | 'hp')[] = ['atk', 'hp']
 
 /**
- * Духи, дающие +5 стихии носителю (на духа). Выведено сверкой с экспортом (A29): Селена (1× Ox) +5,
- * Джорди (6× Chimera) +30; у носителей Lion/Bear/Walrus/Mammoth/Cat/Wolf/Eagle/Owl излишка нет.
- * В листах ENCHANTMENTS/SKILLS колонки стихии у духов нет (проверено и в фикстуре, и в живой таблице) —
- * только по экспорту. Влияет на отображаемую стихию и барьер, но НЕ на ступени навыков
- * (иначе у Селены открылась бы ступень 3 «Dance of Blades» с порогом 95 — экспорт этому противоречит).
+ * Бонус стихии от Elemental Affinity предмета (A29, пересмотрено в сессии 31).
+ * Камень в предмете, чьё сродство включает его стихию («All» — любую), даёт +10 стихии,
+ * если величина камня ≥ AFFINITY_ELEMENT_MIN_STONE_VALUE (25 = T12 и выше).
+ * У камней T9 (15) прибавки нет: 10 таких слотов в двух фикстурах дают ровно ноль.
+ * Бонус входит и в `elementAny` — навык Geomancer «+1% Attack per point in any Element» его считает
+ * (сверка: ошибка ATK Вестии 36 и Логарсона 37 падает с −10,9% до +0,5/−1,4%).
+ * Не объяснено одно наблюдение: Селена в обеих фикстурах имеет +5 сверх камней — её CM-73 Jetboots
+ * со сродством «All» и камнем T9 (15). Под это правило не подгонялось.
  */
 // ASSUMPTION: A29
-export const SPIRIT_ELEMENT_BONUS: Readonly<Record<string, number>> = {
-  'Ox Spirit': 5,
-  'Chimera Spirit': 5,
-}
+export const AFFINITY_ELEMENT_BONUS = 10
+/** Величина камня, с которой действует бонус сродства (25 — T12; у T9 камня величина 15). */
+// ASSUMPTION: A29
+export const AFFINITY_ELEMENT_MIN_STONE_VALUE = 25
 
 // ─────────────────────────── Бой (симулятор) ───────────────────────────
 // Формулы — ST-Central Combat Compendium (https://st-central.net/combat-compendium/), см. A30.

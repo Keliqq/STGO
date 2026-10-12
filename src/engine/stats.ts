@@ -10,6 +10,8 @@
  */
 import type { Element, Enchant, GameData, HeroClass, HeroInstance, HeroSlot, Item, Quality, Skill, SkillEffect } from '../data/types.ts'
 import {
+  AFFINITY_ELEMENT_BONUS,
+  AFFINITY_ELEMENT_MIN_STONE_VALUE,
   AFFINITY_SCOPE,
   ELEMENT_AFFINITY_MULTIPLIER,
   GOLD_ELEMENT_COUNTS_FOR_ANY_HERO,
@@ -18,7 +20,6 @@ import {
   QUALITY_MULTIPLIERS,
   QUALITY_ROUNDING,
   SPIRIT_AFFINITY_MULTIPLIER,
-  SPIRIT_ELEMENT_BONUS,
   SPIRIT_PLUS_RULE,
   SPIRIT_SKILL_DOUBLING_ITEMS,
   TYPED_ITEM_BONUS_STATS,
@@ -49,13 +50,21 @@ export interface StatModel {
   hpGrowthMult?: number
 }
 
-/** База класса на уровне: база₁ × (1 + k·(L−1)) + c·(L−1), база₁ — статы из HEROES (A8). */
+/**
+ * База класса на уровне: база₁·(1 + k·x + d·x²) + c·x, x = L − 1 (A8).
+ * k и c — свои на группу класса (Fighter/Rogue/Spellcaster): у игры своя таблица роста на класс,
+ * и групповая разбивка заметно точнее общей (LOO HP 7,7% против 10,5%).
+ */
 export function baseStatsAt(cls: HeroClass, level: number, model?: Pick<StatModel, 'hpGrowthMult'>): Record<MainStat, number> {
-  const hpGrowth = HERO_LEVEL_STAT_GROWTH.hp
   const hpMult = model?.hpGrowthMult ?? 1
   const at = (st: MainStat): number => {
-    const g = st === 'hp' ? { k: hpGrowth.k * hpMult, c: hpGrowth.c * hpMult } : HERO_LEVEL_STAT_GROWTH[st]
-    return baseStatAtLevel(cls.base[st], level, g)
+    const g = HERO_LEVEL_STAT_GROWTH[st]
+    const mult = st === 'hp' ? hpMult : 1
+    return baseStatAtLevel(cls.base[st], level, {
+      k: g.k[cls.group] * mult,
+      c: g.c[cls.group] * mult,
+      d: g.d * mult,
+    })
   }
   return { atk: at('atk'), def: at('def'), hp: at('hp') }
 }
@@ -192,28 +201,35 @@ export interface ElementValue {
   elementAny: number
 }
 
-/** Стихия героя: Σ камней его стихии (A21) + духи из SPIRIT_ELEMENT_BONUS (A29). Класс `Any` (Spellblade) — любые камни. */
+/**
+ * Стихия героя: Σ камней его стихии (A21) + бонус сродства предмета к камню (A29). Класс `Any` (Spellblade) — любые камни.
+ * Бонус сродства входит и в `elementAny`: он считается «очком стихии» для навыков вида
+ * «+N% Attack per point in any Element» (A29, сверка по Geomancer 36/37 второй фикстуры).
+ */
 export function heroElementValue(hero: HeroInstance, data: GameData): ElementValue {
   const l = lookup(data)
   const cls = effectiveClass(hero, data)
   let elementStones = 0
   let elementAny = 0
-  let spiritBonus = 0
   for (const s of hero.slots) {
     const stone = elementStoneOf(s, l)
-    if (stone?.element && stone.elementValue) {
-      elementAny += stone.elementValue
-      // ASSUMPTION: A21 — в стихию героя идут только камни его стихии (+ Gold как универсальная).
-      const counts =
-        cls?.element === 'Any' ||
-        stone.element === cls?.element ||
-        (GOLD_ELEMENT_COUNTS_FOR_ANY_HERO && stone.element === 'Gold')
-      if (counts) elementStones += stone.elementValue
-    }
-    // ASSUMPTION: A29 — некоторые духи дают +5 стихии (Селена +5, Джорди +30); на ступени навыков не влияет.
-    if (s.spirit) spiritBonus += SPIRIT_ELEMENT_BONUS[s.spirit] ?? 0
+    if (!stone?.element || !stone.elementValue) continue
+    // ASSUMPTION: A29 — предмет со сродством к стихии камня («All» — к любой) усиливает его стихию.
+    const item = s.item ? l.items.get(s.item) : undefined
+    const bonus =
+      item && affinityMatches(item, stone.element) && stone.elementValue >= AFFINITY_ELEMENT_MIN_STONE_VALUE
+        ? AFFINITY_ELEMENT_BONUS
+        : 0
+    const value = stone.elementValue + bonus
+    elementAny += value
+    // ASSUMPTION: A21 — в стихию героя идут только камни его стихии (+ Gold как универсальная).
+    const counts =
+      cls?.element === 'Any' ||
+      stone.element === cls?.element ||
+      (GOLD_ELEMENT_COUNTS_FOR_ANY_HERO && stone.element === 'Gold')
+    if (counts) elementStones += value
   }
-  return { element: elementStones + spiritBonus, elementStones, elementAny }
+  return { element: elementStones, elementStones, elementAny }
 }
 
 /**
