@@ -329,7 +329,7 @@ export function groupStats(records: PredictionRecord[], by: GroupBy): GroupStat[
       case 'difficulty':
         return [r.quest.difficulty]
       case 'variant':
-        return [r.quest.variant === 'boss' ? 'босс' : 'обычный']
+        return [r.quest.variant === 'normal' ? 'обычный' : r.quest.variant === 'miniboss' ? 'мини-босс' : 'босс']
       case 'barrier':
         return [r.quest.barrier ? (r.barrierBroken ? 'барьер пробит' : 'барьер НЕ пробит') : 'без барьера']
       case 'extreme':

@@ -84,9 +84,12 @@ export function teamFighters(members: TeamRunMember[], data: GameData): (Fighter
   })
 }
 
-/** Подпись квеста — как в остальных местах интерфейса. */
+/** Подпись типа квеста по-русски: `miniboss` — босс с выбранным мини-боссом (A17). */
+export const QUEST_VARIANT_RU: Record<Quest['variant'], string> = { normal: 'обычный', boss: 'босс', miniboss: 'мини-босс' }
+
+/** Подпись квеста — как в остальных местах интерфейса (своя копия, чтобы не тянуть optimizer.ts: цикл). */
 export function questLabelRu(q: Quest): string {
-  return `${q.area} · ${q.variant === 'boss' ? 'босс' : 'обычный'} · ${q.difficulty}`
+  return `${q.area} · ${QUEST_VARIANT_RU[q.variant]} · ${q.difficulty}`
 }
 
 /** Суммарный вклад отряда в стихии барьера квеста: сколько нужно и сколько даёт лучшая стихия. */

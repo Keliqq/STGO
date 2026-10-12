@@ -12,6 +12,8 @@ import {
   evaCapOf,
   fighterFromChampion,
   fighterFromHero,
+  isBossQuest,
+  isDoubledInFlash,
   isDoubledVsBoss,
   mulberry32,
   parseSpecials,
@@ -19,8 +21,10 @@ import {
   resolveCombatModel,
   shuffleOrder,
   simulateTeam,
+  traceFight,
   turnOrderFor,
   type Fighter,
+  type TraceEvent,
 } from './combat.ts'
 import { AOE_CHANCE, ENEMY_CRIT_CHANCE, EXTREME_EVA_PENALTY, MAX_EVASION } from './constants.ts'
 
@@ -45,9 +49,17 @@ const quest = (over: Partial<Quest> = {}): Quest => ({
   monsterHp: 100000,
   monsterDmg: 100,
   monsterAoe: 50,
+  aoeChance: null,
+  enemyCritChance: null,
   barrier: null,
   defCaps: CAPS,
   miniBosses: [],
+  mods: [],
+  battle: null,
+  isFlash: false,
+  isNullysium: false,
+  isTomb: false,
+  tombDepth: null,
   ...over,
 })
 
@@ -410,5 +422,174 @@ describe('бойцы из данных', () => {
     // награды рангов 1..5 накопительно (A14)
     const sum = argon.ranks.filter((r) => r.rank <= 5 && r.reward).reduce((a, r) => a + r.reward!.hp, 0)
     expect(f.hp).toBe(argon.base.hp + sum)
+  })
+})
+
+// ─────────────────────── модификаторы квестов в бою (A71/A72) ───────────────────────
+
+describe('уклонение врага: герои промахиваются (A17/A71)', () => {
+  const opts = { runs: 200, seed: 7, maxRounds: 10, enemyCritChance: 0, aoeChance: 0 } as const
+
+  it('enemyEvaPp даёт промах: урон отряда падает примерно на долю уклонения', () => {
+    const q = quest({ monsterHp: 1e9, monsterDmg: 0 })
+    const noEva = simulateTeam([fighter({ atk: 1000 })], q, opts)
+    const withEva = simulateTeam([fighter({ atk: 1000 })], quest({ monsterHp: 1e9, monsterDmg: 0, battle: { enemyEvaPp: 40 } }), opts)
+    // 40% промахов → ~60% урона; допуск на шум Monte-Carlo.
+    expect(withEva.avgDamagePerRound / noEva.avgDamagePerRound).toBeGreaterThan(0.5)
+    expect(withEva.avgDamagePerRound / noEva.avgDamagePerRound).toBeLessThan(0.7)
+  })
+
+  it('без уклонения врага промахов нет', () => {
+    const p = prepare([fighter()], quest(), {})
+    expect(p.enemyEva).toBe(0)
+  })
+
+  it('первый прогон с логом: промах виден как удар с нулевым уроном', () => {
+    // `traceFight` строит свой лог (свой массив), поэтому смотрим события в результате.
+    const r = traceFight([fighter({ atk: 100 })], quest({ monsterHp: 1000, monsterDmg: 0, battle: { enemyEvaPp: 100 } }), { seed: 3, runs: 1, maxRounds: 1 })
+    const hits = r.trace.events.filter((e) => e.kind === 'heroHit')
+    expect(hits.length).toBe(1)
+    expect(hits[0].damage).toBe(0)
+    expect(hits[0].text).toMatch(/промахивается/)
+    expect(r.trace.damageDealt).toBe(0)
+  })
+})
+
+describe('смещение выбора цели по классу (hates_*, A71)', () => {
+  const opts = { runs: 400, seed: 9, maxRounds: 8, enemyCritChance: 0, aoeChance: 0 } as const
+
+  it('targetMult повышает долю атак по указанной группе', () => {
+    // Два бойца с равной угрозой и уклонением 50%: считаем уклонения — они равны числу атак по бойцу.
+    const caster = fighter({ name: 'C', group: 'Spellcaster', hp: 1e6, atk: 0, eva: 0.5, threat: 100 })
+    const brute = fighter({ name: 'F', group: 'Fighter', hp: 1e6, atk: 0, eva: 0.5, threat: 100 })
+    const q = quest({ monsterHp: 1e9, monsterDmg: 100, monsterAoe: 0 })
+    const plain = simulateTeam([caster, brute], q, opts)
+    const biased = simulateTeam([caster, brute], quest({ monsterHp: 1e9, monsterDmg: 100, monsterAoe: 0, battle: { targetGroup: 'Spellcaster', targetMult: 4 } }), opts)
+    // Без смещения доли атак равны; с ×4 по Spellcaster на него приходится 4/5 ударов.
+    expect(plain.perFighter[0].dodgeRate).toBeCloseTo(plain.perFighter[1].dodgeRate, 1)
+    expect(biased.perFighter[0].dodgeRate).toBeGreaterThan(biased.perFighter[1].dodgeRate)
+  })
+
+  it('prepare отдаёт цель и множитель', () => {
+    const p = prepare([fighter()], quest({ battle: { targetGroup: 'Rogue', targetMult: 3 } }), {})
+    expect(p.targetGroup).toBe('Rogue')
+    expect(p.targetMult).toBe(3)
+    expect(prepare([fighter()], quest(), {}).targetMult).toBe(1)
+    expect(prepare([fighter()], quest(), {}).targetGroup).toBeNull()
+  })
+})
+
+describe('первая атака врага (Swift/Lightning Fast/Lightspeed, A71)', () => {
+  const opts = { runs: 1, seed: 1, maxRounds: 1, aoeChance: 0 } as const
+
+  it('+100% ATK в первой атаке: герой теряет вдвое больше HP', () => {
+    const q = quest({ monsterHp: 1e9, monsterDmg: 100, battle: { firstAtkPct: 100 } })
+    const plain = simulateTeam([fighter({ hp: 1000, def: 0, atk: 0 })], quest({ monsterHp: 1e9, monsterDmg: 100 }), { ...opts, enemyCritChance: 0 })
+    const boosted = simulateTeam([fighter({ hp: 1000, def: 0, atk: 0 })], q, { ...opts, enemyCritChance: 0 })
+    // DEF 0 → ×1.5; без бонуса 150, с бонусом 300.
+    expect(plain.avgMinSurvivorHpPct).toBeCloseTo(0.85, 3)
+    expect(boosted.avgMinSurvivorHpPct).toBeCloseTo(0.7, 3)
+  })
+
+  it('бонус действует только в первом раунде', () => {
+    const q = quest({ monsterHp: 1e9, monsterDmg: 100, battle: { firstAtkPct: 100 } })
+    const two = simulateTeam([fighter({ hp: 1000, def: 0, atk: 0 })], q, { runs: 1, seed: 1, maxRounds: 2, aoeChance: 0, enemyCritChance: 0 })
+    // 300 + 150 = 450 потеряно из 1000 → минимум 55% HP.
+    expect(two.avgMinSurvivorHpPct).toBeCloseTo(0.55, 3)
+  })
+
+  it('п.п. крита первой атаки делают крит врага гарантированным в первом раунде', () => {
+    const p = prepare([fighter()], quest({ battle: { firstAtkCritPp: 100 } }), {})
+    expect(p.firstAtkCritPp).toBe(100)
+    const first = (battle: Quest['battle']): TraceEvent => {
+      const r = traceFight([fighter({ hp: 1e6, def: 0, atk: 0 })], quest({ monsterHp: 1000, monsterDmg: 100, battle }), { seed: 4, runs: 1, maxRounds: 1, aoeChance: 0, enemyCritChance: 0.1 })
+      const hit = r.trace.events.find((e) => e.kind === 'enemyHit')
+      if (!hit) throw new Error('нет удара врага в логе')
+      return hit
+    }
+    // 10% базовых + 100 п.п. = 110% → крит гарантирован (×1.5 от базового урона: 150 → 225).
+    expect(first({ firstAtkCritPp: 100 })).toMatchObject({ crit: true, damage: 225 })
+    // Без бонуса тот же seed крита не даёт.
+    expect(first(null).crit ?? false).toBe(false)
+  })
+})
+
+describe('штрафы квеста героям (мини-боссы, Flash/Nullysium, Гробница; A71/A72)', () => {
+  it('штраф ATK применяется как % боя', () => {
+    const q = quest({ monsterHp: 1e9, monsterDmg: 0, battle: { heroAtkPct: -50 } })
+    const plain = simulateTeam([fighter({ atk: 1000 })], quest({ monsterHp: 1e9, monsterDmg: 0 }), { runs: 5, seed: 1, maxRounds: 1, aoeChance: 0, enemyCritChance: 0 })
+    const halved = simulateTeam([fighter({ atk: 1000 })], q, { runs: 5, seed: 1, maxRounds: 1, aoeChance: 0, enemyCritChance: 0 })
+    expect(plain.avgDamagePerRound).toBeCloseTo(1000, 6)
+    expect(halved.avgDamagePerRound).toBeCloseTo(500, 6)
+  })
+
+  it('штраф ATK по классу действует только на свою группу', () => {
+    const q = quest({ monsterHp: 1e9, monsterDmg: 0, battle: { groupMods: [{ group: 'Spellcaster', heroAtkPct: -50 }] } })
+    const caster = fighter({ name: 'C', group: 'Spellcaster', atk: 1000 })
+    const brute = fighter({ name: 'F', group: 'Fighter', atk: 1000 })
+    const m = simulateTeam([caster, brute], q, { runs: 1, seed: 1, maxRounds: 1, aoeChance: 0, enemyCritChance: 0 })
+    expect(m.perFighter[0].damagePerHit).toBeCloseTo(500, 6)
+    expect(m.perFighter[1].damagePerHit).toBeCloseTo(1000, 6)
+  })
+
+  it('штраф EVA героям снижает уклонение, крит-штраф — шанс крита', () => {
+    const p = prepare([fighter({ eva: 0.5, crit: 0.5 })], quest({ battle: { heroEvaPct: -20, heroCritChancePct: -30 } }), {})
+    expect(p.selfStatic[0].eva).toBeCloseTo(-0.2, 6)
+    expect(p.selfStatic[0].crit).toBeCloseTo(-0.3, 6)
+  })
+
+  it('штраф HP героям снижает максимум HP', () => {
+    const plain = prepare([fighter({ hp: 1000 })], quest(), {}).maxHp[0]
+    const hurt = prepare([fighter({ hp: 1000 })], quest({ battle: { heroHpPct: -20 } }), {}).maxHp[0]
+    expect(plain).toBe(1000)
+    expect(hurt).toBe(800)
+  })
+
+  it('штраф урона крита героям снижает урон крита', () => {
+    const plain = simulateTeam([fighter({ atk: 1000, crit: 1, critDmg: 2 })], quest({ monsterHp: 1e9, monsterDmg: 0 }), { runs: 1, seed: 1, maxRounds: 1, aoeChance: 0, enemyCritChance: 0 })
+    const hurt = simulateTeam([fighter({ atk: 1000, crit: 1, critDmg: 2 })], quest({ monsterHp: 1e9, monsterDmg: 0, battle: { heroCritDmgPct: -25 } }), { runs: 1, seed: 1, maxRounds: 1, aoeChance: 0, enemyCritChance: 0 })
+    expect(plain.avgDamagePerRound).toBeCloseTo(2000, 6)
+    expect(hurt.avgDamagePerRound).toBeCloseTo(1750, 6)
+  })
+})
+
+describe('Flash-задания: удвоение бонусов Bjorn (A53/A72)', () => {
+  const bjorn = (): Skill => {
+    const s = data.skills.find((x) => x.name === 'Flash Strike Team')
+    if (!s) throw new Error('нет навыка Flash Strike Team')
+    return s
+  }
+
+  it('навык распознаётся как «doubled during Flash Quests»', () => {
+    expect(isDoubledInFlash(bjorn())).toBe(true)
+    expect(isDoubledVsBoss(bjorn())).toBe(false)
+  })
+
+  it('в Flash-квесте бонусы навыка удваиваются, в обычном — нет', () => {
+    const f = fighter({ atk: 1000, critDmg: 2, skills: [bjorn()] })
+    const plain = prepare([f], quest(), {})
+    const flash = prepare([f], quest({ isFlash: true }), {})
+    // Навык даёт +15% ATK самому чемпиону (scope self) → в бою удвоение видно по atkPct.
+    expect(flash.selfStatic[0].atkPct).toBeCloseTo(plain.selfStatic[0].atkPct * 2, 6)
+    expect(flash.selfStatic[0].atkPct).toBeGreaterThan(0)
+  })
+
+  it('вне Flash-квеста поведение не меняется', () => {
+    const f = fighter({ atk: 1000, skills: [bjorn()] })
+    const a = prepare([f], quest(), {})
+    const b = prepare([f], quest({ isFlash: false }), {})
+    expect(a.selfStatic[0]).toEqual(b.selfStatic[0])
+  })
+
+  it('«doubled against bosses» работает на мини-боссе (variant = miniboss)', () => {
+    const ashley = data.skills.find((x) => x.name === "Ashley's Gambit")
+    if (!ashley) throw new Error('нет навыка Ashley')
+    const f = fighter({ skills: [ashley] })
+    // Навык даёт отряду +15% ATK/DEF; на боссе бонус удваивается до +30%.
+    expect(prepare([f], quest({ variant: 'normal' }), {}).selfStatic[0].atkPct).toBeCloseTo(0.15, 6)
+    expect(prepare([f], quest({ variant: 'boss' }), {}).selfStatic[0].atkPct).toBeCloseTo(0.3, 6)
+    expect(prepare([f], quest({ variant: 'miniboss' }), {}).selfStatic[0].atkPct).toBeCloseTo(0.3, 6)
+    expect(isBossQuest(quest({ variant: 'miniboss' }))).toBe(true)
+    expect(isBossQuest(quest({ variant: 'normal' }))).toBe(false)
   })
 })

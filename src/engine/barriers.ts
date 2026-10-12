@@ -15,6 +15,7 @@
 import type { Element, GameData, HeroInstance, Quest } from '../data/types.ts'
 import { BARRIER_PAIRS_LIST_LIMIT, PARTY_HEROES_PER_BARRIER_ELEMENT } from './constants.ts'
 import { fighterFromChampion, fighterFromHero, parseSpecials, type Fighter } from './combat.ts'
+import { QUEST_VARIANT_RU } from './teamRunner.ts'
 import { effectiveClass } from './stats.ts'
 import { ELEMENT_RU } from './statWeights.ts'
 
@@ -264,7 +265,7 @@ export function barrierReport(data: GameData, quest: Quest, contributions: Roste
       advice,
     })
   }
-  return { quest, label: `${quest.area} · ${quest.variant === 'boss' ? 'босс' : 'обычный'} · ${quest.difficulty}`, partySize, elements, bonus }
+  return { quest, label: `${quest.area} · ${QUEST_VARIANT_RU[quest.variant]} · ${quest.difficulty}`, partySize, elements, bonus }
 }
 
 /** Отчёты по всем квестам с барьером (локация × сложность) — источник таблицы «Барьеры». */

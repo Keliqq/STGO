@@ -13,6 +13,7 @@ import { loadTeams } from '#/data/teams.ts'
 import { questsWithCaps, setUserQuestCap } from '#/data/sync.ts'
 import type { GameData, Quest } from '#/data/types.ts'
 import { defCapsFromCap } from '#/engine/formulas.ts'
+import { QUEST_VARIANT_RU } from '#/engine/teamRunner.ts'
 import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { type Settings, loadSettings, refreshNow, saveSettings, useDataStatus, useGameData } from '#/ui/dataSync.ts'
@@ -203,7 +204,7 @@ function UserQuestCapsSection({ data }: { data: GameData }) {
                   <TableRow key={q.id}>
                     <TableCell>{q.area}</TableCell>
                     <TableCell>{q.difficulty}</TableCell>
-                    <TableCell>{q.variant === 'boss' ? 'босс' : 'обычный'}</TableCell>
+                    <TableCell>{QUEST_VARIANT_RU[q.variant]}</TableCell>
                     <TableCell>
                       <QuestCapField quest={q} value={cap} />
                     </TableCell>

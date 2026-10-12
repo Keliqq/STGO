@@ -25,9 +25,11 @@ export function QuestPicker({
   onChange: (q: Quest | null) => void
   noneValue?: string
 }) {
-  const pick = (diff: string, variant: 'normal' | 'boss'): Quest | null =>
+  const pick = (diff: string, variant: Quest['variant']): Quest | null =>
     quests.find((q) => q.area === quest?.area && q.difficulty === diff && q.variant === variant) ?? null
   const diffs = [...new Set([...QUEST_DIFFICULTIES, ...quests.map((q) => q.difficulty)])]
+  /** Тип в списке: у квеста с мини-боссом (`miniboss`) выбран «босс» — мини-босс задаётся отдельно. */
+  const variantValue: 'normal' | 'boss' = quest && quest.variant !== 'normal' ? 'boss' : 'normal'
   return (
     <>
       <Field label={label}>
@@ -61,7 +63,7 @@ export function QuestPicker({
       <Field label="Тип">
         <NativeSelect
           className="w-28"
-          value={quest?.variant ?? 'boss'}
+          value={variantValue}
           disabled={!quest}
           onChange={(e) => onChange(pick(quest?.difficulty ?? 'Hard', e.target.value as 'normal' | 'boss'))}
         >

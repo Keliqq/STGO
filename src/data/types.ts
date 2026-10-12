@@ -257,11 +257,69 @@ export const QuestAreaSchema = z.object({
 })
 export type QuestArea = z.infer<typeof QuestAreaSchema>
 
+/**
+ * Боевые модификаторы квеста — то, что действует на ГЕРОЕВ и на уклонение ВРАГА и полями квеста
+ * не выражается. Собирает `engine/questMods.ts → applyQuestMods` из мини-босса, флагов Flash/Nullysium
+ * и выбранных модификаторов Гробницы Титанов и кладёт прямо в `Quest.battle`: тогда модификаторы уезжают
+ * в воркер вместе с квестом и не требуют отдельных параметров у каждой симуляции.
+ *
+ * Знаки — как в игре: `heroAtkPct` = −20 значит «ATK героев −20%».
+ */
+export const QuestBattleSchema = z.object({
+  /** ATK героев, % (может быть отрицательным). */
+  heroAtkPct: z.number().nullish(),
+  /** HP героев, %. */
+  heroHpPct: z.number().nullish(),
+  /**
+   * Уклонение героев, п.п. Сюда попадают и штрафы Flash/Nullysium (`evaPenalty` 30 у Nullysium,
+   * 20 у Flash на Extreme), и модификаторы Гробницы (Eagle-Eyed −20, Sniper −30) — знак отрицательный.
+   */
+  heroEvaPct: z.number().nullish(),
+  /** Урон крита героев, п.п. к множителю (Armored −25, Adamantine −70). */
+  heroCritDmgPct: z.number().nullish(),
+  /** Шанс крита героев, п.п. (Fortified −20, No Weakness −30, `critPenalty`), знак отрицательный. */
+  heroCritChancePct: z.number().nullish(),
+  /**
+   * Те же изменения, но только для одной группы классов (`magic_resistance` — Spellcaster,
+   * `stone_skinned` — Fighter). Пустая группа — изменения на всех.
+   */
+  groupMods: z
+    .array(
+      z.object({
+        group: z.enum(['Fighter', 'Rogue', 'Spellcaster']),
+        heroAtkPct: z.number().nullish(),
+        heroHpPct: z.number().nullish(),
+        heroCritChancePct: z.number().nullish(),
+        heroCritDmgPct: z.number().nullish(),
+        heroEvaPct: z.number().nullish(),
+      }),
+    )
+    .nullish(),
+  /** Уклонение ВРАГА, п.п.: доля ударов героев, которые промахиваются (A78). */
+  enemyEvaPp: nonNeg.nullish(),
+  /** Во сколько раз чаще враг выбирает целью указанную группу классов. */
+  targetGroup: z.enum(['Fighter', 'Rogue', 'Spellcaster']).nullish(),
+  targetMult: nonNeg.nullish(),
+  /** Первая атака врага: % к ATK и п.п. к шансу крита. */
+  firstAtkPct: nonNeg.nullish(),
+  firstAtkCritPp: nonNeg.nullish(),
+  /** Множитель шанса AoE (×2, ×3) — уже применён к `Quest.aoeChance`. */
+  aoeChanceMult: nonNeg.nullish(),
+  /** % к урону AoE — уже применён к `Quest.monsterAoe`. */
+  aoeDmgPct: z.number().nullish(),
+})
+export type QuestBattle = z.infer<typeof QuestBattleSchema>
+
 export const QuestSchema = z.object({
-  /** `Howling Woods|normal|Easy`. */
+  /** `Howling Woods|normal|Easy`; у Гробницы Титанов — `Tomb of Titans|tomb|<этаж>`. */
   id: z.string().min(1),
   area: z.string().min(1),
-  variant: z.enum(['normal', 'boss']),
+  /**
+   * `normal` — обычный квест, `boss` — босс локации, `miniboss` — босс с выбранным мини-боссом
+   * (Agile/Dire/Huge/Legendary/Wealthy, A17/A77). Мини-босс считается боссом: «Bonuses are doubled
+   * against bosses» работает и на нём.
+   */
+  variant: z.enum(['normal', 'boss', 'miniboss']),
   /** `Easy`/`Medium`/`Hard`/`Extreme`; у Lost City of Gold — `1`…`13`. */
   difficulty: z.string().min(1),
   minPower: int.nullable(),
@@ -275,7 +333,7 @@ export const QuestSchema = z.object({
    * для квеста известно своё значение (stcalc: 236 пар «квест × сложность» из 244 — 25%, особые — 50% и 0%).
    */
   aoeChance: nonNeg.nullish(),
-  /** Шанс крита монстра в этом квесте (доля, 0.1 = 10%); null — `ENEMY_CRIT_CHANCE` (в Башне 15%, A70). */
+  /** Шанс крита монстра в этом квесте (доля, 0.1 = 10%); null — `ENEMY_CRIT_CHANCE` (в Гробнице 15%, A70). */
   enemyCritChance: nonNeg.nullish(),
   barrier: z.object({ elements: z.array(ElementSchema).min(1), hp: int.positive() }).nullable(),
   /**
@@ -283,8 +341,23 @@ export const QuestSchema = z.object({
    * подставляются в рантайме из stcentral-hub (src/data/breakpoints.ts), см. A10.
    */
   defCaps: DefCapsSchema.nullable(),
-  /** Мини-боссов нет ни в таблице, ни на stcentral-hub (A17) — поле зарезервировано. */
+  /** Статы мини-боссов из таблицы (в листах их нет — A17); ключи выбранных модификаторов — в `mods`. */
   miniBosses: z.array(z.object({ name: z.string(), hp: int, dmg: int })),
+  /**
+   * Ключи выбранных модификаторов квеста (мини-босс, модификаторы Гробницы Титанов) — то, что
+   * пользователь отметил в форме. Нужны интерфейсу для бейджей и разбора; бой считает `battle`.
+   */
+  mods: z.array(z.string()).nullish(),
+  /** Боевые модификаторы квеста (см. `QuestBattleSchema`) — уже применённые к полям выше. */
+  battle: QuestBattleSchema.nullish(),
+  /** Flash-задание (stcalc: `isFlash`): бонусы «doubled during Flash Quests» удваиваются (A53). */
+  isFlash: z.boolean().nullish(),
+  /** Nullysium — flash-босс (stcalc: `isNullysium`): штрафы EVA/крита героям. */
+  isNullysium: z.boolean().nullish(),
+  /** Гробница Титанов / башня (stcalc: `isTomb`/`isTower`): крит врага 15% и штраф крита героям. */
+  isTomb: z.boolean().nullish(),
+  /** Номер этажа Гробницы (пользователь вводит его в форме) — только для квестов Гробницы. */
+  tombDepth: int.positive().nullish(),
 })
 export type Quest = z.infer<typeof QuestSchema>
 

@@ -21,3 +21,5 @@ fixtures/stcalc-levelstats.json
 
 test-results/
 playwright-report/
+# Служебная папка инструмента Playwright MCP (снимки и логи браузера).
+.playwright-mcp/

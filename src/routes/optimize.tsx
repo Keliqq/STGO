@@ -12,7 +12,9 @@ import { areaIconId, difficultyIconId } from '#/data/images.ts'
 import { loadHeroes, saveHeroes } from '#/data/heroStore.ts'
 import { loadConstraintOverrides, saveConstraintOverrides } from '#/data/optimizeSettings.ts'
 import { addRealityCheck, loadRealityChecks, type RealityCheck } from '#/data/realityChecks.ts'
+import { idbStore } from '#/data/storage.ts'
 import { questsWithCaps } from '#/data/sync.ts'
+import { loadTombFloors, saveTombFloors } from '#/data/tombFloors.ts'
 import { QUALITIES, type HeroInstance, type Quality, type Quest } from '#/data/types.ts'
 import {
   defaultConstraints,
@@ -26,7 +28,8 @@ import {
 import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
 import type { ChampionBuild, PowerBoosterId } from '#/engine/combat.ts'
 import { draftCopy } from '#/engine/heroEditor.ts'
-import { ENGINE_MODEL_VERSION, SEED_STAT_PER_SEED } from '#/engine/constants.ts'
+import { ENGINE_MODEL_VERSION, MINI_BOSSES, MINI_BOSS_ORDER, SEED_STAT_PER_SEED, TOMB_MODIFIERS } from '#/engine/constants.ts'
+import { applyQuestMods, miniBossDesc, tombQuest, type TombFloor } from '#/engine/questMods.ts'
 import type { SkillAdviceResult } from '#/engine/skills.ts'
 import { seedAdviceFromWeights, type SeedAdvice } from '#/engine/statWeights.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
@@ -36,6 +39,10 @@ import { Tip } from '#/ui/Hint.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 import { PowerBoosterPicker } from '#/ui/PowerBoosterPicker.tsx'
 import { powerBoosterFrom } from '#/ui/powerBooster.ts'
+import { QuestModsBadges } from '#/ui/QuestModsBadges.tsx'
+import { FlashQuestToggle, MiniBossPicker } from '#/ui/QuestModsPicker.tsx'
+import { questModsSummary } from '#/ui/questModsSummary.ts'
+import { TombFloorPanel } from '#/ui/TombFloorPanel.tsx'
 import { RealityChecksView } from '#/ui/optimize/RealityChecksView.tsx'
 import { ResultView } from '#/ui/optimize/ResultView.tsx'
 import { SimpleResultView } from '#/ui/optimize/SimpleResultView.tsx'
@@ -178,6 +185,14 @@ function OptimizePage() {
   /** Усилитель силы квеста на весь отряд (A74): выбор в форме квеста, влияет на все симуляции. */
   const [booster, setBooster] = useState<PowerBoosterId>(() => boosterFromSearch(search.booster))
   const [levelOverride, setLevelOverride] = useState('')
+  /**
+   * Модификаторы квеста (A17/A53/A71/A77): мини-босс, флаг Flash-задания и этаж Гробницы Титанов.
+   * К квесту их применяет `applyQuestMods`, поэтому дальше по коду везде идёт уже готовый квест.
+   */
+  const [miniBoss, setMiniBoss] = useState('')
+  const [flash, setFlash] = useState(false)
+  const [tombDepth, setTombDepth] = useState<number | null>(null)
+  const [tombFloors, setTombFloors] = useState<TombFloor[]>([])
 
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -197,11 +212,26 @@ function OptimizePage() {
     void loadHeroes().then((r) => setHeroes(r.heroes))
     void loadRealityChecks().then((r) => setChecks(r.checks))
     void loadConstraintOverrides().then(setOverrides)
+    void loadTombFloors(idbStore).then(setTombFloors)
   }, [])
 
   const quests = useMemo(() => (data ? questsWithCaps(data).quests : []), [data])
   const questAreas = useMemo(() => [...new Set(quests.map((q) => q.area))], [quests])
   const selectedQuest = useMemo(() => quests.find((q) => q.id === questId) ?? null, [quests, questId])
+  /** Выбранный этаж Гробницы (null — этаж не выбран). */
+  const tombFloor = useMemo(() => tombFloors.find((f) => f.depth === tombDepth) ?? null, [tombFloors, tombDepth])
+  /**
+   * Квест, с которым реально считаем: базовый из таблицы + выбранные модификаторы (мини-босс, Flash)
+   * либо синтетический квест Гробницы Титанов. Именно он уходит в оптимизатор и в «Пример боя»,
+   * поэтому бейджи, пороги и штрафы везде совпадают с симуляцией.
+   */
+  const effectiveQuest = useMemo((): Quest | null => {
+    if (tombFloor) return tombQuest(tombFloor).quest
+    if (!selectedQuest) return null
+    if (!miniBoss && !flash) return selectedQuest
+    const mods = miniBoss ? [`miniboss:${miniBoss}`] : []
+    return applyQuestMods({ ...selectedQuest, isFlash: flash }, mods).quest
+  }, [tombFloor, selectedQuest, miniBoss, flash])
   /** Сложность и тип текущего квеста: из самого квеста, иначе — из выбора пользователя (пока квеста нет). */
   const questDiff = selectedQuest?.difficulty ?? questPending?.diff ?? 'Hard'
   const questVariant = selectedQuest?.variant ?? questPending?.variant ?? 'boss'
@@ -274,8 +304,9 @@ function OptimizePage() {
     const hs = level ? selectedTeam.map((h) => ({ ...h, level })) : selectedTeam
     let qs: { quest: Quest; weight: number }[]
     if (mode === 'quest') {
-      const q = quests.find((x) => x.id === questId)
-      if (!q) return 'Выберите квест.'
+      // В режиме «квест» считаем с модификаторами: мини-босс, Flash, этаж Гробницы (см. `effectiveQuest`).
+      const q = effectiveQuest ?? quests.find((x) => x.id === questId)
+      if (!q) return tombDepth !== null ? 'Выберите этаж Гробницы Титанов.' : 'Выберите квест.'
       qs = [{ quest: q, weight: 1 }]
     } else {
       const areas = uniAreas.length > 0 ? uniAreas : uniAreaList
@@ -600,42 +631,132 @@ function OptimizePage() {
                     key={a}
                     type="button"
                     size="sm"
-                    variant={a === selectedQuest?.area ? 'default' : 'outline'}
-                    aria-pressed={a === selectedQuest?.area}
-                    onClick={() => pickQuestArea(a)}
+                    variant={a === selectedQuest?.area && !tombFloor ? 'default' : 'outline'}
+                    aria-pressed={a === selectedQuest?.area && !tombFloor}
+                    onClick={() => {
+                      setTombDepth(null)
+                      pickQuestArea(a)
+                    }}
                   >
                     <AreaLabel area={a} />
                   </Button>
                 ))}
+                <Tip text="Гробница Титанов — особый квест: статы (HP, ATK, Defense cap, барьер) и модификаторы этажа вводит пользователь, набор этажей хранится в браузере (A71/A77).">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={tombFloor ? 'default' : 'outline'}
+                    aria-pressed={tombFloor !== null}
+                    onClick={() => {
+                      setTombDepth((cur) => cur ?? tombFloors[0]?.depth ?? null)
+                      setQuestId('')
+                    }}
+                  >
+                    Гробница Титанов
+                  </Button>
+                </Tip>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <Field label="Сложность" hint="Сложность квеста определяет HP и урон босса и пороги защиты.">
-                <NativeSelect value={selectedQuest?.difficulty ?? questDiff} onChange={(e) => pickQuestParams(e.target.value, questVariant)}>
-                  {[...new Set([...DIFFS, ...quests.map((q) => q.difficulty)])].map((d) => (
-                    <NativeSelectOption key={d}>{d}</NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </Field>
-              <Field label="Тип" hint="Обычный квест или битва с боссом локации (у босса свои HP, урон и барьер).">
-                <NativeSelect value={selectedQuest?.variant ?? questVariant} onChange={(e) => pickQuestParams(questDiff, e.target.value as 'normal' | 'boss')}>
-                  <NativeSelectOption value="normal">обычный</NativeSelectOption>
-                  <NativeSelectOption value="boss">босс</NativeSelectOption>
-                </NativeSelect>
-              </Field>
-              <PowerBoosterPicker value={booster} onChange={setBooster} />
-            </div>
-            {selectedQuest ? (
-              <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                {difficultyIconId(selectedQuest.difficulty) && (
-                  <GameIcon kind="difficulty" id={difficultyIconId(selectedQuest.difficulty)} label={selectedQuest.difficulty} size={20} />
+            <details className="rounded-md border p-3" open={tombFloor !== null}>
+              <summary className="cursor-pointer text-sm">Гробница Титанов — этажи и модификаторы</summary>
+              <div className="mt-3">
+                <TombFloorPanel
+                  floors={tombFloors}
+                  selectedDepth={tombDepth}
+                  onSelect={(f) => setTombDepth(f?.depth ?? null)}
+                  onSaved={(next) => {
+                    setTombFloors(next)
+                    void saveTombFloors(next, idbStore)
+                  }}
+                />
+              </div>
+            </details>
+            {!tombFloor ? (
+              <>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <Field label="Сложность" hint="Сложность квеста определяет HP и урон босса и пороги защиты.">
+                    <NativeSelect value={selectedQuest?.difficulty ?? questDiff} onChange={(e) => pickQuestParams(e.target.value, questVariant === 'normal' ? 'normal' : 'boss')}>
+                      {[...new Set([...DIFFS, ...quests.map((q) => q.difficulty)])].map((d) => (
+                        <NativeSelectOption key={d}>{d}</NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                  <Field label="Тип" hint="Обычный квест или битва с боссом локации (у босса свои HP, урон и барьер).">
+                    <NativeSelect
+                      aria-label="Тип квеста"
+                      value={selectedQuest && selectedQuest.variant !== 'normal' ? 'boss' : 'normal'}
+                      onChange={(e) => pickQuestParams(questDiff, e.target.value as 'normal' | 'boss')}
+                    >
+                      <NativeSelectOption value="normal">обычный</NativeSelectOption>
+                      <NativeSelectOption value="boss">босс</NativeSelectOption>
+                    </NativeSelect>
+                  </Field>
+                  <MiniBossPicker value={miniBoss} onChange={setMiniBoss} />
+                  <FlashQuestToggle value={flash} onChange={setFlash} />
+                  <PowerBoosterPicker value={booster} onChange={setBooster} />
+                </div>
+                {effectiveQuest ? (
+                  <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    {difficultyIconId(effectiveQuest.difficulty) && (
+                      <GameIcon kind="difficulty" id={difficultyIconId(effectiveQuest.difficulty)} label={effectiveQuest.difficulty} size={20} />
+                    )}
+                    {questLabel(effectiveQuest)}
+                    {effectiveQuest.barrier ? ` · барьер ${effectiveQuest.barrier.elements.join('/')} ${effectiveQuest.barrier.hp}` : ''}
+                    <QuestModsBadges quest={effectiveQuest} />
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Для такого сочетания сложности и типа в этой локации квеста нет.</p>
                 )}
-                {questLabel(selectedQuest)}
-                {selectedQuest.barrier ? ` · барьер ${selectedQuest.barrier.elements.join('/')} ${selectedQuest.barrier.hp}` : ''}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Для такого сочетания сложности и типа в этой локации квеста нет.</p>
-            )}
+              </>
+            ) : null}
+            <details className="rounded-md border p-3">
+              <summary className="cursor-pointer text-sm">Справка: модификаторы квестов</summary>
+              <div className="mt-3 space-y-4 text-sm">
+                <div>
+                  <p className="mb-1 font-semibold">Мини-боссы (A17/A77)</p>
+                  <ul className="list-disc pl-5 text-muted-foreground">
+                    {MINI_BOSS_ORDER.map((key) => (
+                      <li key={key}>
+                        <span className="text-foreground">{MINI_BOSSES[key].label}</span> — {miniBossDesc(key)}
+                        {MINI_BOSSES[key].lootOnly ? ' (в модели боя не отражается)' : ''}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Источник: stcalc.com (таблица мини-боссов калькулятора). Мини-босс считается боссом, поэтому «Bonuses are doubled against bosses» на нём работает.
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 font-semibold">Flash-задания и Nullysium (A53/A77)</p>
+                  <ul className="list-disc pl-5 text-muted-foreground">
+                    <li>Лидерские навыки Bjorn («Above bonuses are doubled during Flash Quests») в Flash-задании удваиваются.</li>
+                    <li>Nullysium: герои теряют 30 п.п. уклонения и 30 п.п. шанса крита (все сложности).</li>
+                    <li>Flash-задание на Extreme: герои теряют 20 п.п. уклонения.</li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-1 font-semibold">Модификаторы Гробницы Титанов (A70/A71/A77)</p>
+                  <ul className="list-disc pl-5 text-muted-foreground">
+                    {Object.values(TOMB_MODIFIERS).map((def) => (
+                      <li key={def.key}>
+                        <span className="text-foreground">{def.label}</span> — {def.desc}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    «−N» на крит у героев — пункты к шансу крита, «−N» на урон крита — пункты к множителю урона крита (как в калькуляторе stcalc; A77). Крит врага в Гробнице — 15%,
+                    героям −20 п.п. крита; шанс AoE — 25%. Модификаторы вроде «Ambusher» (враг не промахивается первые раунды), «Nullifier» (герои стихии не участвуют) и «Steamroller»
+                    (+10% ATK врага за раунд) в модели боя не поддержаны — не выбирайте их, если нужен точный результат (A77).
+                  </p>
+                </div>
+                {effectiveQuest && questModsSummary(effectiveQuest).length > 0 ? (
+                  <div>
+                    <p className="mb-1 font-semibold">Что даёт выбранное сейчас</p>
+                    <p className="text-muted-foreground">{questModsSummary(effectiveQuest).join('; ')}.</p>
+                  </div>
+                ) : null}
+              </div>
+            </details>
           </div>
         ) : (
           <div className="space-y-4">

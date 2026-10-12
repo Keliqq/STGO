@@ -38,6 +38,7 @@ import { PLAN_WIN_THRESHOLD, RULES_DEVELION_URL, RULES_ROSTER_URL, RULES_TEAM_UR
 import { questLabel } from '#/engine/optimizer.ts'
 import type { PowerBoosterId } from '#/engine/combat.ts'
 import { rosterReport, type RosterReport } from '#/engine/roster.ts'
+import { QUEST_VARIANT_RU } from '#/engine/teamRunner.ts'
 import { planTeams, type PlanObjective, type PlannedTeam, type TeamPlanResult } from '#/engine/teamPlan.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
@@ -226,7 +227,7 @@ function RosterPage() {
                         {r.quest.difficulty}
                       </span>
                     </TableCell>
-                    <TableCell>{r.quest.variant === 'boss' ? 'босс' : 'обычный'}</TableCell>
+                    <TableCell>{QUEST_VARIANT_RU[r.quest.variant]}</TableCell>
                     <TableCell>
                       <span className="inline-flex flex-wrap items-center gap-1">
                         {r.elements.map((e, k) => (

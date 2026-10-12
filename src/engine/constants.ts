@@ -8,8 +8,9 @@
  *   · параметры, которые крутит калибровка по отметкам «проходит / не проходит», — CombatModel (combat.ts)
  *     и StatModel (stats.ts); значения по умолчанию у обоих берутся отсюда.
  * Разделы: статы предметов и героя → бой → оптимизатор → ограничения подбора → веса статов и семена →
- * навыки и кубики → план ролла → правила состава отряда и ростера → план команд.
+ * навыки и кубики → план ролла → правила состава отряда и ростера → план команд → модификаторы квестов.
  */
+import type { ClassGroup } from '../data/types.ts'
 
 /**
  * Множители статов предмета по качеству (к ATK/DEF/HP строки Normal).
@@ -351,7 +352,7 @@ export const RANDOM_BONUS_EXPECTED_FACTOR = 0.5
  * изменения формул или спец-механик старые записи кэша не отдаются (данные при этом те же).
  * Поднимать при любом изменении, влияющем на win rate (формулы, механики классов, ступени навыков).
  */
-export const ENGINE_MODEL_VERSION = 17
+export const ENGINE_MODEL_VERSION = 18
 
 /**
  * Топ-K предметов на слот после отсева по quickScore. Ранжирование по Спирмену (0,92) надёжно,
@@ -711,4 +712,201 @@ export const PLAN_IMPROVE_PASSES = 5
 export const PLAN_SIM_BUDGET = 300
 /** Порог win rate для цели «число команд с win rate ≥ порога». */
 export const PLAN_WIN_THRESHOLD = 0.5
+
+// ─────────────────────────── Модификаторы квестов ───────────────────────────
+//
+// Источник чисел — датасет и калькулятор stcalc.com (сессия 34):
+//   · https://stcalc.com/data/quests.json — статы квестов, `evaPenalty` / `critPenalty` (Nullysium, Flash),
+//     флаги `isFlash` / `isNullysium` / `isTomb` / `isTower`;
+//   · бандл калькулятора https://stcalc.com/static/js/main.<hash>.js — таблицы мини-боссов (секция
+//     мини-боссов) и модификаторов Гробницы Титанов, а также их применение в симуляции.
+// Код stcalc не копируется: здесь только числа и их смысл, проверенный в бандле.
+
+/**
+ * Мини-боссы квеста: выбор в форме квеста («Команд», «Ростера», «Подбора»). Множители применяются
+ * к HP/урону/шансу AoE/шансу крита врага и к уклонению врага:
+ *   HP ×(1 + hpPct), ATK ×(1 + atkPct), урон AoE ×(1 + aoePct), шанс AoE ×aoeMult (потолок 100%),
+ *   шанс крита врага ×critMult (потолок 100%), уклонение врага += evaPct (п.п.).
+ * `wealthy` статы не меняет вовсе — только добыча (в модели боя учитывать нечего).
+ * Значения — stcalc, `miniboss`-таблица; в игре «×3 крита» у Dire/CritMultiplier — это множитель ШАНСА
+ * крита, а не урона (в бандле: `critChance × critMult`; ASSUMPTION A77).
+ */
+export interface MiniBossDef {
+  key: string
+  /** Подпись квеста у stcalc: «Agile», «Dire», … */
+  label: string
+  /** +50% HP → 0.5. */
+  hpPct?: number
+  atkPct?: number
+  /** +25% к урону AoE. */
+  aoePct?: number
+  aoeMult?: number
+  critMult?: number
+  /** Уклонение врага в п.п. */
+  evaPct?: number
+  /** Только добыча — статы те же. */
+  lootOnly?: boolean
+}
+
+export const MINI_BOSSES: Record<string, MiniBossDef> = {
+  agile: { key: 'agile', label: 'Agile', hpPct: 0.5, evaPct: 40 },
+  dire: { key: 'dire', label: 'Dire', hpPct: 0.5, critMult: 3 },
+  huge: { key: 'huge', label: 'Huge', hpPct: 1, aoeMult: 3 },
+  legendary: { key: 'legendary', label: 'Legendary', hpPct: 0.5, atkPct: 0.25, aoePct: 0.25, critMult: 1.5, evaPct: 10 },
+  wealthy: { key: 'wealthy', label: 'Wealthy', lootOnly: true },
+}
+
+/** Порядок показа мини-боссов в интерфейсе (как в игре: от простого к «Legendary»). */
+export const MINI_BOSS_ORDER: readonly string[] = ['agile', 'dire', 'huge', 'legendary', 'wealthy']
+
+/**
+ * Модификаторы Гробницы Титанов (Tomb of Titans) — этаж собирается из одного из этих модификаторов
+ * (в игре — «проклятие» этажа). Смысл полей:
+ *   enemyHpPct / enemyAtkPct — % к HP и ATK врага;
+ *   enemyEvasionPct — уклонение врага в п.п. (герой промахивается);
+ *   aoeChanceMult / aoeDmgPct — множитель шанса AoE и % к его урону;
+ *   firstAtkPct / firstAtkCritPct — первая атака врага: % к ATK и п.п. к шансу крита;
+ *   heroAtkPct / heroCritPct / heroCritDmgPct / heroEvaPct / heroHpPct — изменения у героев
+ *     (п.п. для крита/уклонения/урона крита, % для ATK/HP); `heroGroup` — только для одной группы классов;
+ *   targetGroup + targetMult — «в N раз чаще выбирает целью» эту группу классов.
+ * Значения «−N» на стат сверены с описанием stcalc и с кодом его симуляции (ASSUMPTION A77).
+ */
+export interface QuestModifierDef {
+  key: string
+  label: string
+  /** Дословный смысл из stcalc (для «Справки»). */
+  desc: string
+  enemyHpPct?: number
+  enemyAtkPct?: number
+  enemyEvasionPct?: number
+  aoeChanceMult?: number
+  aoeDmgPct?: number
+  firstAtkPct?: number
+  firstAtkCritPct?: number
+  heroAtkPct?: number
+  heroCritPct?: number
+  heroCritDmgPct?: number
+  heroEvaPct?: number
+  heroHpPct?: number
+  heroGroup?: ClassGroup
+  targetGroup?: ClassGroup
+  targetMult?: number
+}
+
+export const TOMB_MODIFIERS: Record<string, QuestModifierDef> = {
+  adamantine: {
+    key: 'adamantine', label: 'Adamantine Skin', desc: 'ATK героев −20%, урон крита героев −70',
+    heroAtkPct: -20, heroCritDmgPct: -70,
+  },
+  armored: {
+    key: 'armored', label: 'Armored', desc: 'ATK героев −10%, урон крита героев −25',
+    heroAtkPct: -10, heroCritDmgPct: -25,
+  },
+  armored_and_plated: {
+    key: 'armored_and_plated', label: 'Armored & Plated', desc: 'ATK героев −20%, урон крита героев −50',
+    heroAtkPct: -20, heroCritDmgPct: -50,
+  },
+  eagle_eye: { key: 'eagle_eye', label: 'Eagle-Eyed', desc: 'Уклонение героев −20', heroEvaPct: -20 },
+  fortified: { key: 'fortified', label: 'Fortified', desc: 'Шанс крита героев −20', heroCritPct: -20 },
+  hates_fighters: {
+    key: 'hates_fighters', label: 'Hates Fighters', desc: 'В 2 раза чаще выбирает целью Fighter',
+    targetGroup: 'Fighter', targetMult: 2,
+  },
+  hates_rogues: {
+    key: 'hates_rogues', label: 'Hates Rogues', desc: 'В 3 раза чаще выбирает целью Rogue',
+    targetGroup: 'Rogue', targetMult: 3,
+  },
+  hates_spellcasters: {
+    key: 'hates_spellcasters', label: 'Hates Spellcasters', desc: 'В 4 раза чаще выбирает целью Spellcaster',
+    targetGroup: 'Spellcaster', targetMult: 4,
+  },
+  immortal: { key: 'immortal', label: 'Immortal', desc: 'HP врага +100%', enemyHpPct: 100 },
+  lightning_swift: {
+    key: 'lightning_swift', label: 'Lightning Fast', desc: 'Первая атака врага: ATK +100%, шанс крита +100',
+    firstAtkPct: 100, firstAtkCritPct: 100,
+  },
+  lightspeed: {
+    key: 'lightspeed', label: 'Lightspeed', desc: 'Первая атака врага: ATK +300%, шанс крита +200',
+    firstAtkPct: 300, firstAtkCritPct: 200,
+  },
+  magic_eater: {
+    key: 'magic_eater', label: 'Magic Devourer', desc: 'Цель — Spellcaster, их ATK −20%',
+    targetGroup: 'Spellcaster', targetMult: 4, heroAtkPct: -20, heroGroup: 'Spellcaster',
+  },
+  magic_resistance: {
+    key: 'magic_resistance', label: 'Magic Resistance', desc: 'ATK Spellcaster −50%',
+    heroAtkPct: -50, heroGroup: 'Spellcaster',
+  },
+  massive: {
+    key: 'massive', label: 'Massive', desc: 'Шанс AoE ×2, урон AoE +25%',
+    aoeChanceMult: 2, aoeDmgPct: 25,
+  },
+  mythical: {
+    key: 'mythical', label: 'Mythical', desc: 'HP врага +40%, ATK +30%, уклонение врага +15',
+    enemyHpPct: 40, enemyAtkPct: 30, enemyEvasionPct: 15,
+  },
+  necrotic: {
+    key: 'necrotic', label: 'Necrotic Aura', desc: 'HP героев −20%, регенерация −30',
+    heroHpPct: -20,
+  },
+  no_weakness: { key: 'no_weakness', label: 'No Weakness', desc: 'Шанс крита героев −30', heroCritPct: -30 },
+  reaper: {
+    key: 'reaper', label: 'Reaper', desc: 'Шанс крита врага +300%, урон крита +250%, HP героев −10%, регенерация −10',
+    heroHpPct: -10,
+  },
+  sniper: { key: 'sniper', label: 'Sniper', desc: 'Уклонение героев −30', heroEvaPct: -30 },
+  stone_skinned: {
+    key: 'stone_skinned', label: 'Stone Skinned', desc: 'ATK Fighter и Rogue −30%',
+    heroAtkPct: -30, heroGroup: 'Fighter',
+  },
+  swift: { key: 'swift', label: 'Swift', desc: 'Первая атака врага: ATK +100%', firstAtkPct: 100 },
+  titan_sized: {
+    key: 'titan_sized', label: 'Titanesque', desc: 'Шанс AoE ×3, урон AoE +100%',
+    aoeChanceMult: 3, aoeDmgPct: 100,
+  },
+  vigorous: { key: 'vigorous', label: 'Vigorous', desc: 'HP врага +50%', enemyHpPct: 50 },
+}
+
+// ASSUMPTION: A77 — «−N» на крит героев — это п.п. к ШАНСУ крита (`playerCritChancePct`), а «−N» на
+// урон крита — п.п. к множителю урона крита (×CritDmg), как в коде stcalc. Разбор чтений — ASSUMPTIONS.md.
+// ASSUMPTION: A77 — часть модификаторов Гробницы сознательно НЕ реализована (в модели нет их механик):
+// `ambusher` (враг не промахивается первые 3 раунда), `nullifier` (герои выбранной стихии не участвуют),
+// `steamroller` (+10% ATK врага за раунд), `aegis` (+10% барьера), `can_opener` (−50% DEF Fighter),
+// `rat_catcher` (−15% EVA Rogue), усиление крита врага (`assassin`/`deadly`/`slayer`/`bloodthirsty`) и
+// статы врага сверх HP/ATK/AoE (`powerful`/`primordial`/`supertough`/`absolute_unit`/`elusive`/`slippery`).
+
+/**
+ * Уклонение врага в Гробнице Титанов и Flash-квестах: Nullysium — `evaPenalty` 30 (все сложности),
+ * Flash-квесты на Extreme — `evaPenalty` 20 (stcalc, `difficulties.*.evaPenalty`). Это штраф УКЛОНЕНИЮ
+ * ГЕРОЕВ (герой чаще получает удар), а не уклонение врага. Поле квеста: `Quest.battle.heroEvaPct`.
+ */
+// ASSUMPTION: A77 — поле в датасете читается как штраф EVA героя (в описании Nullysium «−30 EVA»),
+// в коде stcalc применяется к уклонению героя в бою.
+export const NULLYSSIUM_EVA_PENALTY_PP = 30
+/** Штраф шансу крита героев у Nullysium (stcalc: `critPenalty` 30, все сложности). */
+export const NULLYSSIUM_CRIT_PENALTY_PP = 30
+/** Штрафы Flash-квестов на Extreme (stcalc: `evaPenalty` 20 у всех записей Flash). */
+export const FLASH_EXTREME_EVA_PENALTY_PP = 20
+
+/**
+ * Статы Гробницы Титанов по умолчанию (stcalc, `isTomb`, в датасете одно значение на все сложности):
+ * HP 9 000 000, ATK 300, урон AoE 150, шанс AoE 25%, шанс крита 15%, HP барьера 350,
+ * Defense cap 153 600 (пороги 25 600 / 51 200 / 153 600 — «X · 2X · 6X»). Пользователь вводит своё
+ * значение этажа (глубина меняет HP/ATK/порог), поэтому константы — только значения по умолчанию.
+ */
+export const TOMB_DEFAULT_STATS = {
+  monsterHp: 9_000_000,
+  monsterDmg: 300,
+  monsterAoe: 150,
+  defenseCap: 153_600,
+} as const
+/** Название локации Гробницы: совпадает с именем в QUESTS и в датасете stcalc. */
+export const TOMB_AREA = 'Tomb of Titans'
+
+/**
+ * Клауза навыка Bjorn «Above bonuses are doubled during Flash Quests» (A53): в Flash-квесте его эффекты
+ * удваиваются, как «Bonuses are doubled against bosses» у Ashley — в боссовом. Источник: stcalc,
+ * `doubleOnFlash` у навыков Bjorn; у нас распознаётся по тексту навыка.
+ */
+export const FLASH_QUEST_BONUS_RE = /doubled during flash quests/i
 

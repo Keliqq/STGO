@@ -314,6 +314,21 @@ SLOTS (QUEST SLOTS) ─────────► `engine/roster.ts → maxQues
 
 **«Defense cap с экрана игры» (A71).** Для квестов, у которых порогов нет ни в таблице, ни на stcentral-hub (Lost City of Gold и всё, что не совпало), на странице «Данные» есть поле ввода одного числа — cap (порог 75%). Хранится только в браузере пользователя: `data/questCaps.ts`, ключ IndexedDB `questCaps`, запись вида `{"<Quest.id>": 159600}`; zod-схема — положительные целые. Пороги хаба важнее: значение подставляется лишь тем квестам, у которых `defCaps` остался null.
 
+**Сессия 34 — модификаторы квеста (A17/A53/A71/A77/A78).** Ещё необязательные поля `Quest`; их заполняет
+`engine/questMods.ts → applyQuestMods`, а не таблица, поэтому в снапшот они не попадают:
+
+| Поле | Что это | Кто заполняет |
+|---|---|---|
+| `Quest.variant: 'normal' \| 'boss' \| 'miniboss'` | тип квеста; `miniboss` — босс с выбранным мини-боссом (считается боссом для «doubled against bosses») | `applyMiniBoss` |
+| `Quest.mods: string[]` | ключи выбранных модификаторов (`miniboss:<key>`, ключи `TOMB_MODIFIERS`) — для бейджей и разбора | `applyQuestMods` |
+| `Quest.battle: QuestBattle \| null` | всё, что действует на героев и на уклонение врага: штрафы ATK/HP/EVA/крита/урона крита (общие и `groupMods` по классу), `enemyEvaPp`, `targetGroup`/`targetMult`, `firstAtkPct`/`firstAtkCritPp`, `aoeChanceMult`/`aoeDmgPct` | `applyQuestMods` |
+| `Quest.isFlash` / `Quest.isNullysium` | Flash-задание и его версия Nullysium: удвоение бонусов Bjorn (A53) и штрафы EVA/крита героям | форма квеста |
+| `Quest.isTomb` / `Quest.tombDepth` | Гробница Титанов: крит врага 15%, героям −20 п.п. крита, номер этажа | `questMods.ts → tombQuest` |
+
+Квест Гробницы — синтетический: `id = "Tomb of Titans|tomb|<этаж>"`, статы вводит пользователь
+(`data/tombFloors.ts`, ключ IndexedDB `tombFloors`, экспорт/импорт JSON), пороги считает `defCapsFromCap`.
+Бой читает эти поля прямо из квеста (`combat.ts → prepare`), поэтому отдельных параметров у симуляции нет.
+
 ## QUEST COMPONENTS
 
 67 строк × 5 колонок, строка 0 — заголовок: `Name` (ключ) → `Type` (`---` | `Artifact` | `Timewarped`) → `Tier` (int) → `Value` (int) → `Quest Area` (одна или несколько локаций через `, `, обычный регистр). Движку подбора экипировки не нужен.

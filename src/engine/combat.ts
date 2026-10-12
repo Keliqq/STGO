@@ -31,6 +31,7 @@ import {
   ELEMENT_RU,
   ENEMY_CRIT_CHANCE,
   ENEMY_DMG_MAX_FACTOR,
+  FLASH_QUEST_BONUS_RE,
   MANA_SHIELD_RECHARGE_ROUNDS,
   MAX_ROUNDS,
   NEGATIVE_EVA_CRIT_MODE,
@@ -339,6 +340,7 @@ const SPECIAL_RE = {
   evaSet: /evasion is set to (\d+)%/i,
   critSet: /critical hit chance is set to (\d+)% and cannot change/i,
   doubledVsBoss: /bonuses are doubled against bosses/i,
+  doubledInFlash: FLASH_QUEST_BONUS_RE,
   hpEscalation: /effect is doubled when below (\d+)% hp and tripled when below (\d+)% hp/i,
   regain: /regain bonuses after (\d+) rounds?/i,
   execute: /upon striking, defeat any enemy below (\d+)% hp/i,
@@ -418,6 +420,20 @@ function hpEscalationOf(skill: Skill): { doubleBelow: number; tripleBelow: numbe
 
 export function isDoubledVsBoss(skill: Skill): boolean {
   return SPECIAL_RE.doubledVsBoss.test(skill.text)
+}
+
+/**
+ * «Above bonuses are doubled during Flash Quests» (лидерские навыки Bjorn, A53): в Flash-квестах
+ * (в том числе Nullysium, stcalc `isFlash`/`isNullysium`) удваиваются ATK/DEF/HP/мана-щит/крит/уклонение
+ * и урон крита — ровно тот набор полей, что удваивает stcalc (`doubleOnFlash`).
+ */
+export function isDoubledInFlash(skill: Skill): boolean {
+  return SPECIAL_RE.doubledInFlash.test(skill.text)
+}
+
+/** Квест считается боссовым (обычный босс или босс с мини-боссом) — для «doubled against bosses». */
+export function isBossQuest(quest: Pick<Quest, 'variant'>): boolean {
+  return quest.variant === 'boss' || quest.variant === 'miniboss'
 }
 
 /** Боец из героя пользователя (ступени навыков — по стихии без духов, A29). */
@@ -868,6 +884,22 @@ export interface Prepared {
   untilDamaged: boolean[]
   /** Вторая попытка при поражении (Chronomancer/Fateweaver), null — её нет. */
   secondAttempt: { powerBonusPct: number } | null
+  /**
+   * Уклонение ВРАГА (доля): шанс, что удар врага целиком промахнётся (мини-босс Agile/Legendary и
+   * модификаторы Гробницы). 0 — враг не уклоняется. Источник — `quest.battle.enemyEvaPp`.
+   */
+  enemyEva: number
+  /**
+   * Во сколько раз чаще враг выбирает целью бойца указанной группы классов (`quest.battle.targetGroup` /
+   * `targetMult`). 1 — без смещения. В stcalc это `targetClassBias` (hates_fighters ×2 и т. п.).
+   */
+  targetMult: number
+  /** Группа классов, к которой относится `targetMult`; null — смещения нет. */
+  targetGroup: ClassGroup | null
+  /** Первая атака врага усилена: % к ATK (`quest.battle.firstAtkPct`, Swift/Lightning Fast/Lightspeed). */
+  firstAtkPct: number
+  /** И п.п. к шансу крита в этой первой атаке (`firstAtkCritPp`). */
+  firstAtkCritPp: number
 }
 
 /**
@@ -894,7 +926,9 @@ export function innateBonusLoss(f: Fighter, damagedBefore: boolean): { eva: numb
 
 /** Состояние симуляции до прогонов — переиспользуется score.ts для аналитической оценки. */
 export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Prepared {
-  const isBoss = quest.variant === 'boss'
+  const isBoss = isBossQuest(quest)
+  // Flash-задание (stcalc `isFlash`): «Above bonuses are doubled during Flash Quests» (A53/A72).
+  const isFlash = quest.isFlash === true
   const specials = fighters.map((f) => parseSpecials(f.skills))
   const groupCounts: Record<ClassGroup, number> = { Fighter: 0, Rogue: 0, Spellcaster: 0 }
   for (const f of fighters) if (f.group) groupCounts[f.group]++
@@ -904,7 +938,8 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   const selfRefs: CondRef[][] = fighters.map(() => [])
   fighters.forEach((f, i) => {
     for (const sk of f.skills) {
-      const dbl = isBoss && isDoubledVsBoss(sk)
+      // Два независимых удвоения: «against bosses» (Ashley) и «during Flash Quests» (Bjorn, A53).
+      const dbl = (isBoss && isDoubledVsBoss(sk)) || (isFlash && isDoubledInFlash(sk))
       // Эскалация — только у эффектов того навыка, в тексте которого она написана (Berserk Rage),
       // а не у всех условных эффектов бойца.
       const esc = hpEscalationOf(sk)
@@ -937,6 +972,22 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   const combat = resolveCombatModel(opts.model)
   // Усилитель силы квеста (A74): % боя на весь отряд, складывается с % карточки (A62), не поверх.
   const booster = POWER_BOOSTERS[opts.powerBooster ?? 'none']
+  /**
+   * Модификаторы квеста (A71/A72): `quest.battle` — мини-боссы, Flash/Nullysium, Гробница Титанов.
+   * Статы врага к этому моменту уже в полях квеста (`questMods.ts → applyQuestMods`), здесь —
+   * то, что действует на героев (штрафы по классу), уклонение врага, первая атака и цель по классу.
+   */
+  const battle = quest.battle ?? null
+  const groupModByGroup = new Map<ClassGroup, { atkPct: number; hpPct: number; crit: number; critDmg: number; eva: number }>()
+  for (const g of battle?.groupMods ?? []) {
+    const cur = groupModByGroup.get(g.group) ?? { atkPct: 0, hpPct: 0, crit: 0, critDmg: 0, eva: 0 }
+    cur.atkPct += (g.heroAtkPct ?? 0) / 100
+    cur.hpPct += (g.heroHpPct ?? 0) / 100
+    cur.crit += (g.heroCritChancePct ?? 0) / 100
+    cur.critDmg += (g.heroCritDmgPct ?? 0) / 100
+    cur.eva += (g.heroEvaPct ?? 0) / 100
+    groupModByGroup.set(g.group, cur)
+  }
 
   fighters.forEach((f, i) => {
     const sm = emptyMods()
@@ -945,8 +996,21 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     sm.defPct += booster.defPct / 100
     sm.crit += booster.crit
     sm.critDmg += booster.critDmg
+    // Штрафы квеста героям: общие (Flash/Nullysium, броня Гробницы) и по группе классов (Stone Skinned).
+    sm.atkPct += (battle?.heroAtkPct ?? 0) / 100
+    sm.crit += (battle?.heroCritChancePct ?? 0) / 100
+    sm.critDmg += (battle?.heroCritDmgPct ?? 0) / 100
+    sm.eva += (battle?.heroEvaPct ?? 0) / 100
+    const gm = f.group ? groupModByGroup.get(f.group) : undefined
+    if (gm) {
+      sm.atkPct += gm.atkPct
+      sm.crit += gm.crit
+      sm.critDmg += gm.critDmg
+      sm.eva += gm.eva
+    }
     const cond: CondRef[] = []
-    let hpPct = 0
+    let hpPct = (battle?.heroHpPct ?? 0) / 100
+    if (gm) hpPct += gm.hpPct
     let hpFlat = 0
     let manaPct = 0
     let manaFlat = 0
@@ -1005,6 +1069,12 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     evaCaps: specials.map((s) => evaCapOf(s)),
     untilDamaged: fighters.map(tracksUntilDamaged),
     secondAttempt: retry ? { powerBonusPct: retry.secondAttemptPowerPct } : null,
+    // Модификаторы квеста (A71/A72): уклонение врага, цель по классу и первая атака.
+    enemyEva: (battle?.enemyEvaPp ?? 0) / 100,
+    targetMult: battle?.targetGroup ? Math.max(1, battle.targetMult ?? 1) : 1,
+    targetGroup: battle?.targetGroup ?? null,
+    firstAtkPct: battle?.firstAtkPct ?? 0,
+    firstAtkCritPp: battle?.firstAtkCritPp ?? 0,
   }
 }
 
@@ -1097,7 +1167,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
   let protectLeft = p.specials.reduce((a, s) => a + (s.lethalProtect ? 1 : 0), 0)
   let monsterHp = quest.monsterHp
   let dmgDealt = 0
-  let round = 1
+  let round: number
   const mods = new Array<Mods>(n)
 
   // Жив/раунд гибели — заново на каждую попытку (счётчики ударов и уклонений копятся по обеим).
@@ -1126,7 +1196,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       round: r,
       selfHpFrac: hp[i] / p.maxHp[i],
       enemyHpFrac,
-      isBoss: quest.variant === 'boss',
+      isBoss: isBossQuest(quest),
       damagedBefore: damagedBefore[i],
       groupCounts: p.groupCounts,
     }
@@ -1148,7 +1218,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     return m === Infinity ? 0 : m
   }
 
-  const tryHit = (i: number, baseDmg: number, aoe: boolean): void => {
+  const tryHit = (i: number, baseDmg: number, aoe: boolean, roundNo: number, firstAtk: boolean): void => {
     if (!alive[i]) return
     const f = p.fighters[i]
     const sp = p.specials[i]
@@ -1156,11 +1226,11 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     const st = per[i]
     st.attacksOn++
     // «Guaranteed evasion … on the first round» (Daimyo): в 1-м раунде удары не проходят вовсе.
-    if (sp.firstRoundEva && round === 1) {
+    if (sp.firstRoundEva && roundNo === 1) {
       st.dodges++
       if (sp.riposte) riposteArmed[i] = true
       if (trace) {
-        trace.push({ round, kind: 'dodge', side: 'heroes', fighter: i, aoe: aoe || undefined, text: `${f.name} уклоняется — гарантированное уклонение в 1-м раунде${aoe ? ' (AoE)' : ''}` })
+        trace.push({ round: roundNo, kind: 'dodge', side: 'heroes', fighter: i, aoe: aoe || undefined, text: `${f.name} уклоняется — гарантированное уклонение в 1-м раунде${aoe ? ' (AoE)' : ''}` })
       }
       return
     }
@@ -1172,17 +1242,20 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       st.dodges++
       if (sp.riposte) riposteArmed[i] = true
       if (trace) {
-        trace.push({ round, kind: 'dodge', side: 'heroes', fighter: i, aoe: aoe || undefined, text: `${f.name} уклоняется (EVA ${Math.round(eva * 100)}%)${aoe ? ' · AoE' : ''}` })
+        trace.push({ round: roundNo, kind: 'dodge', side: 'heroes', fighter: i, aoe: aoe || undefined, text: `${f.name} уклоняется (EVA ${Math.round(eva * 100)}%)${aoe ? ' · AoE' : ''}` })
       }
       return
     }
+    // Первая атака врага (Swift/Lightning Fast/Lightspeed, A71): % к ATK и п.п. к шансу крита.
+    const dmgBase = firstAtk ? baseDmg * (1 + p.firstAtkPct / 100) : baseDmg
     const defEff = combatStat(f.def, f.sheetPct?.def ?? 0, m.defFlat, m.defPct, p.combat.pctStacking)
-    let dmg = baseDmg * damageFactor(defEff, quest.defCaps, p.combat)
+    let dmg = dmgBase * damageFactor(defEff, quest.defCaps, p.combat)
     // A59: у героя с отрицательным уклонением (только на Extreme) шанс крита врага выше базового.
     // Как именно выше (базовый + надбавка или надбавка вместо базового) — параметр A57.
+    const critChance = p.enemyCritChance + (firstAtk ? p.firstAtkCritPp / 100 : 0)
     let crit = false
-    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva, p.negativeEvaCrit)) {
-      dmg = enemyCritDamage(dmg, baseDmg)
+    if (rng() < enemyCritChanceVs(critChance, eva, p.negativeEvaCrit)) {
+      dmg = enemyCritDamage(dmg, dmgBase)
       crit = true
     }
     let absorbed = 0
@@ -1192,33 +1265,33 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       dmg -= absorbed
     }
     hitThisRound[i] = true
-    if (!damagedBefore[i]) lostRound[i] = round
+    if (!damagedBefore[i]) lostRound[i] = roundNo
     damagedBefore[i] = true
     hp[i] -= dmg
     if (trace) {
       if (absorbed > 0) {
-        trace.push({ round, kind: 'manaAbsorb', side: 'heroes', fighter: i, absorbed: r0(absorbed), text: `Мана-щит ${f.name} поглощает ${r0(absorbed)} урона (осталось ${r0(mana[i])})` })
+        trace.push({ round: roundNo, kind: 'manaAbsorb', side: 'heroes', fighter: i, absorbed: r0(absorbed), text: `Мана-щит ${f.name} поглощает ${r0(absorbed)} урона (осталось ${r0(mana[i])})` })
       }
       trace.push({
-        round, kind: 'enemyHit', side: 'enemy', fighter: i, damage: r0(dmg), crit: crit || undefined, aoe: aoe || undefined,
-        text: `Монстр бьёт ${f.name}: ${r0(dmg)}${crit ? ' (крит)' : ''}${aoe ? ' · AoE' : ''}${absorbed > 0 ? ` (щит поглотил ${r0(absorbed)})` : ''} · HP ${Math.max(0, r0(hp[i]))}/${p.maxHp[i]}`,
+        round: roundNo, kind: 'enemyHit', side: 'enemy', fighter: i, damage: r0(dmg), crit: crit || undefined, aoe: aoe || undefined,
+        text: `Монстр бьёт ${f.name}${firstAtk && p.firstAtkPct > 0 ? ' (первая усиленная атака)' : ''}: ${r0(dmg)}${crit ? ' (крит)' : ''}${aoe ? ' · AoE' : ''}${absorbed > 0 ? ` (щит поглотил ${r0(absorbed)})` : ''} · HP ${Math.max(0, r0(hp[i]))}/${p.maxHp[i]}`,
       })
     }
     if (hp[i] <= 0) {
       if (protectLeft > 0 && !sp.lethalProtect) {
         protectLeft--
         hp[i] = 1
-        if (trace) trace.push({ round, kind: 'deathSave', side: 'heroes', fighter: i, text: `${f.name} выживает: союзник принял смертельный удар (1 HP)` })
+        if (trace) trace.push({ round: roundNo, kind: 'deathSave', side: 'heroes', fighter: i, text: `${f.name} выживает: союзник принял смертельный удар (1 HP)` })
       } else if (!surviveUsed[i] && sp.survivePct > 0 && rng() * 100 < sp.survivePct) {
         surviveUsed[i] = true
         hp[i] = 1
-        if (trace) trace.push({ round, kind: 'deathSave', side: 'heroes', fighter: i, text: `${f.name} переживает смертельный удар (шанс ${sp.survivePct}%, остаётся 1 HP)` })
+        if (trace) trace.push({ round: roundNo, kind: 'deathSave', side: 'heroes', fighter: i, text: `${f.name} переживает смертельный удар (шанс ${sp.survivePct}%, остаётся 1 HP)` })
       } else {
         alive[i] = false
         hp[i] = 0
         st.alive = false
-        st.deathRound = round
-        if (trace) trace.push({ round, kind: 'death', side: 'heroes', fighter: i, text: `${f.name} погибает` })
+        st.deathRound = roundNo
+        if (trace) trace.push({ round: roundNo, kind: 'death', side: 'heroes', fighter: i, text: `${f.name} погибает` })
       }
     }
   }
@@ -1231,21 +1304,27 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     // — фаза монстра —
     const aliveIdx: number[] = []
     let threatSum = 0
-    for (let i = 0; i < n; i++) if (alive[i]) { aliveIdx.push(i); threatSum += Math.max(0, p.fighters[i].threat) }
+    for (let i = 0; i < n; i++) {
+      if (!alive[i]) continue
+      aliveIdx.push(i)
+      // «Hates <класс>» (A71): угроза бойца этой группы умножается — враг выбирает её чаще.
+      threatSum += Math.max(0, p.fighters[i].threat) * (p.targetGroup && p.fighters[i].group === p.targetGroup ? p.targetMult : 1)
+    }
     if (aliveIdx.length === 0) return { win: false, rounds: round - 1, alive, dmgDealt, minSurvivorHpFrac: 0 }
     if (aliveIdx.length > 1 && rng() < p.aoeChance) {
       if (trace) {
         trace.push({ round, kind: 'enemyAoe', side: 'enemy', fighter: -1, aoe: true, text: `Монстр применяет AoE по всем (${aliveIdx.length} живых) · базовый урон ${r0(quest.monsterAoe)}` })
       }
-      for (const i of aliveIdx) tryHit(i, quest.monsterAoe, true)
+      for (const i of aliveIdx) tryHit(i, quest.monsterAoe, true, round, round === 1)
     } else {
       let roll = rng() * threatSum
       let target = aliveIdx[aliveIdx.length - 1]
       for (const i of aliveIdx) {
-        roll -= Math.max(0, p.fighters[i].threat)
+        const w = Math.max(0, p.fighters[i].threat) * (p.targetGroup && p.fighters[i].group === p.targetGroup ? p.targetMult : 1)
+        roll -= w
         if (roll <= 0) { target = i; break }
       }
-      tryHit(target, quest.monsterDmg, false)
+      tryHit(target, quest.monsterDmg, false, round, round === 1)
     }
     if (aliveIdx.every((i) => !alive[i])) return { win: false, rounds: round, alive, dmgDealt, minSurvivorHpFrac: 0 }
 
@@ -1273,6 +1352,19 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       let atk = combatStat(f.atk, f.sheetPct?.atk ?? 0, atkFlat, m.atkPct, p.combat.pctStacking) * atkBonus
       if (sp.threatAtkPct > 0) atk *= threatAttackMultiplier(sp.threatAtkPct, f.threat)
       const critChance = sp.critSet ?? f.crit + m.crit
+
+      // Уклонение ВРАГА (A71): удар героя промахивается с этим шансом (Agile 40%, Legendary 10%,
+      // Mythical +15 у этажа Гробницы). Герой всё равно потратил ход — считаем это ударом с нулевым уроном.
+      if (p.enemyEva > 0 && rng() < p.enemyEva) {
+        st.hits++
+        if (trace) {
+          trace.push({
+            round, kind: 'heroHit', side: 'heroes', fighter: i, damage: 0,
+            text: `${f.name} промахивается — уклонение врага ${Math.round(p.enemyEva * 100)}% · монстр ${Math.max(0, r0(monsterHp))}/${r0(quest.monsterHp)}`,
+          })
+        }
+        continue
+      }
 
       let isCrit = false
       if (riposteArmed[i]) {

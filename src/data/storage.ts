@@ -48,4 +48,6 @@ export const KEYS = {
   optimizeSettings: 'optimizeSettings',
   /** «Defense cap с экрана игры» по квестам (A71): то, что ввёл пользователь на странице «Данные». */
   questCaps: 'questCaps',
+  /** Этажи Гробницы Титанов (A71/A72): HP/ATK/cap/барьер и модификаторы, введённые пользователем. */
+  tombFloors: 'tombFloors',
 } as const

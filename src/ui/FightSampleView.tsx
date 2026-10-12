@@ -17,6 +17,7 @@ import {
   type TraceSide,
 } from '#/engine/combat.ts'
 import { DEFAULT_SIM_RUNS } from '#/engine/constants.ts'
+import { QUEST_VARIANT_RU } from '#/engine/teamRunner.ts'
 import type { Engine } from '#/worker/client.ts'
 import { FighterSummaryTable, type FighterSummaryRow } from '#/ui/FighterSummaryTable.tsx'
 
@@ -119,7 +120,7 @@ export function FightSampleView({
         <summary className="cursor-pointer text-sm font-semibold">
           {title}{' '}
           <span className="font-normal text-muted-foreground">
-            · {quest.area} ({quest.variant === 'boss' ? 'босс' : 'обычный'}, {quest.difficulty}) · лог одного боя из прогона и сводка по бойцам
+            · {quest.area} ({QUEST_VARIANT_RU[quest.variant]}, {quest.difficulty}) · лог одного боя из прогона и сводка по бойцам
           </span>
         </summary>
         <div className="mt-3">

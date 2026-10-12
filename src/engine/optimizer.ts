@@ -238,8 +238,11 @@ const configKey = (cfgs: HeroConfig[]): string => cfgs.map(heroKey).join('#')
 const cloneSlot = (c: SlotConfig): SlotConfig => ({ ...c })
 const cloneTeam = (cfgs: HeroConfig[]): HeroConfig[] => cfgs.map((h) => h.map(cloneSlot))
 
+/** Пометка типа квеста для интерфейса: `miniboss` — босс с выбранным мини-боссом (A17). */
+export const QUEST_VARIANT_RU: Record<Quest['variant'], string> = { normal: 'обычный', boss: 'босс', miniboss: 'мини-босс' }
+
 export function questLabel(q: Quest): string {
-  return `${q.area} · ${q.variant === 'boss' ? 'босс' : 'обычный'} · ${q.difficulty}`
+  return `${q.area} · ${QUEST_VARIANT_RU[q.variant]} · ${q.difficulty}`
 }
 
 /** Герой с заменённой экипировкой (конфиг слотов) — для тестов и UI. */
