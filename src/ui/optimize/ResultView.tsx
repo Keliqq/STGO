@@ -3,12 +3,16 @@ import { cn } from 'cn'
 import { Badge } from '#/components/ui/badge.tsx'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table.tsx'
 import { elementIconId, spiritIconId } from '#/data/images.ts'
-import type { GameData, HeroInstance } from '#/data/types.ts'
+import type { GameData, HeroInstance, Quest } from '#/data/types.ts'
 import { modelWarning } from '#/engine/classModel.ts'
+import { fighterFromChampion, fighterFromHero, type ChampionBuild, type PowerBoosterId } from '#/engine/combat.ts'
+import { defAdvice } from '#/engine/defAdvice.ts'
 import type { OptimizerResult } from '#/engine/optimizer.ts'
 import { applyHeroConfig } from '#/engine/optimizer.ts'
 import type { SeedAdvice } from '#/engine/statWeights.ts'
 import { calcStats, effectiveClass } from '#/engine/stats.ts'
+import type { Engine } from '#/worker/client.ts'
+import { FightSampleView } from '#/ui/FightSampleView.tsx'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { Hint, HintLabel, Tip } from '#/ui/Hint.tsx'
 import { DraftBadge } from '#/ui/heroes/heroStatTable.tsx'
@@ -24,6 +28,14 @@ interface ResultViewProps {
   objectiveLabel: string
   /** Совет по семенам (из воркера; может отсутствовать). */
   seeds?: (SeedAdvice & { heroIndex: number })[]
+  /** Квест подбора — для «Примера боя» и подсказки по защите (в универсальном режиме null). */
+  quest?: Quest | null
+  /** Экипировка чемпиона, с которой шёл подбор: без неё пример боя был бы не про этот отряд. */
+  championBuild?: ChampionBuild | null
+  /** Воркер движка: «Пример боя» считается в нём. */
+  engine?: Engine | null
+  /** Усилитель силы квеста, с которым шёл подбор (A74) — те же условия в примере боя. */
+  powerBooster?: PowerBoosterId
 }
 
 /** Пометка о точности: класс героя смоделирован не полностью (src/engine/classModel.ts). */
@@ -35,9 +47,22 @@ function ModelNote({ hero, data }: { hero?: HeroInstance; data: GameData }) {
 }
 
 /** Секция «Результат»: цель, таблица по локациям и подобранные наборы героев. */
-export function ResultView({ data, team, result: { res, fromCache }, objectiveLabel, seeds }: ResultViewProps) {
+export function ResultView({ data, team, result: { res, fromCache }, objectiveLabel, seeds, quest, championBuild, engine, powerBooster }: ResultViewProps) {
   const itemByName = useMemo(() => new Map(data.items.map((i) => [i.name, i])), [data])
   const enchantByName = useMemo(() => new Map(data.enchants.map((e) => [e.name, e])), [data])
+  /**
+   * Бойцы с подобранной экипировкой (герои, затем чемпион) — из них строится «Пример боя» и
+   * подсказка по защите: HP отряда нужен, чтобы не советовать урезать DEF бойцу с малым HP (A75).
+   */
+  const fighters = useMemo(() => {
+    const out = team.map((h, i) => fighterFromHero(res.configs[i] ? applyHeroConfig(h, res.configs[i]) : h, data))
+    if (championBuild) {
+      const champ = data.champions.find((c) => c.name === championBuild.champion)
+      if (champ) out.push(fighterFromChampion(champ, championBuild.rank, data, championBuild))
+    }
+    return out
+  }, [team, res.configs, data, championBuild])
+  const partyHp = useMemo(() => fighters.map((f) => f.hp), [fighters])
 
   return (
     <Section title="Результат">
@@ -96,13 +121,16 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
         {res.configs.map((cfg, hi) => {
           const hero = team[hi]
           const heroDef = hero ? calcStats(applyHeroConfig(hero, cfg), data).def : 0
+          const advice = defAdvice({ def: fighters[hi]?.def ?? heroDef, hp: fighters[hi]?.hp ?? 0, partyHp, caps: quest?.defCaps ?? null })
           return (
             <div key={hero?.id ?? hi} className="rounded-lg border p-3">
               <h3 className="mb-2 font-semibold">
                 {hero?.name ?? `Герой ${hi + 1}`} {hero?.draft ? <DraftBadge /> : null}{' '}
                 {heroDef > 0 ? (
-                  <Tip text="Защита героя с подобранным набором. От неё зависят пороги защиты квеста.">
-                    <span className="cursor-help text-xs font-normal text-muted-foreground">DEF {heroDef}</span>
+                  <Tip text={advice.text}>
+                    <span className="cursor-help text-xs font-normal text-muted-foreground underline decoration-dotted underline-offset-4">
+                      DEF {heroDef} · {advice.short}
+                    </span>
                   </Tip>
                 ) : null}
               </h3>
@@ -166,6 +194,10 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
           )
         })}
       </div>
+
+      {quest && fighters.length > 0 ? (
+        <FightSampleView engine={engine ?? null} fighters={fighters} quest={quest} powerBooster={powerBooster} />
+      ) : null}
 
       {res.statWeights ? (
         <div className="mt-6">

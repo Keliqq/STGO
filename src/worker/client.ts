@@ -8,7 +8,7 @@ import * as Comlink from 'comlink'
 import EngineWorker from './engine.worker?worker'
 import type { EngineApi } from './engine.worker.ts'
 import type { QuestCheckSuggestion } from '../engine/calibration.ts'
-import type { Fighter, PowerBoosterId, SimMetrics } from '../engine/combat.ts'
+import type { Fighter, FightTraceResult, PowerBoosterId, SimMetrics } from '../engine/combat.ts'
 import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
 import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
 import type { SeedAdvice, StatWeightsResult } from '../engine/statWeights.ts'
@@ -26,6 +26,12 @@ export interface Engine {
     opts?: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean; powerBooster?: PowerBoosterId },
     onProgress?: (done: number, total: number) => void,
   ): Promise<SimMetrics>
+  /** «Пример боя» (лог одного прогона) + метрики всех прогонов со сводкой по бойцам (в воркере). */
+  traceFight(
+    fighters: Fighter[],
+    quest: Quest,
+    opts?: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean; powerBooster?: PowerBoosterId; enemyCritChance?: number; aoeChance?: number },
+  ): Promise<FightTraceResult>
   /** Вклад навыков в win rate и советы по перекидке (выполняется в воркере). */
   skillAdvice(
     data: GameData,
@@ -105,6 +111,7 @@ export function createEngine(store: KeyValueStore = idbStore): Engine {
   return {
     simulate: (fighters, quest, opts, onProgress) =>
       remote.simulate(fighters, quest, opts ?? {}, onProgress ? Comlink.proxy(onProgress) : undefined),
+    traceFight: (fighters, quest, opts) => remote.traceFight(fighters, quest, opts ?? {}),
     skillAdvice: (data, heroes, champion, quests, options) =>
       remote.skillAdvice(data, heroes, champion, quests, options),
     statWeights: (data, heroes, champion, quest, runs, powerBooster) => remote.statWeights(data, heroes, champion, quest, runs, powerBooster),

@@ -178,7 +178,7 @@ describe('смерть героев: отметка «кто погиб» про
   })
 
   it('deathPredictions: [] — «никто не погиб», а не «неизвестно»', () => {
-    const metrics = { runs: 10, winRate: 1, avgRounds: 1, avgDamagePerRound: 0, avgMinSurvivorHpPct: 1, survival: [{ name: 'A', rate: 0.7, deathRate: 0.3 }] }
+    const metrics = { runs: 10, winRate: 1, avgRounds: 1, avgDamagePerRound: 0, avgMinSurvivorHpPct: 1, survival: [{ name: 'A', rate: 0.7, deathRate: 0.3 }], perFighter: [] }
     expect(deathPredictions(check({ deadHeroes: [] }), metrics)).toEqual([{ name: 'A', predicted: 0.3, outcome: 0 }])
     expect(deathPredictions(check(), metrics)).toBeNull()
   })

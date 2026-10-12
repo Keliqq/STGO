@@ -4,7 +4,7 @@
  */
 import * as Comlink from 'comlink'
 import type { GameData, HeroInstance, Quest } from '../data/types.ts'
-import { fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type PowerBoosterId, type SimMetrics } from '../engine/combat.ts'
+import { fighterFromChampion, fighterFromHero, simulateTeam, traceFight as traceFightRun, type Fighter, type FightTraceResult, type PowerBoosterId, type SimMetrics } from '../engine/combat.ts'
 import { questsToCheck, type QuestCheckSuggestion } from '../engine/calibration.ts'
 import { SEED_STAT_PER_SEED } from '../engine/constants.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult, type QuestWeight } from '../engine/optimizer.ts'
@@ -55,6 +55,19 @@ const api = {
       // Без уступки событийному циклу воркер не обработал бы входящий cancel() до конца расчёта.
       yieldControl: () => new Promise<void>((r) => setTimeout(r, 0)),
     })
+  },
+  /**
+   * «Пример боя»: подробный лог первого прогона (события боя по раундам) и метрики всех прогонов,
+   * включая «Сводку по бойцам» (`SimMetrics.perFighter`). Seed — тот же, что у прогона, тогда лог
+   * соответствует первому из тех боёв, по которым посчитана сводка.
+   */
+  traceFight(
+    fighters: Fighter[],
+    quest: Quest,
+    opts: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean; powerBooster?: PowerBoosterId; enemyCritChance?: number; aoeChance?: number },
+  ): FightTraceResult {
+    cancelled = false
+    return traceFightRun(fighters, quest, { ...opts, shouldCancel: () => cancelled })
   },
   /** Вклад навыков в win rate и советы по перекидке (кубики). */
   skillAdvice(

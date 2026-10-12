@@ -11,7 +11,19 @@ const SCREENS = path.join(ROOT, 'docs', 'screens')
 export async function shot(page: Page, name: string): Promise<void> {
   mkdirSync(SCREENS, { recursive: true })
   const file = name.endsWith('.png') ? name : `${name}.png`
-  await page.screenshot({ path: path.join(SCREENS, file), fullPage: true })
+  const target = path.join(SCREENS, file)
+  // Снимок пишет на диск сам браузер. На Windows файл иногда оказывается занят (синхронизация папки,
+  // антивирус) и запись падает с «UNKNOWN: unknown error, open» — это не ошибка страницы, поэтому
+  // повторяем попытку, а не валим тест.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.screenshot({ path: target, fullPage: true })
+      return
+    } catch (e) {
+      if (attempt >= 3) throw e
+      await page.waitForTimeout(500)
+    }
+  }
 }
 
 /**
@@ -84,8 +96,11 @@ export async function selectByLabel(locator: import('@playwright/test').Locator,
 
 /** Раскрывает «Подробный разбор» (по умолчанию после подбора виден только простой экран «Что делать»). */
 export async function openDetails(page: Page): Promise<void> {
-  const details = page.locator('details').filter({ hasText: 'Подробный разбор' })
-  if ((await details.getAttribute('open')) === null) await details.locator('summary').click()
+  // Ищем именно внешний <details> по его summary: внутри лежит «Пример боя» — тоже <details>,
+  // поэтому фильтр по тексту совпал бы с обоими, а `details.locator('summary')` нашёл бы и вложенный.
+  const summary = page.locator('summary', { hasText: 'Подробный разбор' })
+  const details = page.locator('details').filter({ has: summary })
+  if ((await details.getAttribute('open')) === null) await summary.click()
 }
 
 /** Запускает подбор, ждёт простой экран «Что делать» и раскрывает подробный разбор с секцией «Результат». */

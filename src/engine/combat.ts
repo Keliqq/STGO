@@ -28,6 +28,7 @@ import {
   BARRIER_UNBROKEN_DMG_FACTOR,
   DEFAULT_SIM_RUNS,
   DEF_MITIGATION,
+  ELEMENT_RU,
   ENEMY_CRIT_CHANCE,
   ENEMY_DMG_MAX_FACTOR,
   MANA_SHIELD_RECHARGE_ROUNDS,
@@ -614,8 +615,78 @@ export interface SimOptions {
   powerBooster?: PowerBoosterId
   /** Переопределение кривой защиты и барьера (анализ чувствительности A57). */
   model?: CombatModel
+  /**
+   * Запись подробного лога боя («Пример боя»): сюда складываются события **первого** прогона
+   * (`r = 0`). При `runs > 1` остальные прогоны только считают метрики. Без этого поля основной
+   * цикл не создаёт ни одного объекта события — скорость не меняется.
+   */
+  trace?: TraceEvent[]
   onProgress?: (done: number, total: number) => void
   shouldCancel?: () => boolean
+}
+
+// ─────────────────────────── лог боя («Пример боя») ───────────────────────────
+
+/** Чья сторона в событии: бойцы отряда / монстр / нейтральное (барьер, итог). */
+export type TraceSide = 'heroes' | 'enemy' | 'neutral'
+
+/** Что произошло в событии. */
+export type TraceEventKind =
+  | 'barrier'
+  | 'enemyAoe'
+  | 'heroHit'
+  | 'enemyHit'
+  | 'dodge'
+  | 'manaAbsorb'
+  | 'manaRecharge'
+  | 'heal'
+  | 'drain'
+  | 'death'
+  | 'deathSave'
+  | 'execute'
+  | 'result'
+
+/**
+ * Одно событие боя. `text` — готовая строка для лога (UI только подкрашивает по `side`),
+ * числовые поля — для тестов и для проверки «сумма событий сходится с метриками».
+ */
+export interface TraceEvent {
+  round: number
+  kind: TraceEventKind
+  side: TraceSide
+  /** Строка лога по-русски. */
+  text: string
+  /** Урон удара (или итоговый урон отряда у события `result`). */
+  damage?: number
+  crit?: boolean
+  /** AoE-атака монстра. */
+  aoe?: boolean
+  /** Поглощено мана-щитом. */
+  absorbed?: number
+  /** Индекс бойца отряда (действующего лица или цели), −1 — монстр. */
+  fighter?: number
+}
+
+/** Лог одного боя: события + итог прогона, который записан. */
+export interface FightTrace {
+  /** Seed записанного прогона (= `SimOptions.seed`): тот же seed даёт тот же лог. */
+  seed: number
+  /** Имена бойцов в порядке `fighters` (индексы в событиях указывают сюда). */
+  fighters: string[]
+  /** Пробит ли стихийный барьер квеста (A9) — считается до боя, как в симуляции. */
+  barrierBroken: boolean
+  events: TraceEvent[]
+  win: boolean
+  rounds: number
+  /** Урон отряда по монстру за этот бой. */
+  damageDealt: number
+  alive: boolean[]
+}
+
+/** Лог боя + метрики (средние по всем прогонам, включая `perFighter`). */
+export interface FightTraceResult {
+  trace: FightTrace
+  metrics: SimMetrics
 }
 
 /** Что выбрано в форме квеста: усилитель силы на весь отряд (A74). */
@@ -632,6 +703,38 @@ export interface HeroSurvival {
   deathRate: number
 }
 
+/**
+ * Показатели одного бойца, средние по всем прогонам («Сводка по бойцам»): урон за удар, криты,
+ * уклонения, перезарядки мана-щита, выживаемость, средний раунд гибели и доля времени с бонусом
+ * «until damaged» (Ninja/Sensei, A54).
+ */
+export interface FighterMetrics {
+  name: string
+  /** Среднее число ударов по монстру за бой. */
+  hitsPerFight: number
+  /** Средний урон одного удара бойца (0 — боец не бил; урон уже с барьером и критами). */
+  damagePerHit: number
+  /** Доля критов среди ударов бойца. */
+  critRate: number
+  /**
+   * Доля уклонений от атак, нацеленных на бойца: учитываются и одиночные атаки, и AoE,
+   * и «гарантированное уклонение в первом раунде» (Daimyo). Штраф Extreme уже в статах.
+   */
+  dodgeRate: number
+  /** Сколько раз за бой мана-щит реально восстанавливался (перезарядок за бой). */
+  shieldRecharges: number
+  /** Доля прогонов, где боец выжил. */
+  survivalRate: number
+  /** Средний раунд гибели среди прогонов, где боец погиб (0 — не погибал). */
+  avgDeathRound: number
+  /**
+   * Доля раундов (из тех, где боец был жив к своему ходу) с активным бонусом «until damaged»
+   * врождённого навыка (Ninja/Sensei; у Sensei возвращается через N раундов, A49/A54).
+   * 0 — у бойца нет механик «until damaged» (считать нечего).
+   */
+  untilDamagedShare: number
+}
+
 export interface SimMetrics {
   runs: number
   winRate: number
@@ -643,6 +746,8 @@ export interface SimMetrics {
    * Третий тай-брейк оптимизатора (win rate → раунды → этот показатель → урон/раунд).
    */
   avgMinSurvivorHpPct: number
+  /** Подробная сводка по каждому бойцу (порядок как в `fighters`). */
+  perFighter: FighterMetrics[]
 }
 
 interface Mods {
@@ -759,6 +864,8 @@ export interface Prepared {
   groupCounts: Record<ClassGroup, number>
   /** Предел уклонения каждого бойца (A42): MAX_EVASION + его «+N% to max Evasion» (Pathfinder → 78%). */
   evaCaps: number[]
+  /** У кого есть механика «until damaged» — только им считаем долю времени с бонусом (A54). */
+  untilDamaged: boolean[]
   /** Вторая попытка при поражении (Chronomancer/Fateweaver), null — её нет. */
   secondAttempt: { powerBonusPct: number } | null
 }
@@ -896,6 +1003,7 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     combat,
     groupCounts,
     evaCaps: specials.map((s) => evaCapOf(s)),
+    untilDamaged: fighters.map(tracksUntilDamaged),
     secondAttempt: retry ? { powerBonusPct: retry.secondAttemptPowerPct } : null,
   }
 }
@@ -910,13 +1018,56 @@ interface RunResult {
 }
 
 /**
+ * Суммы одного бойца за все прогоны (создаются один раз на `simulateTeam`): счётчики копятся прямо
+ * в бою, поэтому прогон не создаёт мусора, а «Сводка по бойцам» не требует отдельного прохода.
+ * `alive`/`deathRound` — состояние последней попытки (перезаписываются каждую попытку).
+ */
+interface RunStats {
+  /** Удары бойца по монстру и их суммарный урон. */
+  hits: number
+  dmg: number
+  crits: number
+  /** Атаки врага, дошедшие до проверки уклонения (одиночные и AoE). */
+  attacksOn: number
+  dodges: number
+  /** Реальные перезарядки мана-щита (щит был неполон и восстановился). */
+  recharges: number
+  deaths: number
+  deathRounds: number
+  /** Раунды, где боец был жив к своему ходу, и из них — с активным «until damaged». */
+  aliveRounds: number
+  bonusRounds: number
+  /** Жив ли боец в конце последней попытки. */
+  alive: boolean
+  /** Раунд гибели в последней попытке (0 — не погиб). */
+  deathRound: number
+}
+
+function newRunStats(n: number): RunStats[] {
+  return Array.from({ length: n }, () => ({
+    hits: 0, dmg: 0, crits: 0, attacksOn: 0, dodges: 0, recharges: 0, deaths: 0, deathRounds: 0,
+    aliveRounds: 0, bonusRounds: 0, alive: true, deathRound: 0,
+  }))
+}
+
+/** Есть ли у бойца механика «until damaged» (своя или врождённая, уже сидящая в статах, A54). */
+export function tracksUntilDamaged(f: Fighter): boolean {
+  if ((f.innateBonus?.eva ?? 0) !== 0 || (f.innateBonus?.crit ?? 0) !== 0) return true
+  return f.skills.some((sk) => sk.effects.some((e) => e.condition?.kind === 'untilDamaged'))
+}
+
+const r0 = (x: number): number => Math.round(x)
+
+/**
  * Один бой. При «immediate second attempt at the quest» (Chronomancer/Fateweaver) поражение
  * автоматически повторяется один раз — с бонусом к ATK, если он указан (A44).
+ * `per` — накопительные счётчики бойцов, `trace` — массив лога или null (без него не создаётся
+ * ни одного объекта события).
  */
-function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
-  const first = runAttempt(p, quest, rng, 0)
+function runOnce(p: Prepared, quest: Quest, rng: () => number, per: RunStats[], trace: TraceEvent[] | null): RunResult {
+  const first = runAttempt(p, quest, rng, 0, per, trace)
   if (first.win || !p.secondAttempt) return first
-  const second = runAttempt(p, quest, rng, p.secondAttempt.powerBonusPct)
+  const second = runAttempt(p, quest, rng, p.secondAttempt.powerBonusPct, per, trace)
   return {
     win: second.win,
     rounds: first.rounds + second.rounds,
@@ -927,7 +1078,7 @@ function runOnce(p: Prepared, quest: Quest, rng: () => number): RunResult {
 }
 
 /** @param powerBonusPct бонус к ATK отряда во второй попытке, % (0 — первая попытка). */
-function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct: number): RunResult {
+function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct: number, per: RunStats[], trace: TraceEvent[] | null): RunResult {
   const n = p.fighters.length
   const atkBonus = 1 + powerBonusPct / 100
   const hp = p.maxHp.slice()
@@ -948,6 +1099,26 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
   let dmgDealt = 0
   let round = 1
   const mods = new Array<Mods>(n)
+
+  // Жив/раунд гибели — заново на каждую попытку (счётчики ударов и уклонений копятся по обеим).
+  for (let i = 0; i < n; i++) {
+    per[i].alive = true
+    per[i].deathRound = 0
+  }
+  if (trace) {
+    const b = quest.barrier
+    trace.push({
+      round: 0,
+      kind: 'barrier',
+      side: 'neutral',
+      text: b
+        ? p.barrierBroken
+          ? `Стихийный барьер (${b.elements.map((el) => ELEMENT_RU[el] ?? el).join('/')}, ${b.hp}): пробит — урон отряда полный`
+          : `Стихийный барьер (${b.elements.map((el) => ELEMENT_RU[el] ?? el).join('/')}, ${b.hp}): НЕ пробит — урон отряда ×${p.combat.barrierUnbrokenFactor}`
+        : 'У квеста нет стихийного барьера',
+      fighter: -1,
+    })
+  }
 
   const computeMods = (i: number, r: number, enemyHpFrac: number): Mods => {
     const m: Mods = { ...p.selfStatic[i] }
@@ -977,14 +1148,20 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     return m === Infinity ? 0 : m
   }
 
-  const tryHit = (i: number, baseDmg: number): void => {
+  const tryHit = (i: number, baseDmg: number, aoe: boolean): void => {
     if (!alive[i]) return
     const f = p.fighters[i]
     const sp = p.specials[i]
     const m = mods[i]
+    const st = per[i]
+    st.attacksOn++
     // «Guaranteed evasion … on the first round» (Daimyo): в 1-м раунде удары не проходят вовсе.
     if (sp.firstRoundEva && round === 1) {
+      st.dodges++
       if (sp.riposte) riposteArmed[i] = true
+      if (trace) {
+        trace.push({ round, kind: 'dodge', side: 'heroes', fighter: i, aoe: aoe || undefined, text: `${f.name} уклоняется — гарантированное уклонение в 1-м раунде${aoe ? ' (AoE)' : ''}` })
+      }
       return
     }
     let eva = sp.evaSet ?? f.eva + m.eva
@@ -992,16 +1169,25 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     // («+N% to max Evasion» поднимает именно предел: у Pathfinder 78%).
     eva = effectiveEvasion(eva, p.evaCaps[i], p.extreme)
     if (rng() < eva) {
+      st.dodges++
       if (sp.riposte) riposteArmed[i] = true
+      if (trace) {
+        trace.push({ round, kind: 'dodge', side: 'heroes', fighter: i, aoe: aoe || undefined, text: `${f.name} уклоняется (EVA ${Math.round(eva * 100)}%)${aoe ? ' · AoE' : ''}` })
+      }
       return
     }
     const defEff = combatStat(f.def, f.sheetPct?.def ?? 0, m.defFlat, m.defPct, p.combat.pctStacking)
     let dmg = baseDmg * damageFactor(defEff, quest.defCaps, p.combat)
     // A59: у героя с отрицательным уклонением (только на Extreme) шанс крита врага выше базового.
     // Как именно выше (базовый + надбавка или надбавка вместо базового) — параметр A57.
-    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva, p.negativeEvaCrit)) dmg = enemyCritDamage(dmg, baseDmg)
+    let crit = false
+    if (rng() < enemyCritChanceVs(p.enemyCritChance, eva, p.negativeEvaCrit)) {
+      dmg = enemyCritDamage(dmg, baseDmg)
+      crit = true
+    }
+    let absorbed = 0
     if (mana[i] > 0) {
-      const absorbed = Math.min(mana[i], dmg)
+      absorbed = Math.min(mana[i], dmg)
       mana[i] -= absorbed
       dmg -= absorbed
     }
@@ -1009,16 +1195,30 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     if (!damagedBefore[i]) lostRound[i] = round
     damagedBefore[i] = true
     hp[i] -= dmg
+    if (trace) {
+      if (absorbed > 0) {
+        trace.push({ round, kind: 'manaAbsorb', side: 'heroes', fighter: i, absorbed: r0(absorbed), text: `Мана-щит ${f.name} поглощает ${r0(absorbed)} урона (осталось ${r0(mana[i])})` })
+      }
+      trace.push({
+        round, kind: 'enemyHit', side: 'enemy', fighter: i, damage: r0(dmg), crit: crit || undefined, aoe: aoe || undefined,
+        text: `Монстр бьёт ${f.name}: ${r0(dmg)}${crit ? ' (крит)' : ''}${aoe ? ' · AoE' : ''}${absorbed > 0 ? ` (щит поглотил ${r0(absorbed)})` : ''} · HP ${Math.max(0, r0(hp[i]))}/${p.maxHp[i]}`,
+      })
+    }
     if (hp[i] <= 0) {
       if (protectLeft > 0 && !sp.lethalProtect) {
         protectLeft--
         hp[i] = 1
+        if (trace) trace.push({ round, kind: 'deathSave', side: 'heroes', fighter: i, text: `${f.name} выживает: союзник принял смертельный удар (1 HP)` })
       } else if (!surviveUsed[i] && sp.survivePct > 0 && rng() * 100 < sp.survivePct) {
         surviveUsed[i] = true
         hp[i] = 1
+        if (trace) trace.push({ round, kind: 'deathSave', side: 'heroes', fighter: i, text: `${f.name} переживает смертельный удар (шанс ${sp.survivePct}%, остаётся 1 HP)` })
       } else {
         alive[i] = false
         hp[i] = 0
+        st.alive = false
+        st.deathRound = round
+        if (trace) trace.push({ round, kind: 'death', side: 'heroes', fighter: i, text: `${f.name} погибает` })
       }
     }
   }
@@ -1034,7 +1234,10 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     for (let i = 0; i < n; i++) if (alive[i]) { aliveIdx.push(i); threatSum += Math.max(0, p.fighters[i].threat) }
     if (aliveIdx.length === 0) return { win: false, rounds: round - 1, alive, dmgDealt, minSurvivorHpFrac: 0 }
     if (aliveIdx.length > 1 && rng() < p.aoeChance) {
-      for (const i of aliveIdx) tryHit(i, quest.monsterAoe)
+      if (trace) {
+        trace.push({ round, kind: 'enemyAoe', side: 'enemy', fighter: -1, aoe: true, text: `Монстр применяет AoE по всем (${aliveIdx.length} живых) · базовый урон ${r0(quest.monsterAoe)}` })
+      }
+      for (const i of aliveIdx) tryHit(i, quest.monsterAoe, true)
     } else {
       let roll = rng() * threatSum
       let target = aliveIdx[aliveIdx.length - 1]
@@ -1042,7 +1245,7 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
         roll -= Math.max(0, p.fighters[i].threat)
         if (roll <= 0) { target = i; break }
       }
-      tryHit(target, quest.monsterDmg)
+      tryHit(target, quest.monsterDmg, false)
     }
     if (aliveIdx.every((i) => !alive[i])) return { win: false, rounds: round, alive, dmgDealt, minSurvivorHpFrac: 0 }
 
@@ -1054,6 +1257,13 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       if (!alive[i]) continue
       const f = p.fighters[i]
       const sp = p.specials[i]
+      const st = per[i]
+      // Бонус «until damaged» (Ninja/Sensei, A54) считаем только у тех, у кого он вообще есть:
+      // остальным такой счётчик не нужен, и лишняя работа в горячем цикле не делается.
+      if (p.untilDamaged[i]) {
+        st.aliveRounds++
+        if (!damagedBefore[i]) st.bonusRounds++
+      }
       // Модификаторы — на момент удара, а не на начало раунда: враг бьёт первым и может снять
       // «until damaged» ещё до атаки героя (ST-Central, Hero Academia → Ninja: «hitting the Ninja and
       // eliminating the passive boost before the Ninja even attacks»). Так же — пороги HP и HP врага.
@@ -1079,11 +1289,24 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
         consec[i] = Math.min(consec[i] + 1, sp.consecCritMax)
       } else consec[i] = 0
       const ignoreBarrier = sp.firstRoundCrit && round === 1 && isCrit // Iaido: крит игнорирует барьер
-      if (!p.barrierBroken && !ignoreBarrier) dmg *= p.combat.barrierUnbrokenFactor
+      const barrierHalved = !p.barrierBroken && !ignoreBarrier
+      if (barrierHalved) dmg *= p.combat.barrierUnbrokenFactor
+      st.hits++
+      st.dmg += dmg
+      if (isCrit) st.crits++
       monsterHp -= dmg
       dmgDealt += dmg
+      if (trace) {
+        trace.push({
+          round, kind: 'heroHit', side: 'heroes', fighter: i, damage: r0(dmg), crit: isCrit || undefined,
+          text: `${f.name} бьёт монстра: ${r0(dmg)}${isCrit ? ' (крит)' : ''}${barrierHalved ? ` · барьер не пробит, ×${p.combat.barrierUnbrokenFactor}` : ''} · монстр ${Math.max(0, r0(monsterHp))}/${r0(quest.monsterHp)}`,
+        })
+      }
       // «Upon striking, defeat any enemy below N% HP» (Dark Knight/Death Knight).
-      if (monsterHp > 0 && sp.executeBelowPct > 0 && monsterHp < (quest.monsterHp * sp.executeBelowPct) / 100) monsterHp = 0
+      if (monsterHp > 0 && sp.executeBelowPct > 0 && monsterHp < (quest.monsterHp * sp.executeBelowPct) / 100) {
+        monsterHp = 0
+        if (trace) trace.push({ round, kind: 'execute', side: 'heroes', fighter: i, text: `${f.name} добивает монстра (HP ниже ${sp.executeBelowPct}%)` })
+      }
       if (monsterHp <= 0) return { win: true, rounds: round, alive, dmgDealt, minSurvivorHpFrac: minSurvivorHpFrac() }
     }
 
@@ -1104,16 +1327,29 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
       if (total > 0) {
         hp[c] = Math.min(p.maxHp[c], hp[c] + total)
         drainAtk[c] += drainAttackGain(total, d.atkBonusPct)
+        if (trace) trace.push({ round, kind: 'drain', side: 'heroes', fighter: c, damage: r0(total), text: `${p.fighters[c].name} сливает ${r0(total)} HP у союзников и лечится на столько же (+${r0(drainAttackGain(total, d.atkBonusPct))} ATK)` })
       }
     }
     for (let i = 0; i < n; i++) {
       if (!alive[i]) continue
       const heal = p.specials[i].healSelf + p.partyHeal
-      if (heal > 0) hp[i] = Math.min(p.maxHp[i], hp[i] + heal)
+      if (heal > 0) {
+        const before = hp[i]
+        hp[i] = Math.min(p.maxHp[i], hp[i] + heal)
+        if (trace && hp[i] > before) {
+          const own = p.specials[i].healSelf
+          const src = p.partyHeal > 0 ? (own > 0 ? 'лечение отряда и своё' : 'лечение отряда') : 'своё лечение'
+          trace.push({ round, kind: 'heal', side: 'heroes', fighter: i, damage: r0(hp[i] - before), text: `${p.fighters[i].name} восстанавливает ${r0(hp[i] - before)} HP (${src}) · HP ${r0(hp[i])}/${p.maxHp[i]}` })
+        }
+      }
       if (hitThisRound[i]) noDmgRun[i] = 0
       else {
         noDmgRun[i]++
-        if (noDmgRun[i] >= MANA_SHIELD_RECHARGE_ROUNDS) mana[i] = p.manaMax[i]
+        if (noDmgRun[i] >= MANA_SHIELD_RECHARGE_ROUNDS && mana[i] < p.manaMax[i]) {
+          mana[i] = p.manaMax[i]
+          per[i].recharges++
+          if (trace) trace.push({ round, kind: 'manaRecharge', side: 'heroes', fighter: i, absorbed: r0(p.manaMax[i]), text: `${p.fighters[i].name}: мана-щит перезаряжен (${r0(p.manaMax[i])}) — ${noDmgRun[i]} раундов без урона` })
+        }
       }
       // «Regain bonuses after N rounds» (Sensei): бонус возвращается через N раундов после потери,
       // попал ли враг в промежутке — неважно (ST-Central, Hero Academia → Sensei: удар → атака без бонуса →
@@ -1141,31 +1377,52 @@ export function elementContributions(fighters: Fighter[], quest: Quest): { eleme
   return { elements, values }
 }
 
-/** N прогонов Монте-Карло. Детерминированно: один и тот же seed → один и тот же результат. */
-export function simulateTeam(fighters: Fighter[], quest: Quest, opts: SimOptions = {}): SimMetrics {
+/** Итог прогонов: метрики + то, что нужно `traceFight` (первый прогон и подготовленное состояние). */
+interface SimOutcome {
+  metrics: SimMetrics
+  /** Результат записанного прогона (r = 0) — для итоговой строки лога; null, если прогонов не было. */
+  first: RunResult | null
+  prepared: Prepared
+}
+
+/**
+ * N прогонов Монте-Карло с общим набором счётчиков. Детерминированно: один и тот же seed → тот же
+ * результат. `opts.trace` наполняется событиями **первого** прогона; без него не создаётся ни одного
+ * объекта события, поэтому обычный путь не медленнее прежнего.
+ */
+function simulateCore(fighters: Fighter[], quest: Quest, opts: SimOptions): SimOutcome {
   const total = opts.runs ?? DEFAULT_SIM_RUNS
   const seed = (opts.seed ?? 1) >>> 0
   const p = prepare(fighters, quest, opts)
+  const n = fighters.length
+  // Счётчики бойцов копятся прямо в бою (см. runAttempt) — отдельного прохода по прогонам нет.
+  const per = newRunStats(n)
   let done = 0
   let wins = 0
   let roundsSum = 0
   let dmgSum = 0
   let minSurvSum = 0
-  const aliveCount = new Array<number>(fighters.length).fill(0)
+  let first: RunResult | null = null
+  const aliveCount = new Array<number>(n).fill(0)
   for (let r = 0; r < total; r++) {
     if (r > 0 && opts.shouldCancel?.()) break
-    const res = runOnce(p, quest, mulberry32(seed + r))
+    const res = runOnce(p, quest, mulberry32(seed + r), per, r === 0 ? (opts.trace ?? null) : null)
+    if (r === 0) first = res
     done++
     if (res.win) wins++
     roundsSum += res.rounds
     dmgSum += res.dmgDealt
     minSurvSum += res.minSurvivorHpFrac
-    res.alive.forEach((a, i) => {
-      if (a) aliveCount[i]++
-    })
+    for (let i = 0; i < n; i++) {
+      if (res.alive[i]) aliveCount[i]++
+      else {
+        per[i].deaths++
+        per[i].deathRounds += per[i].deathRound
+      }
+    }
     if (opts.onProgress && (r % 50 === 0 || r === total - 1)) opts.onProgress(r + 1, total)
   }
-  return {
+  const metrics: SimMetrics = {
     runs: done,
     winRate: done > 0 ? wins / done : 0,
     avgRounds: done > 0 ? roundsSum / done : 0,
@@ -1176,5 +1433,62 @@ export function simulateTeam(fighters: Fighter[], quest: Quest, opts: SimOptions
     })),
     avgDamagePerRound: roundsSum > 0 ? dmgSum / roundsSum : 0,
     avgMinSurvivorHpPct: done > 0 ? minSurvSum / done : 0,
+    perFighter: fighters.map((f, i) => {
+      const t = per[i]
+      return {
+        name: f.name,
+        hitsPerFight: done > 0 ? t.hits / done : 0,
+        damagePerHit: t.hits > 0 ? t.dmg / t.hits : 0,
+        critRate: t.hits > 0 ? t.crits / t.hits : 0,
+        dodgeRate: t.attacksOn > 0 ? t.dodges / t.attacksOn : 0,
+        shieldRecharges: done > 0 ? t.recharges / done : 0,
+        survivalRate: done > 0 ? (done - t.deaths) / done : 0,
+        avgDeathRound: t.deaths > 0 ? t.deathRounds / t.deaths : 0,
+        // Доля времени с бонусом «until damaged»: у кого такой механики нет — считать нечего (0).
+        untilDamagedShare: p.untilDamaged[i] && t.aliveRounds > 0 ? t.bonusRounds / t.aliveRounds : 0,
+      }
+    }),
+  }
+  if (opts.trace && first) {
+    opts.trace.push({
+      round: first.rounds,
+      kind: 'result',
+      side: 'neutral',
+      fighter: -1,
+      damage: r0(first.dmgDealt),
+      text: `${first.win ? 'Победа' : 'Поражение'} за ${first.rounds} раунд(ов): урон отряда ${r0(first.dmgDealt)}, выжили ${first.alive.filter(Boolean).length} из ${n}`,
+    })
+  }
+  return { metrics, first, prepared: p }
+}
+
+/** N прогонов Монте-Карло. Детерминированно: один и тот же seed → один и тот же результат. */
+export function simulateTeam(fighters: Fighter[], quest: Quest, opts: SimOptions = {}): SimMetrics {
+  return simulateCore(fighters, quest, opts).metrics
+}
+
+/**
+ * «Пример боя»: подробный лог одного прогона (`runs` по умолчанию 1) + метрики всех прогонов
+ * (включая `perFighter` — «Сводка по бойцам»). Логируется первый прогон, поэтому при `runs > 1`
+ * лог и метрики относятся к одному и тому же seed, но к разному числу боёв.
+ */
+export function traceFight(fighters: Fighter[], quest: Quest, opts: SimOptions = {}): FightTraceResult {
+  const seed = (opts.seed ?? 1) >>> 0
+  const events: TraceEvent[] = []
+  const runs = Math.max(1, opts.runs ?? 1)
+  const out = simulateCore(fighters, quest, { ...opts, seed, runs, trace: events })
+  const first = out.first
+  return {
+    trace: {
+      seed,
+      fighters: fighters.map((f) => f.name),
+      barrierBroken: out.prepared.barrierBroken,
+      events,
+      win: first?.win ?? false,
+      rounds: first?.rounds ?? 0,
+      damageDealt: first?.dmgDealt ?? 0,
+      alive: first?.alive ?? fighters.map(() => false),
+    },
+    metrics: out.metrics,
   }
 }

@@ -46,10 +46,12 @@ import { ENGINE_MODEL_VERSION } from '#/engine/constants.ts'
 import type { PowerBoosterId } from '#/engine/combat.ts'
 import { questLabel } from '#/engine/optimizer.ts'
 import { partyHints, type PartyHint } from '#/engine/teamRules.ts'
-import { ELEMENT_RU, TEAM_SIM_RUNS, runTeamSync, type TeamRunMember, type TeamRunResult } from '#/engine/teamRunner.ts'
+import { ELEMENT_RU, TEAM_SIM_RUNS, TEAM_SIM_SEED, runTeamSync, teamFighters, type TeamRunMember, type TeamRunResult } from '#/engine/teamRunner.ts'
+import type { Fighter } from '#/engine/combat.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
 import { classIconId, itemIconId, spiritIconId } from '#/data/images.ts'
+import { FightSampleView } from '#/ui/FightSampleView.tsx'
 import { ChampionIcon, GameIcon } from '#/ui/GameIcon.tsx'
 import { DraftBadge, ElementIcon } from '#/ui/heroes/heroStatTable.tsx'
 import { Tip } from '#/ui/Hint.tsx'
@@ -591,6 +593,9 @@ function TeamsPage() {
             dead={dead}
             setDead={setDead}
             onMark={mark}
+            data={data}
+            engine={engineRef.current}
+            booster={booster}
           />
         ) : null}
       </Section>
@@ -793,6 +798,9 @@ function ComparisonTable({
   dead,
   setDead,
   onMark,
+  data,
+  engine,
+  booster,
 }: {
   teams: Team[]
   quest: Quest
@@ -801,10 +809,21 @@ function ComparisonTable({
   dead: Record<string, string[]>
   setDead: React.Dispatch<React.SetStateAction<Record<string, string[]>>>
   onMark: (t: Team, passed: boolean, deadHeroes: string[]) => Promise<void>
+  data: GameData
+  engine: Engine | null
+  booster: PowerBoosterId
 }) {
   /** Строки таблицы участников — по первой команде (в остальных тот же порядок: герои, затем чемпион). */
   const rows = [...teams[0].members.map((m) => m.hero.name), ...(teams[0].champion ? [teams[0].champion.champion] : [])]
   const dash = <span className="text-muted-foreground">—</span>
+  /**
+   * Бойцы каждой команды — для «Примера боя»: тот же состав и чемпион, что в прогоне, поэтому лог
+   * и сводка совпадают с таблицей выше (seed и число прогонов те же — TEAM_SIM_SEED / TEAM_SIM_RUNS).
+   */
+  const fightersOf = useMemo(
+    () => new Map(teams.map((t) => [t.id, (teamFighters(runMembersOf(t), data) as (Fighter | null)[]).filter((f): f is Fighter => f !== null)])),
+    [teams, data],
+  )
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Квест: {questLabel(quest)}</p>
@@ -913,6 +932,16 @@ function ComparisonTable({
                   не прошёл
                 </Button>
               </div>
+              {runs[t.id] ? (
+                <FightSampleView
+                  engine={engine}
+                  fighters={fightersOf.get(t.id) ?? []}
+                  quest={quest}
+                  seed={TEAM_SIM_SEED}
+                  runs={TEAM_SIM_RUNS}
+                  powerBooster={booster}
+                />
+              ) : null}
             </div>
           )
         })}

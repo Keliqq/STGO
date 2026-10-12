@@ -14,6 +14,7 @@
  */
 import type { Element, Quest } from '../data/types.ts'
 import {
+  ELEMENT_RU,
   STAT_WEIGHT_CRIT_DMG_PCT,
   STAT_WEIGHT_CRIT_PCT,
   STAT_WEIGHT_ELEMENT,
@@ -53,16 +54,8 @@ export type StatWeightStat = (typeof STAT_WEIGHT_STATS)[number]
 /** Статы защиты: на насыщенных квестах их ценность видна в выживаемости, а не в уроне. */
 export const DEFENSIVE_STATS: readonly StatWeightStat[] = ['hp', 'def', 'eva']
 
-/** Русские названия стихий для интерфейса (веса статов, барьер, прогон команды). */
-export const ELEMENT_RU: Record<string, string> = {
-  Fire: 'Огонь',
-  Water: 'Вода',
-  Air: 'Воздух',
-  Earth: 'Земля',
-  Light: 'Свет',
-  Dark: 'Тьма',
-  Gold: 'Золото',
-}
+/** Русские названия стихий для интерфейса (веса статов, барьер, прогон команды, лог боя) — из constants.ts. */
+export { ELEMENT_RU }
 
 /** Подпись шага: «+1% CRIT», «+10% CRIT DMG», «+5% ATK», «+10 стихии (Свет)». */
 export function statStepLabel(stat: StatWeightStat, element: Element | null = null): string {

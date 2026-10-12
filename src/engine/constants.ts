@@ -207,6 +207,22 @@ export const DEF_MITIGATION = { at50: 0.5, at70: 0.3, at75: 0.25 } as const
 export const AOE_CHANCE = 0.25
 
 /**
+ * Русские названия стихий для интерфейса и лога боя («Пример боя»). Живут в constants.ts, потому что
+ * нужны и движку боя (`combat.ts` — строка про барьер), и весам статов, и UI; импорт из `statWeights.ts`
+ * дал бы цикл (statWeights → combat → statWeights).
+ */
+export const ELEMENT_RU: Record<string, string> = {
+  Fire: 'Огонь',
+  Water: 'Вода',
+  Air: 'Воздух',
+  Earth: 'Земля',
+  Light: 'Свет',
+  Dark: 'Тьма',
+  Gold: 'Золото',
+  Any: 'любая',
+}
+
+/**
  * Порядок ходов отряда:
  *  · `fixed` (по умолчанию) — Compendium: 3 слота — средний→левый→правый, 4 — ср-левый→крайний
  *    левый→крайний правый→ср-правый; порядок один и тот же все раунды (`combat.ts → turnOrderFor`);

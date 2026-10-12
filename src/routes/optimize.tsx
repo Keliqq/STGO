@@ -24,7 +24,7 @@ import {
   type ConstraintOverrides,
 } from '#/engine/constraints.ts'
 import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
-import type { PowerBoosterId } from '#/engine/combat.ts'
+import type { ChampionBuild, PowerBoosterId } from '#/engine/combat.ts'
 import { draftCopy } from '#/engine/heroEditor.ts'
 import { ENGINE_MODEL_VERSION, SEED_STAT_PER_SEED } from '#/engine/constants.ts'
 import type { SkillAdviceResult } from '#/engine/skills.ts'
@@ -90,6 +90,11 @@ interface RunContext {
   teamLabel: string
   quest: Quest | null
   objectiveLabel: string
+  /** Экипировка чемпиона и усилитель силы того запуска — те же условия в «Примере боя». */
+  championBuild: ChampionBuild | null
+  booster: PowerBoosterId
+  /** Воркер, в котором считался подбор: в нём же считается «Пример боя». */
+  engine: Engine | null
 }
 
 /** Чекбокс с подписью (label оборачивает — e2e находят его через getByLabel). */
@@ -316,6 +321,9 @@ function OptimizePage() {
       teamLabel: [...selectedTeam.map((h) => h.name), champ].filter(Boolean).join(' + '),
       quest: input.mode === 'quest' ? input.quests[0].quest : null,
       objectiveLabel: input.mode === 'universal' ? (input.robust ? 'худшая локация' : 'средневзвешенный win rate') : 'win rate',
+      championBuild: input.championBuild ?? null,
+      booster: input.powerBooster ?? 'none',
+      engine: engineRef.current,
     }
     setError(null)
     setResult(null)
@@ -779,7 +787,17 @@ function OptimizePage() {
               <span className="ml-2 text-sm font-normal text-muted-foreground">цифры по локациям, веса статов, апгрейды, навыки — для тех, кому нужны детали</span>
             </summary>
             <div className="mt-4">
-              <ResultView data={data} team={result.ctx.team} result={result} objectiveLabel={result.ctx.objectiveLabel} seeds={seeds} />
+              <ResultView
+                data={data}
+                team={result.ctx.team}
+                result={result}
+                objectiveLabel={result.ctx.objectiveLabel}
+                seeds={seeds}
+                quest={result.ctx.quest}
+                championBuild={result.ctx.championBuild}
+                engine={result.ctx.engine}
+                powerBooster={result.ctx.booster}
+              />
               {upgrades ? <UpgradeView team={result.ctx.team} rows={upgrades} objectiveLabel={result.ctx.objectiveLabel} /> : null}
               {advice && advice.advice.length > 0 ? <SkillAdviceView data={data} team={result.ctx.team} advice={advice} /> : null}
               <RealityChecksView

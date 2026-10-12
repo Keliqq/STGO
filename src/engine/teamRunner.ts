@@ -9,7 +9,7 @@
  */
 import type { Element, GameData, HeroInstance, Quest } from '../data/types.ts'
 import { AOE_CHANCE } from './constants.ts'
-import { fighterFromChampion, fighterFromHero, simulateTeam, threatShares, type ChampionBuild, type Fighter, type PowerBoosterId, type SimMetrics } from './combat.ts'
+import { fighterFromChampion, fighterFromHero, simulateTeam, threatShares, type ChampionBuild, type Fighter, type FighterMetrics, type PowerBoosterId, type SimMetrics } from './combat.ts'
 import { partyElementBonusPct } from './statWeights.ts'
 
 // Русские названия стихий живут в statWeights.ts (там же, где подписи шагов весов) — реэкспорт для UI.
@@ -40,6 +40,11 @@ export interface MemberMetrics {
   element: number
   /** Итоговые боевые статы (надетое + экипировка чемпиона). */
   stats: { atk: number; def: number; hp: number; crit: number; eva: number; threat: number }
+  /**
+   * Подробные средние по прогонам («Сводка по бойцам», усреднено по квестам): урон за удар,
+   * криты, уклонения, перезарядки мана-щита, раунд гибели, доля времени с «until damaged».
+   */
+  sim: FighterMetrics
 }
 
 /** Результат прогона по одному квесту. */
@@ -164,10 +169,27 @@ export function summarizeTeamRun(
           eva: fighters[i]?.eva ?? 0,
           threat: fighters[i]?.threat ?? 0,
         },
+        sim: {
+          name: mem.name,
+          hitsPerFight: mean(metrics, i, (p) => p.hitsPerFight),
+          damagePerHit: mean(metrics, i, (p) => p.damagePerHit),
+          critRate: mean(metrics, i, (p) => p.critRate),
+          dodgeRate: mean(metrics, i, (p) => p.dodgeRate),
+          shieldRecharges: mean(metrics, i, (p) => p.shieldRecharges),
+          survivalRate: 1 - death,
+          avgDeathRound: mean(metrics, i, (p) => p.avgDeathRound),
+          untilDamagedShare: mean(metrics, i, (p) => p.untilDamagedShare),
+        },
       }
     }),
     runs: metrics[0]?.runs ?? 0,
   }
+}
+
+/** Среднее поле `perFighter[i]` по всем прогонам-квестам. */
+function mean(metrics: SimMetrics[], i: number, get: (p: FighterMetrics) => number): number {
+  if (metrics.length === 0) return 0
+  return metrics.reduce((a, m) => a + get(m.perFighter[i]), 0) / metrics.length
 }
 
 export interface TeamRunOptions {
