@@ -8,7 +8,7 @@
  *   · параметры, которые крутит калибровка по отметкам «проходит / не проходит», — CombatModel (combat.ts)
  *     и StatModel (stats.ts); значения по умолчанию у обоих берутся отсюда.
  * Разделы: статы предметов и героя → бой → оптимизатор → ограничения подбора → веса статов и семена →
- * навыки и кубики → план ролла.
+ * навыки и кубики → план ролла → правила состава отряда и ростера → план команд.
  */
 
 /**
@@ -470,4 +470,121 @@ export const PERFECT_DICE_PER_TOWER_NO_PREMIUM = 4
  */
 export const SKILL_ROLL_STOCK_IDEAL_DICE = 20
 export const SKILL_ROLL_STOCK_BASIC_DICE = 100
+
+// ─────────────────────────── Правила состава отряда и ростера ───────────────────────────
+// Источники (сессия 28, требования владельца):
+//   · ST-Central, «Team Building, Not Guesswork» — https://st-central.net/team-building-not-guesswork/:
+//     правила состава 1) два героя на стихию барьера, 2) один чемпион на отряд, 3) один «красный»
+//     (Fighter) на отряд, 4) остальные слоты — «синие/зелёные» (Spellcaster/Rogue); советы «чемпион ↔
+//     герой» (EVA, крит, угроза, класс) и «Rudo +50% стихии отряда против барьера», «Spellblade 50%»;
+//   · ST-Central, «Foster Your Roster» — https://st-central.net/foster-your-roster/: 3+ героя на стихию
+//     (Spellblade не считается), 2+ архетипа на стихию, бойцов столько же, сколько слотов квестов,
+//     синих ≈ зелёных;
+//   · «Гайд по героям и защитникам Shop Titans 2.0» (Develion) —
+//     https://docs.google.com/document/d/1DrP0VBxnDPSLwsLe_Y8T3BkrGmN_f6QiBGrHW1qs3E8 (связки чемпион +
+//     классы героев, «Ashley сильнее на боссах», «Lilu + Wanderers», «Polonia + Tricksters»).
+// Разбор правил, подсказок и допущений — src/engine/teamRules.ts, src/engine/barriers.ts, A68.
+
+/** Ссылки-источники правил: подсказка в интерфейсе всегда показывает, откуда она. */
+export const RULES_TEAM_URL = 'https://st-central.net/team-building-not-guesswork/'
+export const RULES_ROSTER_URL = 'https://st-central.net/foster-your-roster/'
+export const RULES_DEVELION_URL =
+  'https://docs.google.com/document/d/1DrP0VBxnDPSLwsLe_Y8T3BkrGmN_f6QiBGrHW1qs3E8' as const
+
+/** Правило 1 «Team Building»: на стихию барьера в отряде должно приходиться не меньше двух героев. */
+export const PARTY_HEROES_PER_BARRIER_ELEMENT = 2
+/** Правило 2: чемпион в отряде один. */
+export const PARTY_MAX_CHAMPIONS = 1
+/** Правило 3: «красных» (Fighter) в отряде — один (он же может быть чемпионом-бойцом). */
+export const PARTY_FIGHTERS_MIN = 1
+/** Правило 4: остальные слоты — «синие/зелёные» (Rogue/Spellcaster), то есть красных больше одного не надо. */
+export const PARTY_FIGHTERS_MAX = 1
+
+/** «Foster Your Roster»: героев на каждую стихию — не меньше трёх (Spellblade — «Any», не считается). */
+export const ROSTER_MIN_HEROES_PER_ELEMENT = 3
+/** «Foster Your Roster»: архетипов (Fighter/Rogue/Spellcaster) на стихию — не меньше двух. */
+export const ROSTER_MIN_ARCHETYPES_PER_ELEMENT = 2
+/** «Foster Your Roster»: синих и зелёных примерно поровну — допускаем такую разницу в счёте. */
+export const ROSTER_BLUE_GREEN_TOLERANCE = 1
+
+/**
+ * Чемпионы-«добытчики»: их ставят в отряд в первую очередь (Sia — компоненты, Polonia — кража предметов,
+ * Malady — зачарования). Источник: ST-Central «Team Building» (советы по чемпионам) и лидерские навыки
+ * в листе SKILLS.
+ */
+export const LOOT_CHAMPIONS: readonly string[] = ['Sia', 'Polonia', 'Malady']
+/**
+ * Чемпионы-бойцы (Fighter): ими закрывают «красного», когда своих бойцов не хватает («мало бойцов →
+ * чемпион-боец вместо танка»). Источник: ST-Central «Team Building».
+ */
+export const FIGHTER_CHAMPIONS: readonly string[] = ['Argon', 'Ashley', 'Bjorn', 'Rudo']
+/** Чемпионы под крит-бойцов: Rudo (крит на N раундов) и Bjorn (+крит-урон). Источник: ST-Central «Team Building». */
+export const CRIT_CHAMPIONS: readonly string[] = ['Rudo', 'Bjorn']
+/**
+ * Чемпион, который умножает стихию отряда против барьера: Rudo, «Berserker Rampage» — «+50% party Element
+ * bonus VS Elemental Barriers». В данных это награда 7-го ранга (проверено: `championGear`/фикстура),
+ * в статье ST-Central — «R7»; до 7-го ранга бонуса нет.
+ */
+export const BARRIER_BONUS_SKILL_RE = /party element bonus vs elemental barriers/i
+/**
+ * Пороги уклонения (доля, ПОСЛЕ штрафа Extreme −20 п.п.) и чемпионы под них — ST-Central «Team Building»:
+ * «95% EVA (экстрим) → Lilu; 75% EVA → Yami (+20% до 95%); ~85% EVA → Donovan/Malady/Polonia».
+ * Значения — из совета владельца; в статье числа даны словами, поэтому трактовка границ — A68.
+ */
+export const EVA_CHAMPION_SUSTAIN_MIN = 0.95
+export const EVA_CHAMPION_MID_MIN = 0.85
+export const EVA_CHAMPION_YAMI_MIN = 0.75
+/** Чемпион, чей лидерский навык добавляет отряду выживаемость (лечение + HP/мана-щит). */
+export const EVA_CHAMPION_SUSTAIN = 'Lilu'
+/** Чемпион с +20% уклонения отряду (ранг 4: Perfect Ambush) — доводит 75% до 95%. */
+export const EVA_CHAMPION_YAMI = 'Yami'
+/** Чемпионы с +10…15% уклонения и крита отряду (Донован — за каждого разбойника). */
+export const EVA_CHAMPIONS_MID: readonly string[] = ['Donovan', 'Malady', 'Polonia']
+/** «Крит-боец» для подсказки «крит без защитных навыков»: доля крита, с которой героя считаем крит-бойцом. */
+// ASSUMPTION: A68 — в статье порог не назван; 40% — верхняя часть диапазона крита классов фикстуры (5–46%).
+export const CRIT_BUILD_MIN = 0.4
+/**
+ * Чемпионы, которым важно выжить (они приносят добычу только если живы): Malady и Reinhold — их лидерские
+ * навыки заканчиваются «…if <чемпион> survives». Источник: SKILLS (Type = Leader) и ST-Central «Team Building»
+ * («Malady/Reinhold — с бурстовыми героями и бойцом с высокой угрозой (Chieftain), им надо выжить»).
+ */
+export const SURVIVE_CHAMPIONS: readonly string[] = ['Malady', 'Reinhold']
+/**
+ * Связки «чемпион → классы героев» из гайда Develion: «Donovan +атака за заклинателя/HP за воина/крит и EVA
+ * за странника», «Lilu + Wanderers», «Polonia + 3 Trickster». Проверяются по лидерскому навыку чемпиона
+ * (SKILLS), а не по догадке.
+ */
+export const CHAMPION_CLASS_PAIRS: Readonly<Record<string, readonly string[]>> = {
+  Donovan: ['Rogue'],
+  Lilu: ['Wanderer', 'Pathfinder'],
+  Polonia: ['Trickster', 'Thief'],
+}
+/**
+ * Доля ударов босса по одному бойцу, с которой подсказка предупреждает: весь урон идёт в него одного
+ * (угроза/Σ угроза × (1 − шанс AoE)). Порог — допущение: в источниках числа нет.
+ */
+// ASSUMPTION: A68
+export const THREAT_SHARE_WARN = 0.5
+
+/** Сколько барьерных пар показывать в отчёте (остальные учитываются только счётом — список не раздуваем). */
+export const BARRIER_PAIRS_LIST_LIMIT = 50
+
+// ─────────────────────────── План команд на локацию ───────────────────────────
+
+/**
+ * Прогонов на команду при улучшении плана обменами. Меньше, чем TEAM_SIM_RUNS: обменов много, а решение
+ * принимается по разнице (общий seed — common random numbers), шум разницы заметно ниже абсолютного.
+ */
+// ASSUMPTION: A69 — число выбрано по времени расчёта, игровых данных нет.
+export const PLAN_SIM_RUNS = 300
+/** Прогонов на команду в итоговом отчёте плана (как у прогона команды, но без 2000: команд может быть 5). */
+export const PLAN_FINAL_RUNS = 1000
+/** Сколько обменов-кандидатов (лучших по быстрой оценке) проверяется симуляцией за проход. */
+export const PLAN_SWAP_CANDIDATES = 12
+/** Проходов улучшения обменами (до сходимости). */
+export const PLAN_IMPROVE_PASSES = 5
+/** Бюджет вызовов симуляции на построение плана (1 вызов = 1 команда на 1 квесте). */
+export const PLAN_SIM_BUDGET = 300
+/** Порог win rate для цели «число команд с win rate ≥ порога». */
+export const PLAN_WIN_THRESHOLD = 0.5
 

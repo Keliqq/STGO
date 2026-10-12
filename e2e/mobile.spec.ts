@@ -7,6 +7,7 @@ const ROUTES: { hash: string; title: string; name: string }[] = [
   { hash: '/', title: 'Подбор экипировки для героев Shop Titans', name: 'mobile-home' },
   { hash: '/#/heroes', title: 'Герои', name: 'mobile-heroes' },
   { hash: '/#/optimize', title: 'Подбор экипировки', name: 'mobile-optimize' },
+  { hash: '/#/roster', title: 'Ростер', name: 'mobile-roster' },
   { hash: '/#/data', title: 'Данные', name: 'mobile-data' },
 ]
 

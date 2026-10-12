@@ -90,3 +90,31 @@ export function withoutInnateSkills(data: GameData, className: string): GameData
   cls.innateTitanSkill = null
   return copy
 }
+
+/**
+ * Простой герой для тестов правил состава и плана команд: класс, уровень, слоты без предметов.
+ * Камень `stone` вставляется в первые `stoneCount` слотов — так задаётся стихия героя (A21) без сбора
+ * экипировки. По умолчанию берётся самый крупный камень стихии класса.
+ */
+export function plainHero(
+  data: GameData,
+  className: string,
+  opts: { id?: string; name?: string; level?: number; stone?: string | null; stoneCount?: number } = {},
+): HeroInstance {
+  const cls = data.heroClasses.find((c) => c.name === className)
+  if (!cls) throw new Error(`Нет класса «${className}»`)
+  const stone = opts.stone === undefined ? maxStone(data, cls.element === 'Any' ? 'Fire' : cls.element) : opts.stone
+  const count = opts.stoneCount ?? 6
+  const slots: HeroSlot[] = cls.slots.map((_, i) => ({ item: null, quality: 'Normal', element: i < count ? stone : null, spirit: null }))
+  return {
+    id: opts.id ?? `plain-${className}`,
+    name: opts.name ?? `Тест ${className}`,
+    className,
+    level: opts.level ?? 35,
+    titanSoul: false,
+    slots,
+    skills: [],
+    seeds: { atk: 0, def: 0, hp: 0 },
+    reference: null,
+  }
+}

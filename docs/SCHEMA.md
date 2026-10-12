@@ -32,6 +32,9 @@ SKILLS.Classes ──────────────► HEROES (имя кл
 HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier | редактор героя: «носит до T{N}», подбор: потолок тира на героя (`formulas.ts → maxItemTierFor`, A66)
 BLUEPRINTS.Name (Type = Aurasong) ◄──► SKILLS (Type = Aurasong, то же Name) | экипировка чемпиона: предмет и его навык ауры названы одинаково (A67)
 QUESTS.Maximum Party Size ──► команды | размер отряда локации 3/4/5 — проверка состава (`data/teams.ts → validateParty`, A67)
+QUESTS.Barrier Type/Health ─► таблица «Барьеры» (`engine/barriers.ts`): стихии и величина на локацию × сложность, барьерные пары (A9, A68)
+CHAMPIONS.Element + Element Breakpoints ─► стихия чемпиона по рангу | вклад в барьер и план команд (`barriers.ts`, `engine/teamPlan.ts`, A13, A69)
+SLOTS (QUEST SLOTS) ─────────► `engine/roster.ts → maxQuestSlots` | «бойцов столько же, сколько слотов квестов» (A68)
 ```
 
 ---
@@ -386,3 +389,15 @@ QUESTS.Maximum Party Size ──► команды | размер отряда �
 описаны в ASSUMPTIONS A65; правила «что герою можно надеть» — `src/engine/heroEditor.ts`. С сессии 26
 `Max Item Tier` уровня ограничивает и подбор (A66), а камень/дух вставляются в любой предмет — сродство
 включает только бонус (A5, A6, A65).
+
+### Ростер и план команд (не из таблицы) — `src/engine/`
+
+Страница «Ростер» ничего не хранит: она считает по данным листов и ростеру героев.
+- **`barriers.ts`** — таблица «локация × сложность» из QUESTS (`Barrier Type`/`Barrier Health`): вклад
+  героев (своя стихия, A21; Spellblade — 50% любой, A9) и чемпионов (Element Breakpoints, A13; Rudo +50%
+  стихии отряда, A67/A68), готовые пары и недостающее (самый крупный камень стихии берётся из ENCHANTMENTS).
+- **`teamPlan.ts`** — план команд: размер отряда из QUESTS (`Maximum Party Size`), чемпионы ограничены
+  листом CHAMPIONS (один чемпион на отряд, A67), выбор — симуляцией (`combat.ts → simulateTeam`).
+- **`roster.ts`** — анализ ростера: стихия и группа класса из HEROES, слоты квестов из SLOTS (QUEST SLOTS).
+- **`teamRules.ts`** — правила состава и пары «чемпион ↔ герой» (источники — ST-Central и гайд Develion,
+  A68); подсказки показываются в редакторе команды и в плане.

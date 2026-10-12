@@ -117,6 +117,16 @@ test('команда без героев проверку не проходит,
   await page.getByLabel(/^Денам /).check()
   // Соло разрешено: нижней границы у проверки нет (ST-Central: бывают и соло, и дуэт).
   await expect(editor.getByText('Состав проходит проверку.')).toBeVisible()
+
+  // Подсказки по правилам ST-Central: правило 3 («нужен красный») нарушено, и рядом есть источник.
+  await expect(editor.getByText('Правило 3 нарушено: в отряде нет «красного»')).toBeVisible()
+  await expect(editor.getByText(/Правило 2: чемпиона нет/)).toBeVisible()
+  await expect(editor.getByRole('link', { name: 'источник' }).first()).toHaveAttribute('href', /st-central\.net/)
+  // Подсказка — не приговор: «проверить симуляцией» прогоняет состав с предложенным чемпионом и с текущим.
+  await editor.getByRole('button', { name: 'проверить симуляцией: Argon' }).first().click()
+  await expect(editor.getByText(/без чемпиона: \d+\.\d% → Argon \(ранг 1\): \d+\.\d%/)).toBeVisible({ timeout: 180_000 })
+  await shot(page, 'teams-hints.png')
+
   await editor.getByRole('button', { name: 'Сохранить' }).click()
   await expect(page.getByText('Команда «Соло» сохранена.')).toBeVisible()
 

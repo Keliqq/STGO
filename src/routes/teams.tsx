@@ -44,19 +44,23 @@ import {
 import { QUALITIES, type GameData, type HeroInstance, type Quality, type Quest } from '#/data/types.ts'
 import { ENGINE_MODEL_VERSION } from '#/engine/constants.ts'
 import { questLabel } from '#/engine/optimizer.ts'
+import { partyHints, type PartyHint } from '#/engine/teamRules.ts'
 import { ELEMENT_RU, TEAM_SIM_RUNS, runTeamSync, type TeamRunMember, type TeamRunResult } from '#/engine/teamRunner.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
 import { DraftBadge } from '#/ui/heroes/heroStatTable.tsx'
 import { Tip } from '#/ui/Hint.tsx'
+import { QuestPicker } from '#/ui/QuestPicker.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 
 export const Route = createFileRoute('/teams')({ component: TeamsPage })
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
-const DIFFS = ['Easy', 'Medium', 'Hard', 'Extreme'] as const
 /** Значение «квест не выбран» в списках прогона: пустая строка означала бы «взять цель команды». */
 const QUEST_NONE = '-'
+
+/** Результат проверки чемпиона симуляцией: текущий против предложенного (win rate на одном квесте). */
+type VerifyState = { pending: true } | { error: string } | { currentName: string; current: number; champion: string; rank: number; suggested: number }
 
 /** Чекбокс с подписью (label оборачивает — e2e находят его по подписи). */
 function CheckItem({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode }) {
@@ -96,6 +100,8 @@ function TeamsPage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [runs, setRuns] = useState<Record<string, TeamRunResult>>({})
   const [dead, setDead] = useState<Record<string, string[]>>({})
+  /** «Проверить симуляцией» по подсказкам: ключ — «код подсказки:чемпион». */
+  const [verify, setVerify] = useState<Record<string, VerifyState>>({})
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
 
@@ -241,6 +247,37 @@ function TeamsPage() {
         quest: runQuest.id,
       },
     })
+  }
+
+  /**
+   * «Проверить симуляцией» подсказки: прогон того же состава с текущим чемпионом и с предложенным.
+   * Ранг и экипировка — как у текущего чемпиона, чтобы сравнение было честным (A67: аура и фамильяр —
+   * просто предметы поддержки, их может носить любой чемпион). Подсказка остаётся подсказкой: решает прогон.
+   */
+  async function verifyChampion(hint: PartyHint, championName: string): Promise<void> {
+    if (!data || !editing || !editingQuest) return
+    const key = `${hint.code}:${championName}`
+    setVerify((cur) => ({ ...cur, [key]: { pending: true } }))
+    try {
+      const current = editing.champion
+      const rank = current?.rank ?? 1
+      const gear = { aura: current?.aura ?? null, familiar: current?.familiar ?? null, spirit: current?.spirit ?? null }
+      const members = runMembersOf(editing).filter((m) => m.hero !== null)
+      const withChampion = (name: string): TeamRunMember[] => [...members, { hero: null, build: championBuild(name, rank, gear) }]
+      const engine = engineRef.current
+      const runOne = async (list: TeamRunMember[]): Promise<number> =>
+        engine
+          ? (await engine.runTeam(list, [editingQuest as Quest], data, { runs: TEAM_SIM_RUNS })).winRate
+          : runTeamSync(list, [editingQuest as Quest], data, { runs: TEAM_SIM_RUNS }).winRate
+      const currentMembers = current ? withChampion(current.champion) : [...members]
+      const [curRate, suggestedRate] = [await runOne(currentMembers), await runOne(withChampion(championName))]
+      setVerify((s) => ({
+        ...s,
+        [key]: { currentName: current?.champion ?? 'без чемпиона', current: curRate, champion: championName, rank, suggested: suggestedRate },
+      }))
+    } catch (e) {
+      setVerify((s) => ({ ...s, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+    }
   }
 
   if (!data) {
@@ -460,9 +497,19 @@ function TeamsPage() {
           </div>
           {editing.champion ? <GearSummary gear={editing.champion} data={data} /> : null}
 
-          <div className="mt-4">
-            <h3 className="mb-2 text-sm font-semibold">Проверка состава</h3>
-            <PartyCheck team={editing} quest={editingQuest} max={areaPartySize(data, editingQuest?.area)} />
+          <div className="mt-4 space-y-4">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">Проверка состава</h3>
+              <PartyCheck team={editing} quest={editingQuest} max={areaPartySize(data, editingQuest?.area)} />
+            </div>
+            <PartyHintsView
+              team={editing}
+              quest={editingQuest}
+              data={data}
+              max={areaPartySize(data, editingQuest?.area)}
+              state={verify}
+              onVerify={(hint, champion) => void verifyChampion(hint, champion)}
+            />
           </div>
         </Section>
       ) : null}
@@ -521,74 +568,10 @@ function TeamsPage() {
   )
 }
 
-/** Выбор целевой локации: область → сложность → тип (как на странице «Подбор»). */
-function TargetPicker({
-  quests,
-  areas,
-  quest,
-  label = 'Целевая локация',
-  onChange,
-  noneValue,
-}: {
-  quests: Quest[]
-  areas: string[]
-  quest: Quest | null
-  label?: string
-  onChange: (q: Quest | null) => void
-  /**
-   * Значение пункта «не выбрана». У цели команды это пустая строка (просто нет локации),
-   * а у прогона — `QUEST_NONE`: пустая строка там означает «взять локацию команды».
-   */
-  noneValue?: string
-}) {
-  const pick = (diff: string, variant: 'normal' | 'boss'): Quest | null =>
-    quests.find((q) => q.area === quest?.area && q.difficulty === diff && q.variant === variant) ?? null
-  const diffs = [...new Set([...DIFFS, ...quests.map((q) => q.difficulty)])]
-  return (
-    <>
-      <Field label={label}>
-        <NativeSelect
-          className="w-48"
-          value={quest?.area ?? noneValue ?? ''}
-          onChange={(e) => {
-            const area = e.target.value
-            if (!area || area === noneValue) return onChange(null)
-            const inArea = quests.filter((q) => q.area === area)
-            onChange(inArea.find((q) => q.difficulty === quest?.difficulty && q.variant === quest?.variant) ?? inArea[0] ?? null)
-          }}
-        >
-          <NativeSelectOption value={noneValue ?? ''}>— не выбрана —</NativeSelectOption>
-          {areas.map((a) => (
-            <NativeSelectOption key={a} value={a}>
-              {a}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
-      <Field label="Сложность">
-        <NativeSelect className="w-28" value={quest?.difficulty ?? ''} disabled={!quest} onChange={(e) => onChange(pick(e.target.value, quest?.variant ?? 'boss'))}>
-          {diffs.map((d) => (
-            <NativeSelectOption key={d} value={d}>
-              {d}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
-      <Field label="Тип">
-        <NativeSelect
-          className="w-28"
-          value={quest?.variant ?? 'boss'}
-          disabled={!quest}
-          onChange={(e) => onChange(pick(quest?.difficulty ?? 'Hard', e.target.value as 'normal' | 'boss'))}
-        >
-          <NativeSelectOption value="normal">обычный</NativeSelectOption>
-          <NativeSelectOption value="boss">босс</NativeSelectOption>
-        </NativeSelect>
-      </Field>
-    </>
-  )
+/** Выбор целевой локации: область → сложность → тип (общий компонент — src/ui/QuestPicker.tsx). */
+function TargetPicker(props: Parameters<typeof QuestPicker>[0]) {
+  return <QuestPicker {...props} />
 }
-
 /**
  * Выбор предмета экипировки чемпиона (или «нет») вместе с качеством.
  * Поле оборачивает `<select>` в `<label>` — доступное имя равно видимой подписи, без текста опций
@@ -689,6 +672,84 @@ function PartyCheck({ team, quest, max }: { team: Team; quest: Quest | null; max
           </p>
         ))
       )}
+    </div>
+  )
+}
+
+/**
+ * Подсказки по составу: правила 1–4 ST-Central (галочка/предупреждение) и пары «чемпион ↔ герой»
+ * по признакам героя. У каждой — источник, у советов — кнопка «проверить симуляцией»: подсказка
+ * не приговор, решение принимает прогон (требование владельца, сессия 28).
+ */
+function PartyHintsView({
+  team,
+  quest,
+  data,
+  max,
+  state,
+  onVerify,
+}: {
+  team: Team
+  quest: Quest | null
+  data: GameData
+  max: number | null
+  state: Record<string, VerifyState>
+  onVerify: (hint: PartyHint, champion: string) => void
+}) {
+  const hints = useMemo(() => partyHints(runMembersOf(team), quest, data, { maxPartySize: max }), [team, quest, data, max])
+  const tone = (level: PartyHint['level']): string =>
+    level === 'warn' ? 'border-destructive/40 bg-destructive/5' : level === 'ok' ? 'border-success/30 bg-success/5' : 'border-border bg-muted/30'
+  const label = (level: PartyHint['level']): string => (level === 'warn' ? 'предупреждение' : level === 'ok' ? 'по правилу' : 'совет')
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold">Подсказки по составу (ST-Central)</h3>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Правила: два героя на стихию барьера, один чемпион, один «красный» (Fighter), остальные — синие/зелёные. Советы по чемпиону — не
+        приговор: рядом кнопка «проверить симуляцией», она прогоняет этот состав с текущим чемпионом и с предложенным.
+      </p>
+      <div className="space-y-2">
+        {hints.map((h) => (
+          <div key={h.code} className={cn('rounded-md border p-2 text-sm', tone(h.level))}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={h.level === 'warn' ? 'destructive' : 'secondary'}>{label(h.level)}</Badge>
+              <span className="font-medium">{h.title}</span>
+            </div>
+            <p className="mt-1 text-muted-foreground">{h.message}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              <a href={h.source} target="_blank" rel="noreferrer" className="underline">
+                источник
+              </a>
+              {(h.verifyChampions ?? []).map((c) => {
+                const key = `${h.code}:${c}`
+                const v = state[key]
+                return (
+                  <span key={c} className="flex items-center gap-2">
+                    <Tip text="Прогон этого состава с предложенным чемпионом и с текущим — на том же квесте, ранге и экипировке.">
+                      <span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!quest || team.members.length === 0 || (v !== undefined && 'pending' in v)}
+                          onClick={() => onVerify(h, c)}
+                        >
+                          {v !== undefined && 'pending' in v ? <Loader2 className="animate-spin" /> : null} проверить симуляцией: {c}
+                        </Button>
+                      </span>
+                    </Tip>
+                    {v && 'error' in v ? <span className="text-destructive">{v.error}</span> : null}
+                    {v && 'suggested' in v ? (
+                      <span>
+                        {v.currentName}: <strong>{pct(v.current)}</strong> → {v.champion} (ранг {v.rank}): <strong>{pct(v.suggested)}</strong>
+                      </span>
+                    ) : null}
+                  </span>
+                )
+              })}
+              {!quest ? <span className="text-muted-foreground">выберите локацию, чтобы проверить прогоном</span> : null}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

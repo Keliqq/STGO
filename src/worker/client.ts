@@ -12,6 +12,8 @@ import type { Fighter, SimMetrics } from '../engine/combat.ts'
 import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
 import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
 import type { SeedAdvice, StatWeightsResult } from '../engine/statWeights.ts'
+import type { TeamPlanResult } from '../engine/teamPlan.ts'
+import type { WorkerPlanInput } from './engine.worker.ts'
 import type { TeamRunMember, TeamRunResult } from '../engine/teamRunner.ts'
 import type { GameData, HeroInstance, Quest } from '../data/types.ts'
 import { ENGINE_MODEL_VERSION } from '../engine/constants.ts'
@@ -56,6 +58,8 @@ export interface Engine {
     opts?: { seed?: number; runs?: number },
     onProgress?: (done: number, total: number) => void,
   ): Promise<TeamRunResult>
+  /** «План команд на локацию»: жадный сбор + улучшение обменами по симуляции (в воркере, с отменой). */
+  planTeams(data: GameData, input: WorkerPlanInput, onProgress?: (done: number, total: number) => void): Promise<TeamPlanResult>
   /**
    * Оптимизатор. Сначала кэш IndexedDB по хешу входа; промах — расчёт в воркере, затем запись в кэш.
    * Отменённые результаты не кэшируются.
@@ -107,6 +111,7 @@ export function createEngine(store: KeyValueStore = idbStore): Engine {
       remote.questsToCheck(data, quests, heroes, champion, onProgress ? Comlink.proxy(onProgress) : undefined),
     runTeam: (members, quests, data, opts, onProgress) =>
       remote.runTeam(members, quests, data, opts ?? {}, onProgress ? Comlink.proxy(onProgress) : undefined),
+    planTeams: (data, input, onProgress) => remote.planTeams(data, input, onProgress ? Comlink.proxy(onProgress) : undefined),
     optimize: async (data, input, onProgress) => {
       const hash = optimizerInputHash(data, input)
       const cache = await cacheRead(store)

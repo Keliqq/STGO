@@ -10,7 +10,14 @@ import { SEED_STAT_PER_SEED } from '../engine/constants.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult, type QuestWeight } from '../engine/optimizer.ts'
 import { rerollAdvice, type SkillAdviceOptions, type SkillAdviceResult } from '../engine/skills.ts'
 import { seedAdvice, statWeights, type SeedAdvice, type StatWeightsResult } from '../engine/statWeights.ts'
+import { planTeams, type TeamPlanOptions, type TeamPlanResult } from '../engine/teamPlan.ts'
 import { runTeam, type TeamRunMember, type TeamRunResult } from '../engine/teamRunner.ts'
+
+/**
+ * Вход плана команд для воркера: всё, кроме `data` (её шлёт вызывающий) и колбэков отмены/прогресса,
+ * которые подставляет сам воркер.
+ */
+export type WorkerPlanInput = Omit<TeamPlanOptions, 'data' | 'onProgress' | 'shouldCancel' | 'simulate'>
 
 let cancelled = false
 
@@ -125,10 +132,22 @@ const api = {
       return Promise.resolve(m)
     }, opts)
   },
+  /**
+   * «План команд на локацию»: жадный сбор отрядов по правилам 1–4 и улучшение обменами по симуляции.
+   * Прогресс — сделанные симуляции из бюджета; отмена — cancel() (вернётся последнее удачное состояние).
+   */
+  planTeams(data: GameData, input: WorkerPlanInput, onProgress?: (done: number, total: number) => void): TeamPlanResult {
+    cancelled = false
+    return planTeams({
+      ...input,
+      data,
+      onProgress: onProgress ? (done, total) => void onProgress(done, total) : undefined,
+      shouldCancel: () => cancelled,
+    })
+  },
   cancel(): void {
     cancelled = true
   },
 }
-
 Comlink.expose(api)
 export type EngineApi = typeof api
