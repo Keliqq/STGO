@@ -9,7 +9,7 @@
  */
 import type { Element, GameData, HeroInstance, Quest } from '../data/types.ts'
 import { AOE_CHANCE } from './constants.ts'
-import { fighterFromChampion, fighterFromHero, simulateTeam, threatShares, type ChampionBuild, type Fighter, type SimMetrics } from './combat.ts'
+import { fighterFromChampion, fighterFromHero, simulateTeam, threatShares, type ChampionBuild, type Fighter, type PowerBoosterId, type SimMetrics } from './combat.ts'
 import { partyElementBonusPct } from './statWeights.ts'
 
 // Русские названия стихий живут в statWeights.ts (там же, где подписи шагов весов) — реэкспорт для UI.
@@ -173,6 +173,8 @@ export function summarizeTeamRun(
 export interface TeamRunOptions {
   seed?: number
   runs?: number
+  /** Усилитель силы квеста на весь отряд (A74), выбор в форме квеста. */
+  powerBooster?: PowerBoosterId
 }
 
 /**
@@ -183,7 +185,7 @@ export async function runTeam(
   members: TeamRunMember[],
   quests: Quest[],
   data: GameData,
-  simulate: (fighters: Fighter[], quest: Quest, opts: { runs: number; seed: number }) => Promise<SimMetrics>,
+  simulate: (fighters: Fighter[], quest: Quest, opts: { runs: number; seed: number; powerBooster?: PowerBoosterId }) => Promise<SimMetrics>,
   opts: TeamRunOptions = {},
 ): Promise<TeamRunResult> {
   const fighters = teamFighters(members, data)
@@ -193,7 +195,7 @@ export async function runTeam(
   const runs = opts.runs ?? TEAM_SIM_RUNS
   const seed = (opts.seed ?? TEAM_SIM_SEED) >>> 0
   const metrics: SimMetrics[] = []
-  for (let i = 0; i < quests.length; i++) metrics.push(await simulate(list, quests[i], { runs, seed: (seed + i) >>> 0 }))
+  for (let i = 0; i < quests.length; i++) metrics.push(await simulate(list, quests[i], { runs, seed: (seed + i) >>> 0, powerBooster: opts.powerBooster }))
   const labels = members.map((m) => ({ name: m.hero?.name ?? m.build?.champion ?? '?', isChampion: m.hero === null }))
   return { ...summarizeTeamRun(list, quests, metrics, labels), seed }
 }
@@ -211,7 +213,7 @@ export function runTeamSync(
   const list = fighters as Fighter[]
   const runs = opts.runs ?? TEAM_SIM_RUNS
   const seed = (opts.seed ?? TEAM_SIM_SEED) >>> 0
-  const metrics = quests.map((q, i) => simulateTeam(list, q, { runs, seed: (seed + i) >>> 0 }))
+  const metrics = quests.map((q, i) => simulateTeam(list, q, { runs, seed: (seed + i) >>> 0, powerBooster: opts.powerBooster }))
   const labels = members.map((m) => ({ name: m.hero?.name ?? m.build?.champion ?? '?', isChampion: m.hero === null }))
   return { ...summarizeTeamRun(list, quests, metrics, labels), seed }
 }

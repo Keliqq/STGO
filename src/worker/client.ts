@@ -8,7 +8,7 @@ import * as Comlink from 'comlink'
 import EngineWorker from './engine.worker?worker'
 import type { EngineApi } from './engine.worker.ts'
 import type { QuestCheckSuggestion } from '../engine/calibration.ts'
-import type { Fighter, SimMetrics } from '../engine/combat.ts'
+import type { Fighter, PowerBoosterId, SimMetrics } from '../engine/combat.ts'
 import type { OptimizerInput, OptimizerResult, QuestWeight } from '../engine/optimizer.ts'
 import type { SkillAdviceOptions, SkillAdviceResult } from '../engine/skills.ts'
 import type { SeedAdvice, StatWeightsResult } from '../engine/statWeights.ts'
@@ -23,7 +23,7 @@ export interface Engine {
   simulate(
     fighters: Fighter[],
     quest: Quest,
-    opts?: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean },
+    opts?: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean; powerBooster?: PowerBoosterId },
     onProgress?: (done: number, total: number) => void,
   ): Promise<SimMetrics>
   /** Вклад навыков в win rate и советы по перекидке (выполняется в воркере). */
@@ -41,6 +41,7 @@ export interface Engine {
     champion: { name: string; rank: number } | null,
     quest: Quest,
     runs?: number,
+    powerBooster?: PowerBoosterId,
   ): Promise<{ weights: StatWeightsResult; seeds: (SeedAdvice & { heroIndex: number })[] }>
   /** «Что отметить»: квесты, где варианты калибровки сильнее всего расходятся по win rate (в воркере). */
   questsToCheck(
@@ -55,7 +56,7 @@ export interface Engine {
     members: TeamRunMember[],
     quests: Quest[],
     data: GameData,
-    opts?: { seed?: number; runs?: number },
+    opts?: { seed?: number; runs?: number; powerBooster?: PowerBoosterId },
     onProgress?: (done: number, total: number) => void,
   ): Promise<TeamRunResult>
   /** «План команд на локацию»: жадный сбор + улучшение обменами по симуляции (в воркере, с отменой). */
@@ -106,7 +107,7 @@ export function createEngine(store: KeyValueStore = idbStore): Engine {
       remote.simulate(fighters, quest, opts ?? {}, onProgress ? Comlink.proxy(onProgress) : undefined),
     skillAdvice: (data, heroes, champion, quests, options) =>
       remote.skillAdvice(data, heroes, champion, quests, options),
-    statWeights: (data, heroes, champion, quest, runs) => remote.statWeights(data, heroes, champion, quest, runs),
+    statWeights: (data, heroes, champion, quest, runs, powerBooster) => remote.statWeights(data, heroes, champion, quest, runs, powerBooster),
     questsToCheck: (data, quests, heroes, champion, onProgress) =>
       remote.questsToCheck(data, quests, heroes, champion, onProgress ? Comlink.proxy(onProgress) : undefined),
     runTeam: (members, quests, data, opts, onProgress) =>

@@ -4,7 +4,7 @@
  */
 import * as Comlink from 'comlink'
 import type { GameData, HeroInstance, Quest } from '../data/types.ts'
-import { fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type SimMetrics } from '../engine/combat.ts'
+import { fighterFromChampion, fighterFromHero, simulateTeam, type Fighter, type PowerBoosterId, type SimMetrics } from '../engine/combat.ts'
 import { questsToCheck, type QuestCheckSuggestion } from '../engine/calibration.ts'
 import { SEED_STAT_PER_SEED } from '../engine/constants.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult, type QuestWeight } from '../engine/optimizer.ts'
@@ -29,7 +29,7 @@ const api = {
   simulate(
     fighters: Fighter[],
     quest: Quest,
-    opts: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean },
+    opts: { runs?: number; seed?: number; maxRounds?: number; extreme?: boolean; powerBooster?: PowerBoosterId },
     onProgress?: (done: number, total: number) => void,
   ): SimMetrics {
     cancelled = false
@@ -76,14 +76,15 @@ const api = {
     champion: { name: string; rank: number } | null,
     quest: Quest,
     runs?: number,
+    powerBooster?: PowerBoosterId,
   ): { weights: StatWeightsResult; seeds: (SeedAdvice & { heroIndex: number })[] } {
     cancelled = false
     const champ = champion ? data.champions.find((c) => c.name === champion.name) : undefined
     const fighters = heroes.map((h) => fighterFromHero(h, data))
     if (champ && champion) fighters.push(fighterFromChampion(champ, champion.rank, data))
     const heroesOnly = fighters.slice(0, heroes.length)
-    const weights = statWeights(heroesOnly, quest, { runs })
-    const seeds = heroesOnly.map((_, i) => ({ ...seedAdvice(heroesOnly, quest, SEED_STAT_PER_SEED, { runs, heroIndex: i }), heroIndex: i }))
+    const weights = statWeights(heroesOnly, quest, { runs, powerBooster })
+    const seeds = heroesOnly.map((_, i) => ({ ...seedAdvice(heroesOnly, quest, SEED_STAT_PER_SEED, { runs, heroIndex: i, powerBooster }), heroIndex: i }))
     return { weights, seeds }
   },
   /**
@@ -117,7 +118,7 @@ const api = {
     members: TeamRunMember[],
     quests: Quest[],
     data: GameData,
-    opts: { seed?: number; runs?: number },
+    opts: { seed?: number; runs?: number; powerBooster?: PowerBoosterId },
     onProgress?: (done: number, total: number) => void,
   ): Promise<TeamRunResult> {
     cancelled = false

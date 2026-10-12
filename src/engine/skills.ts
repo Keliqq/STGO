@@ -30,12 +30,13 @@
  */
 import type { GameData, HeroInstance, Skill } from '../data/types.ts'
 import type { QuestWeight } from './optimizer.ts'
-import { fighterFromChampion, fighterFromHero, simulateTeam } from './combat.ts'
+import { fighterFromChampion, fighterFromHero, simulateTeam, type PowerBoosterId } from './combat.ts'
 import {
   ARGONS_FINEST_TALENT_POINTS,
   CUBE_BASIC_COST,
   CUBE_MAX_TIER,
   CUBE_SLOTS,
+  INCOMPATIBLE_SKILL_NAMES,
   OPTIMIZER_CRN_SEED,
   OPTIMIZER_SIM_RUNS,
   ROLAND_PREFERRED_SLOT,
@@ -60,6 +61,8 @@ export interface SkillAdviceOptions {
   eps?: number
   /** Индексы героев, на которых Роланд уже использован (флажок на героя) — план не предлагает его снова. */
   rolandUsed?: readonly number[]
+  /** Усилитель силы квеста на весь отряд (A74): вклад навыков считается в том же бою, что и подбор. */
+  powerBooster?: PowerBoosterId
 }
 
 export interface SkillContribution {
@@ -156,14 +159,14 @@ export interface SlotPlanAction {
 /** Шаги, которыми слот перекидывается (заменяется другим навыком): «оставить» к ним не добавляется. */
 const REROLL_STEP_KINDS: readonly RollStepKind[] = ['hire', 'reroll', 'roland']
 
-function weightedWinRate(heroes: HeroInstance[], data: GameData, champion: { name: string; rank: number } | null | undefined, quests: QuestWeight[], seed: number, runs: number): number {
+function weightedWinRate(heroes: HeroInstance[], data: GameData, champion: { name: string; rank: number } | null | undefined, quests: QuestWeight[], seed: number, runs: number, powerBooster?: PowerBoosterId): number {
   const fighters = heroes.map((h) => fighterFromHero(h, data))
   if (champion) {
     const c = data.champions.find((x) => x.name === champion.name)
     if (c) fighters.push(fighterFromChampion(c, champion.rank, data))
   }
   const wSum = quests.reduce((a, q) => a + q.weight, 0) || 1
-  return quests.reduce((a, qw) => a + qw.weight * simulateTeam(fighters, qw.quest, { runs, seed }).winRate, 0) / wSum
+  return quests.reduce((a, qw) => a + qw.weight * simulateTeam(fighters, qw.quest, { runs, seed, powerBooster }).winRate, 0) / wSum
 }
 
 /** Вклад каждого навыка из hero.skills в win rate (замена на пустой). */
@@ -177,14 +180,14 @@ export function skillContributions(
   if (quests.length === 0 || heroes.length === 0) return []
   const seed = (options.seed ?? OPTIMIZER_CRN_SEED) >>> 0
   const runs = options.runs ?? OPTIMIZER_SIM_RUNS
-  const base = weightedWinRate(heroes, data, champion, quests, seed, runs)
+  const base = weightedWinRate(heroes, data, champion, quests, seed, runs, options.powerBooster)
   const out: SkillContribution[] = []
   heroes.forEach((hero, heroIndex) => {
     hero.skills.forEach((skillId, skillIndex) => {
       const skill = data.skills.find((s) => s.id === skillId)
       if (!skill) return
       const without = heroes.map((h, i) => (i === heroIndex ? { ...h, skills: h.skills.filter((_, j) => j !== skillIndex) } : h))
-      const wrWithout = weightedWinRate(without, data, champion, quests, seed, runs)
+      const wrWithout = weightedWinRate(without, data, champion, quests, seed, runs, options.powerBooster)
       out.push({
         heroIndex,
         skillIndex,
@@ -276,11 +279,24 @@ export function skillBlockReason(data: GameData, hero: HeroInstance, skill: Skil
     .filter((x): x is { skill: Skill; slot: number } => x.skill !== undefined && x.slot !== slot)
     .map((x) => x.skill)
   if (others.some((s) => s.line === skill.line)) return `на герое уже есть навык линейки «${skill.line}» — они взаимоисключающие`
+  if (incompatibleWith(skill.name, others.map((s) => s.name))) return `навык несовместим с уже выученным (${INCOMPATIBLE_SKILL_NAMES.flat().join(' / ')}, A72)`
   const weapons = weaponTypes(data)
   if (isWeaponSkill(skill, weapons) && others.some((s) => isWeaponSkill(s, weapons) && s.rarity === skill.rarity)) {
     return `на оружие не больше одного ${skill.rarity === 'Epic' ? 'эпического' : 'обычного'} навыка (A40)`
   }
   return null
+}
+
+/**
+ * Несовместимые навыки (A72): stcalc — «Sturdy и Impervious несовместимы», то есть игра не даёт
+ * одному герою оба. Учитывается только при ролле (пул перекидки и редактор), не в бою.
+ */
+function incompatibleWith(name: string, presentNames: readonly string[]): boolean {
+  for (const [a, b] of INCOMPATIBLE_SKILL_NAMES) {
+    if (name === a && presentNames.includes(b)) return true
+    if (name === b && presentNames.includes(a)) return true
+  }
+  return false
 }
 
 /**
@@ -299,6 +315,7 @@ export function rollableSkills(data: GameData, hero: HeroInstance, options: { ig
     .filter((x): x is { skill: Skill; slot: number } => x.skill !== undefined && !ignore.has(x.slot))
     .map((x) => x.skill)
   const blockedLines = new Set(present.map((s) => s.line))
+  const presentNames = present.map((s) => s.name)
   const weapons = weaponTypes(data)
   const blockedWeaponRarities = new Set(present.filter((s) => isWeaponSkill(s, weapons)).map((s) => s.rarity))
   const classNames = heroClassNames(data, hero)
@@ -308,6 +325,7 @@ export function rollableSkills(data: GameData, hero: HeroInstance, options: { ig
     if (s.requiresPromotion && !promoted) return false
     if (!s.classes.some((c) => classNames.includes(c))) return false
     if (blockedLines.has(s.line)) return false
+    if (incompatibleWith(s.name, presentNames)) return false
     if (isWeaponSkill(s, weapons) && blockedWeaponRarities.has(s.rarity)) return false
     return true
   })

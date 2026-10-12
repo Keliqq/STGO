@@ -94,6 +94,23 @@ export function damageFactor(def: number, caps: DefCaps | null, curve: DefCurve)
 }
 
 /**
+ * Пороги защиты из одного числа — «Defense cap» с экрана игры (A71).
+ *
+ * Игра задаёт квесту один cap (порог 75%): дальше пороги кратны ему — 50% = cap/6, 70% = cap/3,
+ * 75% = cap. Тот же формат у stcentral-hub («X · 2X · 6X», где X = cap/6) и у stcalc.com.
+ * Проверка на гайде stcalc по Meteor Zone Extreme (cap 159600, атака врага 410): DEF 0 → 615
+ * (×1.5), 26600 = cap/6 → 205 (×0.5), 53200 = cap/3 → 123 (×0.3), 159600 = cap → 102.5 ≈ 103 (×0.25) —
+ * это ровно `damageFactor` с этими порогами (тест `formulas.test.ts`).
+ *
+ * Нужна там, где в таблице и на stcentral-hub порогов нет (Lost City of Gold, A10) и пользователь
+ * вводит cap с экрана игры: поле «Defense cap с экрана игры» на странице «Данные».
+ */
+// ASSUMPTION: A71 — cap с экрана игры пользователь читает глазами; кратность 1:2:6 взята из обоих источников.
+export function defCapsFromCap(cap: number): DefCaps {
+  return { p50: cap / 6, p70: cap / 3, p75: cap }
+}
+
+/**
  * Урон крита врага: «enemy base damage is utilized at all defense values above half the first soft cap» —
  * крит ×1.5 считается от базового урона, если DEF снижает урон, и от повышенного, если DEF мала.
  */

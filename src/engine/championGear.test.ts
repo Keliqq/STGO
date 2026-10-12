@@ -146,9 +146,12 @@ describe('экипировка чемпиона: влияние на бой', ()
     ]
     const a = simulateTeam(fighters, lcogQuest, { runs: 200, seed: 99 })
     const b = simulateTeam(fighters, lcogQuest, { runs: 200, seed: 99 })
-    const c = simulateTeam(fighters, lcogQuest, { runs: 200, seed: 100 })
     expect(a).toEqual(b)
-    expect(JSON.stringify(a)).not.toBe(JSON.stringify(c))
+    // «Другой seed → другой результат» проверяем набором seeds, а не парой: в этом квесте отряд гибнет
+    // всегда (win rate 0, гибель 100%), поэтому часть seeds даёт совпадающие сводки — пара 99/100
+    // после смены AoE 20% → 25% (A70) как раз совпала.
+    const bySeed = [99, 100, 101, 102].map((seed) => JSON.stringify(simulateTeam(fighters, lcogQuest, { runs: 200, seed })))
+    expect(new Set(bySeed).size).toBeGreaterThan(1)
   })
 
   it('чемпион из фикстуры находится по имени, как его ищет команда', () => {

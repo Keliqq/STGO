@@ -17,11 +17,14 @@ import {
   GOLD_ELEMENT_COUNTS_FOR_ANY_HERO,
   HERO_LEVEL_STAT_GROWTH,
   LCOG_CHESTS,
+  NON_STACKING_SPIRIT_SKILLS,
   QUALITY_MULTIPLIERS,
   QUALITY_ROUNDING,
+  QUIVER_BOW_BONUS_STATS,
   SPIRIT_AFFINITY_MULTIPLIER,
   SPIRIT_PLUS_RULE,
   SPIRIT_SKILL_DOUBLING_ITEMS,
+  TITAN_ONLY_SPIRIT_SKILLS,
   TYPED_ITEM_BONUS_STATS,
 } from './constants.ts'
 import { baseStatAtLevel, floorStat } from './formulas.ts'
@@ -273,6 +276,25 @@ export function innateBonusOf(cls: HeroClass, data: GameData): { eva: number; cr
   return base?.innateBonus ?? { eva: 0, crit: 0 }
 }
 
+/**
+ * Не складывается ли этот навык духа сам с собой (A5-дополнение, A72): у нескольких Titan Spirit
+ * навык `Titan Solemnity` действует один раз. У «+»-версии своё имя (`Titan Solemnity+`),
+ * поэтому сравниваем и его.
+ */
+function isNonStackingSpirit(name: string): boolean {
+  return NON_STACKING_SPIRIT_SKILLS.some((n) => name === n || name === `${n}+`)
+}
+
+/**
+ * Доступен ли навык духа только «титаническим» классам (A72). У Titan Solemnity в вики пометка
+ * «Exclusive to Titan classes»: у базового класса дух даёт лишь плоские статы предмета, а +15% HP
+ * и мана-щита не работают. Промоушен в модели — это действующий класс с `baseClass` (промоушен
+ * или Душа Титана, A47).
+ */
+function isTitanOnlySpirit(name: string): boolean {
+  return TITAN_ONLY_SPIRIT_SKILLS.some((n) => name === n || name === `${n}+`)
+}
+
 /** Все навыки, действующие на героя: обычные (ступень по стихии), врождённый, духи, артефакты. */
 export function activeSkills(hero: HeroInstance, data: GameData, element: number): Skill[] {
   const { skills, lines, items, enchants } = lookup(data)
@@ -299,10 +321,13 @@ export function activeSkills(hero: HeroInstance, data: GameData, element: number
       // ASSUMPTION: A5 — «+»-версия, если Spirit Affinity предмета = навык духа.
       const usePlus = SPIRIT_PLUS_RULE === 'affinity' && !!item && !!base && item.spiritAffinity === base.name
       const sk = usePlus && plus ? plus : base
-      // Навыки одинаковых духов складываются: без этого ошибка ATK по фикстуре 9% вместо 2% (A5).
-      if (sk) out.push(sk)
+      // A72: «Exclusive to Titan classes» — у базового класса навык духа не действует (статы духа остаются).
+      // Навыки одинаковых духов складываются: без этого ошибка ATK по фикстуре 9% вместо 2% (A5),
+      // кроме NON_STACKING_SPIRIT_SKILLS (Titan Spirit) — второй такой навык не добавляется (A72).
+      const usable = sk && (!isTitanOnlySpirit(sk.name) || promoted)
+      if (usable && !(isNonStackingSpirit(sk.name) && out.some((x) => x.name === sk.name))) out.push(sk)
       // ASSUMPTION: A27 — Portable Totem Pole удваивает навык вставленного в него духа.
-      if (sk && item && (SPIRIT_SKILL_DOUBLING_ITEMS as readonly string[]).includes(item.name)) out.push(sk)
+      if (usable && item && (SPIRIT_SKILL_DOUBLING_ITEMS as readonly string[]).includes(item.name)) out.push(sk)
     }
     if (item?.artifactSkill) {
       const sk = skills.get(item.artifactSkill)
@@ -348,6 +373,9 @@ export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptio
   // Ступени навыков считает стихия без духов (A29): экспорт Селены (95 при пороге 95) это подтверждает.
   const skills = activeSkills(hero, data, elementStones)
   const effects = skills.flatMap((s) => s.effects).filter(isSheetEffect)
+  // A72: «+30% bonus from all items with Bow» (навык Quiver Bow Bonus, единственный `Type = 'Other'`)
+  // усиливает ATK/DEF/HP лука — в отличие от «stats with <тип>» (A25, без DEF).
+  const quiverEffects = new Set(skills.filter((s) => s.type === 'Other').flatMap((s) => s.effects))
 
   const flat = zero()
   const pct = zero()
@@ -410,13 +438,15 @@ export function calcStats(hero: HeroInstance, data: GameData, options: CalcOptio
       if (item.stats.Normal[st] > 0) {
         enchantStats[st] = Math.round((stone?.stats?.[st] ?? 0) * stoneK) + Math.round((spirit?.stats?.[st] ?? 0) * spiritK)
       }
-      // «bonus from all items» — ко всем статам; «… with <тип>» — к model.typedBonusStats (A25);
+      // «bonus from all items» — ко всем статам; «… with <тип>» — к model.typedBonusStats (A25),
+      // у колчана (навык типа Other) — ко всем трём статам (QUIVER_BOW_BONUS_STATS, A72);
       // «+N% Attack with Wand» — только к своему стату.
       let k = 1
       for (const e of effects) {
         if (e.mode !== 'pct' || !appliesToItem(e, item)) continue
         if (e.stat === 'itemStats') {
-          if (e.condition?.kind !== 'itemType' || model.typedBonusStats.includes(st)) k += e.value / 100
+          const bonusStats = quiverEffects.has(e) ? QUIVER_BOW_BONUS_STATS : model.typedBonusStats
+          if (e.condition?.kind !== 'itemType' || bonusStats.includes(st)) k += e.value / 100
         } else if (e.stat === st && e.condition) k += e.value / 100
       }
       multiplier[st] = k

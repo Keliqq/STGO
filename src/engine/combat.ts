@@ -3,10 +3,13 @@
  *
  * Формулы — ST-Central Combat Compendium (https://st-central.net/combat-compendium/, A30):
  *   · враг бьёт первым; порядок ходов отряда: 3 слота — средний → левый → правый,
- *     4 слота — средний-левый → крайний левый → крайний правый → средний-правый;
+ *     4 слота — средний-левый → крайний левый → крайний правый → средний-правый; вариант
+ *     `turn-order-shuffle` перемешивает отряд каждый раунд (stcalc, A73);
  *   · урон героя = ATK в бою (у монстров нет DEF); крит ×CritDmg;
  *   · урон врага = Monster DMG × множитель по DEF (1.5× при 0 → 0.25× на пороге 75%, между порогами линейно);
- *     крит врага ~10% ×1.5 от базового урона; AoE — по всем, отдельный урон Monster AOE DMG;
+ *     крит врага ~10% (в Гробнице Титанов 15%, A70) ×1.5 от базового урона; AoE — по всем, отдельный урон
+ *     Monster AOE DMG, шанс 25% (A31/A70); квест может задать свои шансы полями Quest.aoeChance /
+ *     Quest.enemyCritChance; усилитель силы квеста (A74) — % боя на весь отряд;
  *   · цель врага выбирается с вероятностью threat / Σ threat; EVA — шанс полного уклонения;
  *   · стихийный барьер: не пробит → урон отряда ×BARRIER_UNBROKEN_DMG_FACTOR (A9);
  *   · Extreme: уклонение −20 п.п. и предел 75% (A34/A42), у героя с отрицательным уклонением
@@ -31,7 +34,9 @@ import {
   MAX_ROUNDS,
   NEGATIVE_EVA_CRIT_MODE,
   PCT_STACKING,
+  POWER_BOOSTERS,
   SPIRIT_PLUS_RULE,
+  TURN_ORDER,
 } from './constants.ts'
 import {
   combatStat,
@@ -86,6 +91,11 @@ export interface CombatModel {
   negativeEvaCrit?: 'additive' | 'absolute'
   /** Как % боя складываются с % карточки (A62): `pooled` (Compendium) или `multiplicative`. */
   pctStacking?: 'pooled' | 'multiplicative'
+  /**
+   * Порядок ходов отряда (A73): `fixed` — Compendium (один и тот же все раунды, `turnOrderFor`),
+   * `shuffle` — как в stcalc: отряд перемешивается каждый раунд.
+   */
+  turnOrder?: 'fixed' | 'shuffle'
 }
 
 /** Параметры боя с подставленными значениями по умолчанию. */
@@ -97,6 +107,7 @@ export interface ResolvedCombatModel {
   barrierUnbrokenFactor: number
   negativeEvaCrit: 'additive' | 'absolute'
   pctStacking: 'pooled' | 'multiplicative'
+  turnOrder: 'fixed' | 'shuffle'
 }
 
 export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
@@ -108,6 +119,7 @@ export function resolveCombatModel(m: CombatModel = {}): ResolvedCombatModel {
     barrierUnbrokenFactor: m.barrierUnbrokenFactor ?? BARRIER_UNBROKEN_DMG_FACTOR,
     negativeEvaCrit: m.negativeEvaCrit ?? NEGATIVE_EVA_CRIT_MODE,
     pctStacking: m.pctStacking ?? PCT_STACKING,
+    turnOrder: m.turnOrder ?? TURN_ORDER,
   }
 }
 
@@ -143,6 +155,21 @@ export function turnOrderFor(n: number): number[] {
     if (mid + d < n) out.push(mid + d)
   }
   return out.slice(0, n)
+}
+
+/**
+ * Случайный порядок ходов на раунд (A73): перемешивание Фишера — Йетса тем же PRNG, что и бой,
+ * поэтому прогон остаётся детерминированным при том же seed. Нужно только варианту калибровки
+ * `turn-order-shuffle` (stcalc перемешивает отряд каждый раунд); базовая модель — фиксированный
+ * порядок Compendium (`turnOrderFor`).
+ */
+export function shuffleOrder(order: readonly number[], rng: () => number): number[] {
+  const out = [...order]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
 }
 
 /** Боец: готовый набор статов + активные навыки (ступени уже вычислены). */
@@ -576,13 +603,23 @@ export interface SimOptions {
   maxRounds?: number
   /** Принудительно включить экстрим-штраф уклонения; по умолчанию — quest.difficulty === 'Extreme'. */
   extreme?: boolean
+  /** Явное переопределение шанса крита врага (важнее поля квеста и модели). */
   enemyCritChance?: number
+  /** Явное переопределение шанса AoE (важнее поля квеста и модели). */
   aoeChance?: number
+  /**
+   * Усилитель силы квеста на весь отряд (A74): `normal` / `super` / `mega`. % боя — складываются
+   * с % карточки (A62). По умолчанию `none` — усилитель не выбран.
+   */
+  powerBooster?: PowerBoosterId
   /** Переопределение кривой защиты и барьера (анализ чувствительности A57). */
   model?: CombatModel
   onProgress?: (done: number, total: number) => void
   shouldCancel?: () => boolean
 }
+
+/** Что выбрано в форме квеста: усилитель силы на весь отряд (A74). */
+export type PowerBoosterId = keyof typeof POWER_BOOSTERS
 
 export interface HeroSurvival {
   name: string
@@ -791,10 +828,16 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
   // «Highly random attack bonus for the party, up to +N%» (Tamas): матожидание, одинаково всем бойцам (A43).
   const randomAtkPct = randomAttackBonus(specials.reduce((a, s) => Math.max(a, s.randomPartyAtkUpToPct), 0))
   const combat = resolveCombatModel(opts.model)
+  // Усилитель силы квеста (A74): % боя на весь отряд, складывается с % карточки (A62), не поверх.
+  const booster = POWER_BOOSTERS[opts.powerBooster ?? 'none']
 
   fighters.forEach((f, i) => {
     const sm = emptyMods()
     sm.atkPct += randomAtkPct
+    sm.atkPct += booster.atkPct / 100
+    sm.defPct += booster.defPct / 100
+    sm.crit += booster.crit
+    sm.critDmg += booster.critDmg
     const cond: CondRef[] = []
     let hpPct = 0
     let hpFlat = 0
@@ -846,9 +889,10 @@ export function prepare(fighters: Fighter[], quest: Quest, opts: SimOptions): Pr
     partyHeal,
     extreme: opts.extreme ?? quest.difficulty === 'Extreme',
     maxRounds: opts.maxRounds ?? MAX_ROUNDS,
-    enemyCritChance: opts.enemyCritChance ?? combat.enemyCritChance,
+    // Приоритет: явное переопределение (тесты, калибровка) → значение квеста (A70) → модель боя → константа.
+    enemyCritChance: opts.enemyCritChance ?? quest.enemyCritChance ?? combat.enemyCritChance,
     negativeEvaCrit: combat.negativeEvaCrit,
-    aoeChance: opts.aoeChance ?? combat.aoeChance,
+    aoeChance: opts.aoeChance ?? quest.aoeChance ?? combat.aoeChance,
     combat,
     groupCounts,
     evaCaps: specials.map((s) => evaCapOf(s)),
@@ -1003,7 +1047,10 @@ function runAttempt(p: Prepared, quest: Quest, rng: () => number, powerBonusPct:
     if (aliveIdx.every((i) => !alive[i])) return { win: false, rounds: round, alive, dmgDealt, minSurvivorHpFrac: 0 }
 
     // — фаза отряда —
-    for (const i of p.order) {
+    // A73: базовая модель — фиксированный порядок Compendium; вариант `turn-order-shuffle` (stcalc)
+    // перемешивает отряд каждый раунд (тем же rng, поэтому прогон детерминирован).
+    const order = p.combat.turnOrder === 'shuffle' ? shuffleOrder(p.order, rng) : p.order
+    for (const i of order) {
       if (!alive[i]) continue
       const f = p.fighters[i]
       const sp = p.specials[i]

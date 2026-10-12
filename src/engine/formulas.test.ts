@@ -7,6 +7,7 @@ import {
   baseStatAtLevel,
   combatStat,
   damageFactor,
+  defCapsFromCap,
   effectiveEvasion,
   enemyCritChanceVs,
   enemyCritDamage,
@@ -58,6 +59,26 @@ describe('формулы: Combat Compendium', () => {
     const s = threatShareList([300, 100], 0.2)
     expect(s[0]).toBeCloseTo(0.8 * 0.75 + 0.1, 10)
     expect(s[0] + s[1]).toBeCloseTo(1, 10)
+  })
+})
+
+describe('пороги защиты из одного числа — «Defense cap» с экрана игры (A71)', () => {
+  it('cap → пороги 50/70/75% = cap/6 · cap/3 · cap (формат «X · 2X · 6X»)', () => {
+    expect(defCapsFromCap(159600)).toEqual({ p50: 26600, p70: 53200, p75: 159600 })
+  })
+
+  it('Meteor Zone Extreme (stcalc: cap 159600, атака врага 410): 0 → 615, 26600 → 205, 53200 → 123, cap → 102.5', () => {
+    // Владелец приводил эти числа по таблице гайда stcalc; «53000 → 123» в ней — округление 53200,
+    // а 123 — ровно 0.3 × 410. Проверяем саму кривую: она воспроизводит таблицу один в один.
+    const caps = defCapsFromCap(159600)
+    const dmg = 410
+    const at = (def: number): number => dmg * damageFactor(def, caps, curve)
+    expect(at(0)).toBeCloseTo(615, 6) // 1.5 × 410
+    expect(at(26600)).toBeCloseTo(205, 6) // 0.5 × 410
+    expect(at(53200)).toBeCloseTo(123, 6) // 0.3 × 410
+    expect(at(159600)).toBeCloseTo(102.5, 6) // 0.25 × 410 — в таблице показано как 103
+    // Ниже порога 50% урон падает линейно: 53000 (округление таблицы) даёт ≈123.6.
+    expect(at(53000)).toBeCloseTo(123.6, 1)
   })
 })
 

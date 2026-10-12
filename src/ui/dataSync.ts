@@ -9,6 +9,7 @@ import {
   loadGameData,
   subscribeStatus,
   syncBreakpoints,
+  syncUserQuestCaps,
 } from '#/data/sync.ts'
 import type { GameData } from '#/data/types.ts'
 
@@ -29,12 +30,14 @@ export async function saveSettings(s: Settings): Promise<void> {
 
 let started = false
 
-/** Кэш/снапшот сразу, затем фоном — проверка свежести таблицы и пороги защиты. */
+/** Кэш/снапшот сразу, затем фоном — проверка свежести таблицы, пороги защиты и введённые cap'ы (A71). */
 export function startDataSync(): void {
   if (started) return
   started = true
   void (async () => {
     await loadGameData()
+    // «Defense cap с экрана игры» — из IndexedDB: нужны до первого расчёта с порогами.
+    await syncUserQuestCaps()
     const { ttlHours } = await loadSettings()
     void ensureFresh(ttlHours)
     void syncBreakpoints()

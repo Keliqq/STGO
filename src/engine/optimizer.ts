@@ -41,7 +41,7 @@ import {
   OPTIMIZER_TOP_K,
   OPTIMIZER_YIELD_INTERVAL_MS,
 } from './constants.ts'
-import { barrierBroken, championEquipment, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type ChampionBuild, type Fighter, type SimMetrics } from './combat.ts'
+import { barrierBroken, championEquipment, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type ChampionBuild, type Fighter, type PowerBoosterId, type SimMetrics } from './combat.ts'
 import { maxItemTierFor } from './formulas.ts'
 import { quickScore } from './score.ts'
 import { partyElementBonusPct, STAT_WEIGHT_STATS, statWeights, type StatWeightStat, type StatWeightsResult } from './statWeights.ts'
@@ -130,6 +130,11 @@ export interface OptimizerInput {
   constraints: OptimizerConstraints
   /** Переопределить «Душа Титана» у всех героев (есть/нет). */
   titanSoul?: 'as-is' | 'on' | 'off'
+  /**
+   * Усилитель силы квеста на весь отряд (A74), выбор в форме квеста: `normal` / `super` / `mega`.
+   * Учитывается во всех симуляциях подбора — как % боя поверх карточки (A62).
+   */
+  powerBooster?: PowerBoosterId
   /** Общий seed кандидатов (CRN). */
   seed?: number
   /**
@@ -517,7 +522,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     if (hit) return hit
     await yieldC()
     const fs = teamOf(cfg)
-    const per = quests.map((qw) => simulateTeam(fs, qw.quest, { runs, seed }))
+    const per = quests.map((qw) => simulateTeam(fs, qw.quest, { runs, seed, powerBooster: input.powerBooster }))
     const ev: CandEval = { per, ...objectiveOf(per) }
     simCache.set(k, ev)
     simsUsed++
@@ -805,7 +810,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     if (!input.withStatWeights || quests.length !== 1) return null
     // Чемпион не входит в веса героев: его экипировку программа не подбирает.
     const heroesOnly = fs.slice(0, heroes.length)
-    const w = statWeights(heroesOnly, quests[0].quest, { runs: input.statWeightRuns, seed })
+    const w = statWeights(heroesOnly, quests[0].quest, { runs: input.statWeightRuns, seed, powerBooster: input.powerBooster })
     weightSims += w.heroes.length * (1 + STAT_WEIGHT_STATS.length) + 1
     return w
   }
@@ -820,7 +825,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     weights: StatWeightsResult | null = null,
   ): OptimizerResult {
     const fs = teamOf(cfg)
-    const per = ev?.per ?? quests.map((qw) => simulateTeam(fs, qw.quest, { runs, seed }))
+    const per = ev?.per ?? quests.map((qw) => simulateTeam(fs, qw.quest, { runs, seed, powerBooster: input.powerBooster }))
     const perQuest: QuestOutcome[] = per.map((m, i) => ({
       questId: quests[i].quest.id,
       label: questLabel(quests[i].quest),

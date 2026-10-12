@@ -10,7 +10,9 @@ import { loadHeroes } from '#/data/heroStore.ts'
 import { classIconId, elementIconId, skillIconId, typeIconId } from '#/data/images.ts'
 import { loadRealityChecks } from '#/data/realityChecks.ts'
 import { loadTeams } from '#/data/teams.ts'
-import { questsWithCaps } from '#/data/sync.ts'
+import { questsWithCaps, setUserQuestCap } from '#/data/sync.ts'
+import type { GameData, Quest } from '#/data/types.ts'
+import { defCapsFromCap } from '#/engine/formulas.ts'
 import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { type Settings, loadSettings, refreshNow, saveSettings, useDataStatus, useGameData } from '#/ui/dataSync.ts'
@@ -112,6 +114,110 @@ function BackupSection() {
   )
 }
 
+/** «X · 2X · 6X» из stcentral-hub и игры: один cap → пороги 50 / 70 / 75% (A71). */
+function capsLabel(cap: number): string {
+  const c = defCapsFromCap(cap)
+  return `${Math.round(c.p50)} · ${Math.round(c.p70)} · ${Math.round(c.p75)}`
+}
+
+/**
+ * Поле «Defense cap с экрана игры» для квеста, которому порогов не нашлось (A10/A71):
+ * в игре видно одно число — порог 75%, остальные кратны ему (cap/6 и cap/3).
+ * Запись — по Enter или уходу из поля; пустое поле убирает значение.
+ */
+function QuestCapField({ quest, value }: { quest: Quest; value: number | undefined }) {
+  // Пока пользователь не трогал поле, показываем значение из хранилища (оно приходит асинхронно при старте).
+  const [text, setText] = useState<string | null>(null)
+  const shown = text ?? (value == null ? '' : String(value))
+  const commit = (): void => {
+    if (text === null) return
+    const trimmed = text.trim()
+    if (trimmed === '') {
+      void setUserQuestCap(quest.id, null)
+      return
+    }
+    const n = Number(trimmed)
+    if (!Number.isFinite(n) || n <= 0) return
+    void setUserQuestCap(quest.id, n)
+  }
+  return (
+    <Input
+      type="number"
+      min={1}
+      className="w-28"
+      placeholder="0"
+      value={shown}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit()
+      }}
+    />
+  )
+}
+
+/**
+ * Пороги защиты квестов, которых нет ни в таблице, ни на stcentral-hub (Lost City of Gold и всё,
+ * что не совпало по локации/сложности). Пользователь вводит cap с экрана игры; он хранится в
+ * IndexedDB браузера и подставляется в `defCaps` (`data/questCaps.ts`, A71).
+ */
+function UserQuestCapsSection({ data }: { data: GameData }) {
+  const status = useDataStatus()
+  const caps = questsWithCaps(data)
+  // Список — по порогам ХАБА, а не по итоговым: введённый квест не должен исчезать из таблицы (иначе
+  // значение не увидеть и не поправить). Пороги самого хаба вводить не нужно.
+  const missing = caps.noHubCaps
+  const areas = [...new Set(missing.map((q) => q.area))]
+  const entered = Object.keys(status.userQuestCaps).length
+  if (missing.length === 0) {
+    return (
+      <p className="mt-3 text-sm text-muted-foreground">
+        Пороги есть у всех квестов — вводить cap вручную нечего.
+      </p>
+    )
+  }
+  return (
+    <div className="mt-4">
+      <p className="mb-2 text-sm">
+        У {missing.length} квестов порогов нет. Впишите <b>Defense cap с экрана игры</b> (это порог 75%): 50% и 70% игра
+        выводит из него — cap/6 и cap/3, тот же формат, что «X · 2X · 6X» у stcentral-hub. Введено вручную: {entered}.
+        Значения хранятся только в вашем браузере (IndexedDB).
+      </p>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Локация</TableHead>
+            <TableHead>Сложность</TableHead>
+            <TableHead>Тип</TableHead>
+            <TableHead>Defense cap с экрана игры</TableHead>
+            <TableHead>Пороги 50 · 70 · 75%</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {areas.flatMap((area) =>
+            missing
+              .filter((q) => q.area === area)
+              .map((q) => {
+                const cap = status.userQuestCaps[q.id]
+                return (
+                  <TableRow key={q.id}>
+                    <TableCell>{q.area}</TableCell>
+                    <TableCell>{q.difficulty}</TableCell>
+                    <TableCell>{q.variant === 'boss' ? 'босс' : 'обычный'}</TableCell>
+                    <TableCell>
+                      <QuestCapField quest={q} value={cap} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{cap ? capsLabel(cap) : '— без порогов —'}</TableCell>
+                  </TableRow>
+                )
+              }),
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 function DataPage() {
   const status = useDataStatus()
   const data = useGameData()
@@ -189,6 +295,7 @@ function DataPage() {
             {w}
           </p>
         ))}
+        {data ? <UserQuestCapsSection data={data} /> : null}
       </Section>
 
       {data ? (

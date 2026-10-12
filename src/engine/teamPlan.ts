@@ -29,7 +29,7 @@ import {
   PLAN_WIN_THRESHOLD,
 } from './constants.ts'
 import { elementContribution } from './barriers.ts'
-import { fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type ChampionBuild, type Fighter, type SimMetrics } from './combat.ts'
+import { fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type ChampionBuild, type Fighter, type PowerBoosterId, type SimMetrics } from './combat.ts'
 import { quickScore } from './score.ts'
 import { effectiveClass } from './stats.ts'
 import { partyHints, type PartyHint } from './teamRules.ts'
@@ -61,7 +61,7 @@ export interface PlannedTeam {
   notes: string[]
 }
 
-export type PlanSimulate = (fighters: Fighter[], quest: Quest, opts: { runs: number; seed: number }) => SimMetrics
+export type PlanSimulate = (fighters: Fighter[], quest: Quest, opts: { runs: number; seed: number; powerBooster?: PowerBoosterId }) => SimMetrics
 
 export interface TeamPlanOptions {
   data: GameData
@@ -75,6 +75,8 @@ export interface TeamPlanOptions {
   runs?: number
   finalRuns?: number
   seed?: number
+  /** Усилитель силы квеста на весь отряд (A74), выбор в форме квеста. */
+  powerBooster?: PowerBoosterId
   /** Бюджет вызовов симуляции на улучшение (1 вызов = 1 команда на 1 квесте). */
   budget?: number
   swapCandidates?: number
@@ -304,7 +306,7 @@ export function planTeams(opts: TeamPlanOptions): TeamPlanResult {
   const sim = (i: number, tag: 'run' | 'final'): SimMetrics => {
     sims++
     report()
-    return simulate(plannedFighters(draft[i], data), quest, { runs: tag === 'final' ? finalRuns : runs, seed: (seed + i + (tag === 'final' ? 1000 : 0)) >>> 0 })
+    return simulate(plannedFighters(draft[i], data), quest, { runs: tag === 'final' ? finalRuns : runs, seed: (seed + i + (tag === 'final' ? 1000 : 0)) >>> 0, powerBooster: opts.powerBooster })
   }
   const initial = draft.map((_, i) => sim(i, 'run'))
   let winRates = initial.map((m) => m.winRate)

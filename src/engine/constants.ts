@@ -124,6 +124,37 @@ export const SPIRIT_SKILL_DOUBLING_ITEMS = ['Portable Totem Pole'] as const
 export const TYPED_ITEM_BONUS_STATS: readonly ('atk' | 'def' | 'hp')[] = ['atk', 'hp']
 
 /**
+ * Исключение из A25 для колчана: «+30% bonus from all items with Bow» (навык `Quiver Bow Bonus`,
+ * единственная строка SKILLS без типа — A19, поэтому в данных у неё `Type = 'Other'`) усиливает
+ * и HP/DEF лука. Так сказано в данных владельца (changelog stcalc.com); сам changelog публично
+ * недоступен (`/changelog` → 404, SPA), в вики и на stcentral такого уточнения нет — статус A72.
+ * Проверка «колчан работает только с дальним оружием» — не наша логика, а условие из таблицы:
+ * у навыка `condition.itemType = ['Bow']`, поэтому к мечу, посоху и т. п. бонус не применяется вовсе
+ * (`stats.ts → appliesToItem`). Реализация: `stats.ts → calcStats` (эффекты навыков типа `Other`).
+ */
+// ASSUMPTION: A25 (дополнение), A72
+export const QUIVER_BOW_BONUS_STATS: readonly ('atk' | 'def' | 'hp')[] = ['atk', 'def', 'hp']
+
+/**
+ * Навыки духов, которые НЕ складываются, если духов с таким навыком несколько.
+ * Источник: вики сообщества по Titan Spirit (https://shop-titans.fandom.com/wiki/Titan_Spirit):
+ * «Titan Solemnity: +15% Health, +15% Mana Shield … Does not stack with other Titan Spirits».
+ * Значит, несколько Titan Spirit дают эффект один раз, а не суммой. Остальные духи складываются (A5),
+ * а плоские статы самих духов (ATK/DEF/HP предмета) суммируются как у любых предметов.
+ */
+// ASSUMPTION: A5 (дополнение), A72
+export const NON_STACKING_SPIRIT_SKILLS: readonly string[] = ['Titan Solemnity']
+
+/**
+ * Навыки духов, доступные только «титаническим» (промоутнутым) классам. Там же: у Titan Solemnity
+ * пометка «Exclusive to Titan classes» — значит, у базового класса дух даёт только плоские статы
+ * предмета (ATK 164 / DEF 109 / HP 33), а +15% HP/мана-щита не работают. Промоушен в модели — это
+ * `HeroClass.baseClass != null` у действующего класса (то есть уже промоушен или Душа Титана, A47).
+ */
+// ASSUMPTION: A72
+export const TITAN_ONLY_SPIRIT_SKILLS: readonly string[] = ['Titan Solemnity']
+
+/**
  * Бонус стихии от Elemental Affinity предмета (A29, пересмотрено в сессии 31).
  * Камень в предмете, чьё сродство включает его стихию («All» — любую), даёт +10 стихии,
  * если величина камня ≥ AFFINITY_ELEMENT_MIN_STONE_VALUE (25 = T12 и выше).
@@ -144,19 +175,67 @@ export const AFFINITY_ELEMENT_MIN_STONE_VALUE = 25
 
 /** Максимальный множитель урона врага при DEF = 0 (Compendium: «Maximum DMG = Enemy DMG × 1.5»). */
 export const ENEMY_DMG_MAX_FACTOR = 1.5
-/** Шанс крита врага (Compendium: «Chance to crit = 10%~»). */
-// ASSUMPTION: A30 — выборка в статье небольшая.
+/**
+ * Шанс крита врага: 10% (Compendium: «Chance to crit = 10%~»).
+ * Уточнение по датасету stcalc (https://stcalc.com/data/quests.json, разобрано в сессии 32): `critChance`=10
+ * и `critDmg`=150 в 240 парах «квест × сложность» из 244, `critChance`=15 — ровно в 4 парах, и это все
+ * сложности «Tomb of Titans» (Гробница Титанов; в датасете помечена `isTomb`). У записей Башни
+ * (Tower Floor 30, `isTower`) крит 10%, а не 15% — формулировка «15% у Tower» не подтвердилась.
+ * Отдельный квест может переопределить шанс полем `Quest.enemyCritChance` (A70).
+ */
+// ASSUMPTION: A30 — выборка в статье небольшая; A70 — числа сверены с датасетом stcalc.
 export const ENEMY_CRIT_CHANCE = 0.1
+/**
+ * Шанс крита врага в Гробнице Титанов / Tomb of Titans (stcalc: `critChance` 15, те же 4 записи `isTomb`).
+ * Квестов Гробницы в таблице нет — значение справочное (и заготовка под поле `Quest.enemyCritChance`).
+ */
+// ASSUMPTION: A70
+export const ENEMY_CRIT_CHANCE_TOMB = 0.15
 /** Множитель крита врага (Compendium: «Critical Damage = 1.5x», считается от базового урона). */
 export const ENEMY_CRIT_MULT = 1.5
 /** Порог DEF → снижение урона (Compendium: 50% → ×0.5, 70% → ×0.3, cap → ×0.25; между порогами линейно). */
 export const DEF_MITIGATION = { at50: 0.5, at70: 0.3, at75: 0.25 } as const
 /**
- * Шанс AoE-атаки врага (Compendium: «AoE chance = 20-25% pending on Quest/Enemy»;
- * урон — отдельная колонка Monster AOE DMG).
+ * Шанс AoE-атаки врага (урон — отдельная колонка Monster AOE DMG).
+ * Компендиум: «AoE chance = 20-25% pending on Quest/Enemy». Уточнено по датасету stcalc
+ * (https://stcalc.com/data/quests.json, поле `aoeChance`, 244 пары «квест × сложность», сессия 32):
+ * 25% — в 236 парах; 0% — 4 пары (Moonlit Grotto / Moonstone Golem, все сложности);
+ * 50% — 4 пары (Runestone Quarry / Runestone Golem, все сложности). Поэтому базовое значение — 0.25,
+ * а особые квесты задают своё поле `Quest.aoeChance` (движок читает его раньше константы).
  */
-// ASSUMPTION: A31 — точный шанс по квесту неизвестен, берём нижнюю границу.
-export const AOE_CHANCE = 0.2
+// ASSUMPTION: A31 — было 0.2 (нижняя граница компендиума); A70 — по датасету stcalc взято 0.25.
+export const AOE_CHANCE = 0.25
+
+/**
+ * Порядок ходов отряда:
+ *  · `fixed` (по умолчанию) — Compendium: 3 слота — средний→левый→правый, 4 — ср-левый→крайний
+ *    левый→крайний правый→ср-правый; порядок один и тот же все раунды (`combat.ts → turnOrderFor`);
+ *  · `shuffle` — stcalc.com перемешивает отряд каждый раунд (свой порядок ходов на раунд).
+ * Что именно делает игра, в источниках расходится, поэтому НЕ выбираем молча: базовое значение —
+ * Compendium (A30/A33), а `shuffle` доступен вариантом калибровки `turn-order-shuffle` (A73).
+ */
+// ASSUMPTION: A33 — для 5 слотов порядок не опубликован; A73 — расхождение Compendium ↔ stcalc.
+export const TURN_ORDER: 'fixed' | 'shuffle' = 'fixed'
+
+/**
+ * Усилители силы (Power Boosters) — выбор в форме квеста, действуют на весь отряд.
+ * Числа (данные владельца, из интерфейса/калькулятора stcalc.com): Normal — +20% ATK/DEF;
+ * Super — +40% ATK/DEF и +10% крита; Mega — +80% ATK/DEF, +25% крита и +50% урона крита.
+ * Значения — доли: 0.1 = +10 п.п. крита, 0.5 = +50% к множителю урона крита.
+ * Публично эти проценты НЕ подтверждены: официальная страница (https://playshoptitans.com/specials/quest)
+ * и вики (https://shop-titans.fandom.com/wiki/Quest_Boosters) дают только слова «Power bonus / Large / Huge»;
+ * официальные ноты 4.1.0 (https://playshoptitans.com/news/version-4-1-0-release-notes) подтверждают лишь,
+ * что бустеры дают бонус к статам и больше не дают уклонения. Отсюда статус A74.
+ * Складываются как % боя (`PCT_STACKING = pooled`, A62): суммируются с % карточки и аурами, а не
+ * умножаются поверх (`combat.ts → prepare`, поле `SimOptions.powerBooster`).
+ */
+// ASSUMPTION: A74 — числа со слов владельца (stcalc), публичной ссылки на них нет.
+export const POWER_BOOSTERS = {
+  none: { atkPct: 0, defPct: 0, crit: 0, critDmg: 0 },
+  normal: { atkPct: 20, defPct: 20, crit: 0, critDmg: 0 },
+  super: { atkPct: 40, defPct: 40, crit: 0.1, critDmg: 0 },
+  mega: { atkPct: 80, defPct: 80, crit: 0.25, critDmg: 0.5 },
+} as const
 /**
  * Множитель урона отряда, если стихийный барьер не пробит. Источник: ST-Central, «Hero Academia» →
  * Elemental Barriers: «If the barrier's health is higher than the elemental value of your party then it will be
@@ -256,7 +335,7 @@ export const RANDOM_BONUS_EXPECTED_FACTOR = 0.5
  * изменения формул или спец-механик старые записи кэша не отдаются (данные при этом те же).
  * Поднимать при любом изменении, влияющем на win rate (формулы, механики классов, ступени навыков).
  */
-export const ENGINE_MODEL_VERSION = 16
+export const ENGINE_MODEL_VERSION = 17
 
 /**
  * Топ-K предметов на слот после отсева по quickScore. Ранжирование по Спирмену (0,92) надёжно,
@@ -460,6 +539,17 @@ export const ROLAND_PREFERRED_SLOT = 3
 // ASSUMPTION: A39 — соответствие кубиков тирам навыков в данных отсутствует; в ST-Central
 // подтверждены слоты, стоимость и блокировки, про тиры навыков там ничего нет.
 export const CUBE_MAX_TIER: Record<1 | 2 | 3 | 4, number> = { 1: 10, 2: 15, 3: 20, 4: 25 }
+
+/**
+ * Пары навыков, которые игра не даёт одному герою одновременно. Так сказано в данных владельца
+ * (changelog stcalc.com); публично пара не подтверждена (вики описывает Sturdy и Impervious просто
+ * как HP-навыки), статус — A72. Учитывается только в пуле перекидки (`skills.ts → rollableSkills` /
+ * `skillBlockReason`): надетый вручную герой может иметь оба, и движок считает то, что есть, —
+ * это ограничение ролла, а не боя.
+ */
+// ASSUMPTION: A72 — в таблице взаимных исключений нет, пара взята из данных владельца.
+export const INCOMPATIBLE_SKILL_NAMES: readonly (readonly [string, string])[] = [['Sturdy', 'Impervious']]
+
 
 // ─────────────────────────── План ролла навыков героя ───────────────────────────
 // Источник: «Гайд по героям и защитникам Shop Titans 2.0» (Develion), раздел «Как “роллить” героев»

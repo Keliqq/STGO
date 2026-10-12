@@ -24,6 +24,7 @@ import {
   type ConstraintOverrides,
 } from '#/engine/constraints.ts'
 import { applyHeroConfig, questLabel, type OptimizerInput, type OptimizerResult } from '#/engine/optimizer.ts'
+import type { PowerBoosterId } from '#/engine/combat.ts'
 import { draftCopy } from '#/engine/heroEditor.ts'
 import { ENGINE_MODEL_VERSION, SEED_STAT_PER_SEED } from '#/engine/constants.ts'
 import type { SkillAdviceResult } from '#/engine/skills.ts'
@@ -33,6 +34,8 @@ import { useGameData } from '#/ui/dataSync.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { Tip } from '#/ui/Hint.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
+import { PowerBoosterPicker } from '#/ui/PowerBoosterPicker.tsx'
+import { powerBoosterFrom } from '#/ui/powerBooster.ts'
 import { RealityChecksView } from '#/ui/optimize/RealityChecksView.tsx'
 import { ResultView } from '#/ui/optimize/ResultView.tsx'
 import { SimpleResultView } from '#/ui/optimize/SimpleResultView.tsx'
@@ -52,6 +55,8 @@ export interface OptimizeSearch {
   familiarQuality?: string
   spirit?: string
   quest?: string
+  /** Усилитель силы квеста (A74), переданный со страницы «Команды». */
+  booster?: string
 }
 
 export const Route = createFileRoute('/optimize')({
@@ -66,9 +71,13 @@ export const Route = createFileRoute('/optimize')({
     familiarQuality: str(search.familiarQuality),
     spirit: str(search.spirit),
     quest: str(search.quest),
+    booster: str(search.booster),
   }),
   component: OptimizePage,
 })
+
+/** Из ссылки принимаем только известные усилители, иначе — «без усилителя». */
+const boosterFromSearch = (v: string | undefined): PowerBoosterId => powerBoosterFrom(v)
 
 /** Максимум героев в отряде: `Maximum Party Size` локации может быть 5 (A67), но не больше 5 в правилах игры. */
 const MAX_HEROES = 5
@@ -161,6 +170,8 @@ function OptimizePage() {
   const [uniAreas, setUniAreas] = useState<string[]>([])
   const [robust, setRobust] = useState(false)
   const [titanSoul, setTitanSoul] = useState<'as-is' | 'on' | 'off'>('as-is')
+  /** Усилитель силы квеста на весь отряд (A74): выбор в форме квеста, влияет на все симуляции. */
+  const [booster, setBooster] = useState<PowerBoosterId>(() => boosterFromSearch(search.booster))
   const [levelOverride, setLevelOverride] = useState('')
 
   const [running, setRunning] = useState(false)
@@ -287,6 +298,7 @@ function OptimizePage() {
       robust,
       constraints: cons,
       titanSoul,
+      powerBooster: booster,
       // Веса статов («почему именно эти вещи») — в режиме «квест»: в универсальном отдача видна в таблице локаций.
       withStatWeights: mode === 'quest',
     }
@@ -322,7 +334,7 @@ function OptimizePage() {
       setSeeds(res.statWeights ? res.statWeights.heroes.map((h) => ({ ...seedAdviceFromWeights(res.statWeights!, SEED_STAT_PER_SEED, h.index), heroIndex: h.index })) : undefined)
       try {
         const cfgHeroes = input.heroes.map((h, i) => applyHeroConfig(h, res.configs[i]))
-        setAdvice(await engineRef.current.skillAdvice(data, cfgHeroes, input.champion ?? null, input.quests))
+        setAdvice(await engineRef.current.skillAdvice(data, cfgHeroes, input.champion ?? null, input.quests, { powerBooster: booster }))
       } catch {
         setAdvice(null)
       }
@@ -603,6 +615,7 @@ function OptimizePage() {
                   <NativeSelectOption value="boss">босс</NativeSelectOption>
                 </NativeSelect>
               </Field>
+              <PowerBoosterPicker value={booster} onChange={setBooster} />
             </div>
             {selectedQuest ? (
               <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

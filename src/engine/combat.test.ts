@@ -17,11 +17,12 @@ import {
   parseSpecials,
   prepare,
   resolveCombatModel,
+  shuffleOrder,
   simulateTeam,
   turnOrderFor,
   type Fighter,
 } from './combat.ts'
-import { ENEMY_CRIT_CHANCE, EXTREME_EVA_PENALTY, MAX_EVASION } from './constants.ts'
+import { AOE_CHANCE, ENEMY_CRIT_CHANCE, EXTREME_EVA_PENALTY, MAX_EVASION } from './constants.ts'
 
 const data = fixtureGameData()
 
@@ -294,6 +295,95 @@ describe('особые механики навыков (обязательный
     expect(once.survival[0].rate).toBe(1)
     const twice = simulateTeam([cleric], q, { runs: 10, seed: 1, maxRounds: 2, enemyCritChance: 0, aoeChance: 0 })
     expect(twice.survival[0].rate).toBe(0) // второй смертельный удар уже убивает
+  })
+})
+
+describe('шансы врага из датасета stcalc (A70)', () => {
+  it('по умолчанию AoE 25% (236 пар из 244) и крит врага 10%', () => {
+    const p = prepare([fighter(), fighter({ name: 'B' })], quest(), {})
+    expect(AOE_CHANCE).toBe(0.25)
+    expect(p.aoeChance).toBe(0.25)
+    expect(p.enemyCritChance).toBe(ENEMY_CRIT_CHANCE)
+  })
+
+  it('поле квеста важнее константы, явное переопределение — важнее поля', () => {
+    // Особые квесты stcalc: Moonlit Grotto — 0% AoE, Runestone Quarry — 50%; Гробница Титанов — крит 15%.
+    const q = quest({ aoeChance: 0, enemyCritChance: 0.15 })
+    const fromQuest = prepare([fighter()], q, {})
+    expect(fromQuest.aoeChance).toBe(0)
+    expect(fromQuest.enemyCritChance).toBe(0.15)
+    const forced = prepare([fighter()], q, { aoeChance: 0.5, enemyCritChance: 0 })
+    expect(forced.aoeChance).toBe(0.5)
+    expect(forced.enemyCritChance).toBe(0)
+    // Шанс крита врага влияет и на быструю оценку (score.ts берёт тот же prepare).
+    expect(prepare([fighter()], quest({ enemyCritChance: 0.15 }), {}).enemyCritChance).toBe(0.15)
+  })
+})
+
+describe('усилители силы квеста (A74)', () => {
+  const opts = { runs: 1, seed: 1, maxRounds: 1, enemyCritChance: 0, aoeChance: 0 } as const
+
+  it('Normal: +20% ATK/DEF как % боя — урон 1000 → 1200', () => {
+    const q = quest({ monsterHp: 1_000_000, monsterDmg: 0 })
+    expect(simulateTeam([fighter({ atk: 1000 })], q, opts).avgDamagePerRound).toBeCloseTo(1000, 6)
+    expect(simulateTeam([fighter({ atk: 1000 })], q, { ...opts, powerBooster: 'normal' }).avgDamagePerRound).toBeCloseTo(1200, 6)
+  })
+
+  it('Mega: +80% ATK/DEF, +25 п.п. крита, +50% урона крита (статические моды боя)', () => {
+    const p = prepare([fighter({ crit: 0, critDmg: 2 })], quest(), { powerBooster: 'mega' })
+    expect(p.selfStatic[0].atkPct).toBeCloseTo(0.8, 6)
+    expect(p.selfStatic[0].defPct).toBeCloseTo(0.8, 6)
+    expect(p.selfStatic[0].crit).toBeCloseTo(0.25, 6)
+    expect(p.selfStatic[0].critDmg).toBeCloseTo(0.5, 6)
+    // Super — только крит-шанс, без урона крита.
+    const sup = prepare([fighter()], quest(), { powerBooster: 'super' })
+    expect([sup.selfStatic[0].atkPct, sup.selfStatic[0].crit, sup.selfStatic[0].critDmg]).toEqual([0.4, 0.1, 0])
+  })
+
+  it('+20% DEF усилителя снижает входящий урон (DEF 1000 → 1200 на порогах CAPS)', () => {
+    // 3 раунда по 100 урона: без усилителя 0.5 × 100 = 50 → 150 > 145 HP (смерть),
+    // с усилителем DEF 1200 → множитель 0.46 → 138 ≤ 145 (герой жив).
+    const q = quest({ monsterHp: 1_000_000, monsterDmg: 100 })
+    const base = { runs: 1, seed: 4, maxRounds: 3, enemyCritChance: 0, aoeChance: 0 } as const
+    const f = fighter({ def: 1000, hp: 145, atk: 0 })
+    expect(simulateTeam([f], q, base).survival[0].rate).toBe(0)
+    expect(simulateTeam([f], q, { ...base, powerBooster: 'normal' }).survival[0].rate).toBe(1)
+  })
+
+  it('неизвестный усилитель не выбран — поведение как раньше (none)', () => {
+    const p = prepare([fighter()], quest(), { powerBooster: 'none' })
+    expect([p.selfStatic[0].atkPct, p.selfStatic[0].defPct, p.selfStatic[0].crit, p.selfStatic[0].critDmg]).toEqual([0, 0, 0, 0])
+  })
+})
+
+describe('порядок ходов: фиксированный и перемешивание (A73)', () => {
+  it('по умолчанию — фиксированный порядок Compendium', () => {
+    expect(resolveCombatModel().turnOrder).toBe('fixed')
+    expect(turnOrderFor(3)).toEqual([1, 0, 2])
+    expect(turnOrderFor(4)).toEqual([1, 0, 3, 2])
+  })
+
+  it('shuffleOrder — перестановка того же набора, детерминированная по seed', () => {
+    const a = shuffleOrder([1, 0, 2], mulberry32(7))
+    expect([...a].sort((x, y) => x - y)).toEqual([0, 1, 2])
+    expect(shuffleOrder([1, 0, 2], mulberry32(7))).toEqual(a)
+    // Разные seed дают разные порядки хотя бы иногда.
+    const orders = new Set(Array.from({ length: 20 }, (_, i) => shuffleOrder([1, 0, 2], mulberry32(i)).join(',')))
+    expect(orders.size).toBeGreaterThan(1)
+  })
+
+  it('вариант turn-order-shuffle воспроизводим при том же seed и меняет исход боя', () => {
+    // Монстр (1005 HP) умирает от первого-второго удара, поэтому порядок меняет, кто успел ударить:
+    // фиксированный [1, 0, 2] даёт ровно 10 + 1000 = 1010, перемешивание — другое среднее.
+    const q = quest({ monsterHp: 1005, monsterDmg: 0 })
+    const team = [fighter({ name: 'A', atk: 1000 }), fighter({ name: 'B', atk: 10 }), fighter({ name: 'C', atk: 10 })]
+    const base = { runs: 50, seed: 11, enemyCritChance: 0, aoeChance: 0 } as const
+    const fixed = simulateTeam(team, q, base)
+    const shuffled = simulateTeam(team, q, { ...base, model: { turnOrder: 'shuffle' } })
+    const again = simulateTeam(team, q, { ...base, model: { turnOrder: 'shuffle' } })
+    expect(fixed.avgDamagePerRound).toBeCloseTo(1010, 6)
+    expect(shuffled).toEqual(again)
+    expect(shuffled.avgDamagePerRound).not.toBeCloseTo(fixed.avgDamagePerRound, 6)
   })
 })
 

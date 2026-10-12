@@ -42,6 +42,7 @@ import {
   threatShares,
   type Fighter,
   type FighterBonus,
+  type PowerBoosterId,
   type SimMetrics,
 } from './combat.ts'
 
@@ -203,6 +204,8 @@ export interface StatWeightsOptions {
   baseWinRate?: number
   /** В UI: помечать, что это веса с зонда (ослабленный квест). */
   probeNote?: string | null
+  /** Усилитель силы квеста на весь отряд (A74): веса считаются в том же бою, что и результат подбора. */
+  powerBooster?: PowerBoosterId
 }
 
 export interface StatWeightsResult {
@@ -345,10 +348,10 @@ function computeAt(
   options: StatWeightsOptions,
   probe: StatWeightsResult['probe'] = null,
 ): StatWeightsResult {
-  const sim = (fs: Fighter[]): SimMetrics => simulateTeam(fs, q, { runs, seed })
+  const sim = (fs: Fighter[]): SimMetrics => simulateTeam(fs, q, { runs, seed, powerBooster: options.powerBooster })
   const base = sim(fighters)
   // win rate на НАСТОЯЩЕМ квесте: на зонде он показывается отдельно (числа там — от ослабленного боя).
-  const realWinRate = q === displayQuest ? base.winRate : simulateTeam(fighters, displayQuest, { runs, seed }).winRate
+  const realWinRate = q === displayQuest ? base.winRate : simulateTeam(fighters, displayQuest, { runs, seed, powerBooster: options.powerBooster }).winRate
   // Метрика выбирается по win rate ЗОНДА (options.baseWinRate, если веса считаются на ослабленном
   // квесте): на настоящем квесте он может быть 0% или 100%, и «прирост win rate» ничего не объясняет.
   const qwin = options.baseWinRate ?? base.winRate
@@ -495,7 +498,7 @@ export function seedAdvice(
   if (!f) return { rows: [], best: null, text: 'Нет героя для совета по семенам.' }
   const runs = options.runs ?? STAT_WEIGHT_RUNS
   const seed = (options.seed ?? 1) >>> 0
-  const sim = (fs: Fighter[]): SimMetrics => simulateTeam(fs, quest, { runs, seed })
+  const sim = (fs: Fighter[]): SimMetrics => simulateTeam(fs, quest, { runs, seed, powerBooster: options.powerBooster })
   const base = sim(fighters)
   const kinds: ('atk' | 'hp' | 'def')[] = ['atk', 'hp', 'def']
   const rows: SeedAdviceRow[] = kinds.map((kind) => {

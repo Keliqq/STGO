@@ -269,6 +269,14 @@ export const QuestSchema = z.object({
   monsterHp: int.positive(),
   monsterDmg: int.nonnegative(),
   monsterAoe: int.nonnegative(),
+  /**
+   * Шанс AoE-атаки монстра именно в этом квесте (доля, 0.25 = 25%). В таблице поля нет:
+   * в GameData почти всегда null — движок берёт `AOE_CHANCE` (A31/A70). Заполняется, только если
+   * для квеста известно своё значение (stcalc: 236 пар «квест × сложность» из 244 — 25%, особые — 50% и 0%).
+   */
+  aoeChance: nonNeg.nullish(),
+  /** Шанс крита монстра в этом квесте (доля, 0.1 = 10%); null — `ENEMY_CRIT_CHANCE` (в Башне 15%, A70). */
+  enemyCritChance: nonNeg.nullish(),
   barrier: z.object({ elements: z.array(ElementSchema).min(1), hp: int.positive() }).nullable(),
   /**
    * Пороги защиты 50/70/75%. В таблице их нет; в GameData всегда null —

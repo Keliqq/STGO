@@ -36,12 +36,14 @@ import { ElementIcon } from '#/ui/heroes/heroStatTable.tsx'
 import { ELEMENT_RU, barrierReports, contributionTo, maxElementStone, rosterContributions, type BarrierElementReport, type BarrierReport } from '#/engine/barriers.ts'
 import { PLAN_WIN_THRESHOLD, RULES_DEVELION_URL, RULES_ROSTER_URL, RULES_TEAM_URL } from '#/engine/constants.ts'
 import { questLabel } from '#/engine/optimizer.ts'
+import type { PowerBoosterId } from '#/engine/combat.ts'
 import { rosterReport, type RosterReport } from '#/engine/roster.ts'
 import { planTeams, type PlanObjective, type PlannedTeam, type TeamPlanResult } from '#/engine/teamPlan.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
 import { Tip } from '#/ui/Hint.tsx'
 import { QuestPicker } from '#/ui/QuestPicker.tsx'
+import { PowerBoosterPicker } from '#/ui/PowerBoosterPicker.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 
 export const Route = createFileRoute('/roster')({ component: RosterPage })
@@ -65,6 +67,8 @@ function RosterPage() {
   const [areaFilter, setAreaFilter] = useState('')
   const [selectedBarrier, setSelectedBarrier] = useState<string | null>(null)
   const [planQuestId, setPlanQuestId] = useState('')
+  /** Усилитель силы квеста на весь отряд (A74) — для плана команд. */
+  const [booster, setBooster] = useState<PowerBoosterId>('none')
   const [objective, setObjective] = useState<PlanObjective>('sum')
   const [threshold, setThreshold] = useState(String(Math.round(PLAN_WIN_THRESHOLD * 100)))
   const [plan, setPlan] = useState<TeamPlanResult | null>(null)
@@ -118,6 +122,7 @@ function RosterPage() {
         champions,
         objective,
         threshold: Math.max(0, Math.min(1, (Number(threshold) || 50) / 100)),
+        powerBooster: booster,
       }
       const engine = engineRef.current
       // Тяжёлый перебор симуляций — в воркере; синхронный вызов только как запасной (воркера нет вовсе).
@@ -278,6 +283,7 @@ function RosterPage() {
             label="Локация плана"
             onChange={(q) => setPlanQuestId(q?.id ?? '')}
           />
+          <PowerBoosterPicker value={booster} onChange={setBooster} />
           <Field label="Цель улучшения">
             <NativeSelect className="w-56" value={objective} onChange={(e) => setObjective(e.target.value as PlanObjective)}>
               <NativeSelectOption value="sum">сумма win rate команд</NativeSelectOption>

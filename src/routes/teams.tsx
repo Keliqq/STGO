@@ -43,6 +43,7 @@ import {
 } from '#/data/teams.ts'
 import { QUALITIES, type GameData, type HeroInstance, type Quality, type Quest } from '#/data/types.ts'
 import { ENGINE_MODEL_VERSION } from '#/engine/constants.ts'
+import type { PowerBoosterId } from '#/engine/combat.ts'
 import { questLabel } from '#/engine/optimizer.ts'
 import { partyHints, type PartyHint } from '#/engine/teamRules.ts'
 import { ELEMENT_RU, TEAM_SIM_RUNS, runTeamSync, type TeamRunMember, type TeamRunResult } from '#/engine/teamRunner.ts'
@@ -53,6 +54,7 @@ import { ChampionIcon, GameIcon } from '#/ui/GameIcon.tsx'
 import { DraftBadge, ElementIcon } from '#/ui/heroes/heroStatTable.tsx'
 import { Tip } from '#/ui/Hint.tsx'
 import { QuestPicker } from '#/ui/QuestPicker.tsx'
+import { PowerBoosterPicker } from '#/ui/PowerBoosterPicker.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 
 export const Route = createFileRoute('/teams')({ component: TeamsPage })
@@ -98,6 +100,8 @@ function TeamsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [questId, setQuestId] = useState('')
+  /** Усилитель силы квеста на весь отряд (A74) — для прогона выбранных команд. */
+  const [booster, setBooster] = useState<PowerBoosterId>('none')
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [runs, setRuns] = useState<Record<string, TeamRunResult>>({})
@@ -200,8 +204,8 @@ function TeamsPage() {
         const engine = engineRef.current
         // Тяжёлый Монте-Карло — в воркере; синхронный вариант только как запасной (воркера нет вовсе).
         out[team.id] = engine
-          ? await engine.runTeam(runMembersOf(team), [runQuest], data, { runs: TEAM_SIM_RUNS })
-          : runTeamSync(runMembersOf(team), [runQuest], data)
+          ? await engine.runTeam(runMembersOf(team), [runQuest], data, { runs: TEAM_SIM_RUNS, powerBooster: booster })
+          : runTeamSync(runMembersOf(team), [runQuest], data, { runs: TEAM_SIM_RUNS, powerBooster: booster })
         setRuns({ ...out })
         setProgress({ done: (i + 1) * TEAM_SIM_RUNS, total: selected.length * TEAM_SIM_RUNS })
       }
@@ -247,6 +251,7 @@ function TeamsPage() {
         familiarQuality: c?.familiar?.quality ?? '',
         spirit: c?.spirit ?? '',
         quest: runQuest.id,
+        booster,
       },
     })
   }
@@ -554,6 +559,7 @@ function TeamsPage() {
           <Field label="Прогонов на квест">
             <span className="text-sm">{TEAM_SIM_RUNS}</span>
           </Field>
+          <PowerBoosterPicker value={booster} onChange={setBooster} />
           <Tip text="Один и тот же seed для всех команд: разница между командами — не шум симуляции.">
             <span>
               <Button disabled={running || selected.length === 0 || !runQuest} onClick={() => void run()}>

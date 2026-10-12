@@ -10,6 +10,7 @@ import { applyBreakpoints, type BreakpointsData, type BreakpointsStatus, loadBre
 import { buildGameData, REQUIRED_SHEETS } from './build.ts'
 import { discoverGids, fetchSheetResolved, type SheetName } from './fetchSheet.ts'
 import type { ImageMap } from './imageMapTypes.ts'
+import { applyUserQuestCaps, loadQuestCaps, type QuestCaps, saveQuestCaps } from './questCaps.ts'
 import { idbStore, type KeyValueStore, KEYS } from './storage.ts'
 import { type GameData, GameDataSchema, type Item, type Quest, type RawSheets } from './types.ts'
 
@@ -45,6 +46,11 @@ export interface DataStatus {
   lastUpdate: { at: string; message: string; diff: DataDiff } | null
   /** Пороги защиты (stcentral-hub): null — ещё не загружались. */
   breakpoints: BreakpointsStatus | null
+  /**
+   * «Defense cap с экрана игры» по квестам (A71): введённые пользователем значения из IndexedDB.
+   * Подставляются в `defCaps` тем квестам, у которых порогов хаба нет.
+   */
+  userQuestCaps: QuestCaps
 }
 
 // ───────────── Статус (observable для useSyncExternalStore) ─────────────
@@ -58,10 +64,12 @@ const INITIAL_STATUS: DataStatus = {
   warnings: [],
   lastUpdate: null,
   breakpoints: null,
+  userQuestCaps: {},
 }
 let status: DataStatus = INITIAL_STATUS
 let current: GameData | null = null
 let breakpoints: BreakpointsData | null = null
+let userCaps: QuestCaps = {}
 const listeners = new Set<() => void>()
 
 function setStatus(patch: Partial<DataStatus>): void {
@@ -80,6 +88,7 @@ export function subscribeStatus(listener: () => void): () => void {
 export function resetSyncState(): void {
   current = null
   breakpoints = null
+  userCaps = {}
   status = INITIAL_STATUS
 }
 
@@ -295,7 +304,33 @@ export async function syncBreakpoints(deps: SyncDeps & { force?: boolean; ttlHou
 }
 
 /** Квесты с подставленными порогами (если они загружены). */
-export function questsWithCaps(data: GameData): { quests: Quest[]; matched: number; warnings: string[] } {
-  if (!breakpoints) return { quests: data.quests, matched: 0, warnings: [] }
-  return applyBreakpoints(data.quests, breakpoints.blocks)
+export function questsWithCaps(data: GameData): { quests: Quest[]; matched: number; warnings: string[]; userMatched: number; noHubCaps: Quest[] } {
+  const base = breakpoints ? applyBreakpoints(data.quests, breakpoints.blocks) : { quests: data.quests, matched: 0, warnings: [] }
+  // Пороги хаба важнее: введённый пользователем cap идёт только туда, где порогов не осталось (A71).
+  const user = applyUserQuestCaps(base.quests, userCaps)
+  // Квесты, которым порогов хаба не досталось, — именно их пользователь может вписать вручную (A71).
+  const noHubCaps = base.quests.filter((q) => !q.defCaps)
+  return { quests: user.quests, matched: base.matched, warnings: base.warnings, userMatched: user.matched, noHubCaps }
+}
+
+// ───────────── «Defense cap с экрана игры» (A71) ─────────────
+
+/** Прочитать введённые пользователем пороги из IndexedDB (при старте приложения). */
+export async function syncUserQuestCaps(deps: SyncDeps = {}): Promise<QuestCaps> {
+  userCaps = await loadQuestCaps(deps.store ?? idbStore)
+  setStatus({ userQuestCaps: userCaps })
+  return userCaps
+}
+
+/**
+ * Записать «Defense cap с экрана игры» для квеста (пустое значение — убрать). Пороги считает
+ * `defCapsFromCap` (cap/6, cap/3, cap): на экране игры видно только одно число — порог 75%.
+ */
+export async function setUserQuestCap(questId: string, cap: number | null, deps: SyncDeps = {}): Promise<void> {
+  const next: QuestCaps = { ...userCaps }
+  if (cap === null) delete next[questId]
+  else next[questId] = Math.max(1, Math.round(cap))
+  userCaps = next
+  await saveQuestCaps(next, deps.store ?? idbStore)
+  setStatus({ userQuestCaps: next })
 }

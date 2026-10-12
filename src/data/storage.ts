@@ -46,4 +46,6 @@ export const KEYS = {
   realityChecks: 'realityChecks',
   optimizeCache: 'optimizeCache',
   optimizeSettings: 'optimizeSettings',
+  /** «Defense cap с экрана игры» по квестам (A71): то, что ввёл пользователь на странице «Данные». */
+  questCaps: 'questCaps',
 } as const

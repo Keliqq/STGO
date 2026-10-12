@@ -14,6 +14,7 @@ import {
   calibrationObjective,
   calibrationSummary,
   deathPredictions,
+  describeVariant,
   MODEL_VARIANTS,
   questsToCheck,
   fixtureStatRms,
@@ -233,6 +234,14 @@ describe('«что отметить»: квесты, где варианты д�
     const top = questsToCheck({ data, quests: quests.slice(1, 2), heroes: [antoine()], runs: 20, seed: 1, top: 1 })
     expect(top.length).toBeLessThanOrEqual(1)
     if (top[0]) expect(top[0].byVariant).toHaveLength(MODEL_VARIANTS.length - 1)
+  })
+
+  it('вариант turn-order-shuffle есть в MODEL_VARIANTS и описан значениями (A73)', () => {
+    const variant = MODEL_VARIANTS.find((v) => v.id === 'turn-order-shuffle')
+    expect(variant).toMatchObject({ assumption: 'A73', combat: { turnOrder: 'shuffle' } })
+    expect(describeVariant(variant!)).toBe('turnOrder: fixed → shuffle')
+    // Базовая модель — фиксированный порядок Compendium: вариант не подменяет её молча.
+    expect(MODEL_VARIANTS.find((v) => v.id === 'base')?.combat).toBeUndefined()
   })
 })
 

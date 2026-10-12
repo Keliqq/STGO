@@ -423,11 +423,19 @@ export const MODEL_VARIANTS: ModelVariant[] = [
   // вторичные статы предметов (A25)
   { id: 'typed-def-on', label: '«stats with <тип>» усиливает и DEF (TYPED_ITEM_BONUS_STATS = atk, hp, def)', assumption: 'A25', stat: { typedBonusStats: ['atk', 'hp', 'def'] } },
 
-  // бой (A9, A30, A31)
+  // бой (A9, A30, A31, A70, A73)
   { id: 'enemy-crit-0', label: 'крит врага 0 %', assumption: 'A30', combat: { enemyCritChance: 0 } },
   { id: 'enemy-crit-0.25', label: 'крит врага 25 %', assumption: 'A30', combat: { enemyCritChance: 0.25 } },
   { id: 'aoe-0', label: 'AoE выключено', assumption: 'A31', combat: { aoeChance: 0 } },
-  { id: 'aoe-0.25', label: 'шанс AoE 25 % (верхняя граница компендиума)', assumption: 'A31', combat: { aoeChance: 0.25 } },
+  { id: 'aoe-0.2', label: 'шанс AoE 20 % (нижняя граница компендиума)', assumption: 'A31', combat: { aoeChance: 0.2 } },
+  { id: 'aoe-0.5', label: 'шанс AoE 50 % (особые квесты/враги по stcalc)', assumption: 'A70', combat: { aoeChance: 0.5 } },
+  { id: 'enemy-crit-0.15', label: 'крит врага 15 % (как в Гробнице Титанов по датасету stcalc)', assumption: 'A70', combat: { enemyCritChance: 0.15 } },
+  {
+    id: 'turn-order-shuffle',
+    label: 'отряд перемешивается каждый раунд (stcalc), а не фиксированный порядок компендиума',
+    assumption: 'A73',
+    combat: { turnOrder: 'shuffle' },
+  },
   {
     id: 'def-curve-strong',
     label: 'кривая защиты сильнее: 0.45/0.25/0.20, при DEF=0 ×2.1',
@@ -644,11 +652,26 @@ export const TUNING_KNOBS: TuningKnob[] = [
     id: 'aoe',
     label: 'шанс AoE врага',
     assumption: 'A31',
-    from: 0.2,
+    from: 0.25,
     min: 0,
-    max: 0.35,
+    max: 0.5,
     step: 0.05,
     variant: (v) => ({ id: `aoe-${v.toFixed(2)}`, label: `шанс AoE ${(v * 100).toFixed(0)} %`, assumption: 'A31', combat: { aoeChance: v } }),
+  },
+  {
+    id: 'turnOrder',
+    label: 'перемешивание отряда каждый раунд (0 — фиксированный порядок, 1 — как в stcalc)',
+    assumption: 'A73',
+    from: 0,
+    min: 0,
+    max: 1,
+    step: 1,
+    variant: (v) => ({
+      id: `turn-order-${v}`,
+      label: v >= 0.5 ? 'порядок ходов перемешивается каждый раунд' : 'порядок ходов фиксированный',
+      assumption: 'A73',
+      combat: { turnOrder: v >= 0.5 ? 'shuffle' : 'fixed' },
+    }),
   },
   {
     id: 'mitigation',
