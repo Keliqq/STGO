@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { importHeroesViaFile, pickHero, runOptimize, section, selectByLabel, shot, watchErrors, pickQuest } from './helpers.ts'
+import { importHeroesViaFile, openDetails, pickHero, runOptimize, section, selectByLabel, shot, watchErrors, pickQuest } from './helpers.ts'
 
 test('подбор для одного героя под квест + советы по навыкам + отметка', async ({ page }) => {
   const errors = watchErrors(page)
@@ -10,6 +10,8 @@ test('подбор для одного героя под квест + совет
   await pickQuest(page, 'Lost City of Gold', '13', 'boss')
   await shot(page, 'optimize-form.png')
   await runOptimize(page)
+  // Простой экран: вердикт словами и шанс победы, без жаргона.
+  await expect(section(page, 'Что делать').getByText(/Шанс победы с этим набором — \d+(\.\d)?%/)).toBeVisible()
   await expect(section(page, 'Результат').getByText(/Цель: \d+(\.\d)?%/)).toBeVisible()
   await expect(section(page, 'Результат').getByText('Lost City of Gold · босс · 13')).toBeVisible()
   await shot(page, 'optimize-result.png')
@@ -118,6 +120,8 @@ test('отмена посреди расчёта; тяжёлый расчёт н
   await shot(page, 'optimize-running.png')
 
   await page.getByRole('button', { name: 'Отменить' }).click()
-  await expect(section(page, 'Результат').getByText('отменено, результат частичный')).toBeVisible({ timeout: 60_000 })
+  await expect(section(page, 'Что делать')).toBeVisible({ timeout: 60_000 })
+  await openDetails(page)
+  await expect(section(page, 'Результат').getByText('отменено, результат частичный')).toBeVisible()
   expect(errors).toEqual([])
 })

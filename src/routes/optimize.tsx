@@ -34,6 +34,7 @@ import { Tip } from '#/ui/Hint.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 import { RealityChecksView } from '#/ui/optimize/RealityChecksView.tsx'
 import { ResultView } from '#/ui/optimize/ResultView.tsx'
+import { SimpleResultView } from '#/ui/optimize/SimpleResultView.tsx'
 import { SkillAdviceView } from '#/ui/optimize/SkillAdviceView.tsx'
 import { UpgradeView, type UpgradeRow } from '#/ui/optimize/UpgradeView.tsx'
 
@@ -543,19 +544,28 @@ function OptimizePage() {
 
       {result ? (
         <>
-          <ResultView data={data} team={result.ctx.team} result={result} objectiveLabel={result.ctx.objectiveLabel} seeds={seeds} />
-          {upgrades ? <UpgradeView team={result.ctx.team} rows={upgrades} objectiveLabel={result.ctx.objectiveLabel} /> : null}
-          {advice && advice.advice.length > 0 ? <SkillAdviceView data={data} team={result.ctx.team} advice={advice} /> : null}
-          <RealityChecksView
-            checks={checks}
-            onChecksChange={setChecks}
-            target={
-              result.ctx.quest
-                ? { questLabel: questLabel(result.ctx.quest), teamLabel: result.ctx.teamLabel, simWinRate: result.res.winRate }
-                : null
-            }
-            onMark={(passed) => void markReality(passed)}
-          />
+          <SimpleResultView data={data} team={result.ctx.team} res={result.res} upgrades={upgrades} />
+          <details className="group mb-6 rounded-xl border bg-card p-4 shadow-sm">
+            <summary className="cursor-pointer text-lg font-semibold">
+              Подробный разбор
+              <span className="ml-2 text-sm font-normal text-muted-foreground">цифры по локациям, веса статов, апгрейды, навыки — для тех, кому нужны детали</span>
+            </summary>
+            <div className="mt-4">
+              <ResultView data={data} team={result.ctx.team} result={result} objectiveLabel={result.ctx.objectiveLabel} seeds={seeds} />
+              {upgrades ? <UpgradeView team={result.ctx.team} rows={upgrades} objectiveLabel={result.ctx.objectiveLabel} /> : null}
+              {advice && advice.advice.length > 0 ? <SkillAdviceView data={data} team={result.ctx.team} advice={advice} /> : null}
+              <RealityChecksView
+                checks={checks}
+                onChecksChange={setChecks}
+                target={
+                  result.ctx.quest
+                    ? { questLabel: questLabel(result.ctx.quest), teamLabel: result.ctx.teamLabel, simWinRate: result.res.winRate }
+                    : null
+                }
+                onMark={(passed) => void markReality(passed)}
+              />
+            </div>
+          </details>
         </>
       ) : null}
     </Page>

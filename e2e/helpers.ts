@@ -82,10 +82,18 @@ export async function selectByLabel(locator: import('@playwright/test').Locator,
   await locator.selectOption({ value })
 }
 
-/** Запускает подбор и ждёт секцию «Результат». */
+/** Раскрывает «Подробный разбор» (по умолчанию после подбора виден только простой экран «Что делать»). */
+export async function openDetails(page: Page): Promise<void> {
+  const details = page.locator('details').filter({ hasText: 'Подробный разбор' })
+  if ((await details.getAttribute('open')) === null) await details.locator('summary').click()
+}
+
+/** Запускает подбор, ждёт простой экран «Что делать» и раскрывает подробный разбор с секцией «Результат». */
 export async function runOptimize(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Подобрать' }).click()
-  await expect(section(page, 'Результат')).toBeVisible({ timeout: 180_000 })
+  await expect(section(page, 'Что делать')).toBeVisible({ timeout: 180_000 })
+  await openDetails(page)
+  await expect(section(page, 'Результат')).toBeVisible()
 }
 
 /** Выбор квеста в режиме «Квест»: кнопка локации с иконкой, затем сложность и тип. */
