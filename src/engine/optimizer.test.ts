@@ -11,8 +11,10 @@ import type { HeroInstance, Quality, Quest } from '../data/types.ts'
 import { fixtureGameData } from '../test/fixtures.ts'
 import { fighterFromHero, mulberry32, simulateTeam } from './combat.ts'
 import { OPTIMIZER_TOP_K } from './constants.ts'
+import { defaultConstraints } from './constraints.ts'
+import { maxItemTierFor } from './formulas.ts'
 import { QUALITY_ORDER } from './quality.ts'
-import { applyHeroConfig, evasionSurplusNote, runOptimizer, selectSlotCandidates, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
+import { applyHeroConfig, evasionSurplusNote, runOptimizer, selectSlotCandidates, tierCapFor, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
 import { quickScore } from './score.ts'
 
 const data = fixtureGameData()
@@ -107,6 +109,36 @@ describe('оптимизатор: ограничения на героя (per-he
       expect(itemByName(sc.item).tier, `слабый герой: ${sc.item}`).toBeLessThanOrEqual(3)
     }
     expect(res.configs[0].some((sc) => sc.item && itemByName(sc.item).tier > 3)).toBe(true)
+  })
+
+  it('не предлагает предмет выше Max Item Tier уровня героя (A41 + A66)', async () => {
+    // Голый герой низкого уровня и щедрые ограничения: потолок задаёт только HERO LEVELS.
+    const level = 10 // Max Item Tier(10) = 4
+    const bare: HeroInstance = {
+      ...heroes[0],
+      id: 'bare-level-10',
+      name: 'Новичок',
+      level,
+      reference: null,
+      slots: Array.from({ length: 6 }, () => ({ item: null, quality: 'Normal' as Quality, element: null, spirit: null })),
+    }
+    const levelCap = maxItemTierFor(data, level)!
+    expect(levelCap).toBeLessThan(15)
+    const res = await runOptimizer(data, baseInput(bare, { constraints: { ...CONS, maxItemTier: 15 } }))
+    const picked = res.configs[0].filter((sc) => sc.item)
+    expect(picked.length, 'подбор вообще что-то предложил').toBeGreaterThan(0)
+    for (const sc of picked) expect(itemByName(sc.item!).tier, sc.item!).toBeLessThanOrEqual(levelCap)
+    // Тот же потолок у ограничений по умолчанию: «макс. надетый + 1» за уровень не выходит.
+    const defaults = defaultConstraints(data, [bare])
+    expect(defaults.perHero?.[0].maxItemTier).toBe(levelCap)
+  })
+
+  it('свой потолок пользователя не поднимает тир выше Max Item Tier уровня', () => {
+    expect(tierCapFor(data, { ...CONS, maxItemTier: 16 }, 0, 1)).toBe(maxItemTierFor(data, 1))
+    expect(tierCapFor(data, { ...CONS, maxItemTier: 16 }, 0, 50)).toBe(16)
+    // Ручной (per-hero) потолок ниже уровня — действует он.
+    const cons = { ...CONS, maxItemTier: 16, perHero: [{ hero: 0, maxItemTier: 2, maxStoneTier: 9 }] }
+    expect(tierCapFor(data, cons, 0, 50)).toBe(2)
   })
 })
 

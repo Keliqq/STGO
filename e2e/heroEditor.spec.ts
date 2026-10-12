@@ -41,7 +41,7 @@ test('создать героя вручную → увидеть статы', a
   await list.locator('button[role="option"]:not([disabled])').first().click()
   const atkAfter = Number(await atkRow.locator('td').nth(1).innerText())
   expect(atkAfter, 'ATK вырос от надетого меча').toBeGreaterThan(atkBefore)
-  await expect(form.getByText('Всё на месте: типы слотов, тир по уровню, камни и духи, один артефакт.')).toBeVisible()
+  await expect(form.getByText(/Всё на месте: типы слотов, тир по уровню, один артефакт/)).toBeVisible()
   await shot(page, 'heroes-editor-form.png')
 
   await form.getByRole('button', { name: 'Создать' }).click()
@@ -144,5 +144,12 @@ test('применить подбор: набор записывается в ч
   await expect(draft.getByText(/Сравнение с оригиналом «Антуан»/)).toBeVisible()
   await expect(draft.getByText(/База: из экспорта/)).toBeVisible()
   await shot(page, 'heroes-applied-build.png')
+
+  // В «Подборе» черновик помечен меткой рядом с именем (A65), а не только суффиксом в имени.
+  await page.goto('/#/optimize')
+  const team = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Отряд', exact: true }) })
+  const draftOption = team.locator('label').filter({ hasText: 'Антуан (черновик)' })
+  await expect(draftOption).toBeVisible()
+  await expect(draftOption.getByText('черновик', { exact: true })).toBeVisible()
   expectClean(errors)
 })

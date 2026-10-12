@@ -29,7 +29,7 @@ BLUEPRINTS.Component ────────► QUEST COMPONENTS.Name | BLUEPRI
 QUESTS.Component 1-3 ────────► QUEST COMPONENTS.Name
 QUEST COMPONENTS.Quest Area ─► QUESTS (заголовок блока, без учёта регистра)
 SKILLS.Classes ──────────────► HEROES (имя класса / группа «All Fighters», «All Promoted Rogues», …) | CHAMPIONS (имя)
-HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier | редактор героя: «носит до T{N}» (`formulas.ts → maxItemTierFor`)
+HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier | редактор героя: «носит до T{N}», подбор: потолок тира на героя (`formulas.ts → maxItemTierFor`, A66)
 ```
 
 ---
@@ -125,7 +125,7 @@ HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier | редактор гер
 **Что даёт камень стихии:**
 1. величину стихии (колонки 2–8) — она идёт против стихийного барьера квеста;
 2. собственные ATK/DEF/HP — берутся из строки **BLUEPRINTS** с тем же именем (`Ember Element`: T4, ATK 16, DEF 11, HP 3).
-Сродство предмета (`Elemental Affinity`) усиливает эффект — правило в таблице не описано (A6).
+Сродство предмета (`Elemental Affinity`) усиливает эффект — правило в таблице не описано (A6), но подтверждено официальными заметками 9.0.0: несовпадающий камень «can still be enchanted like before», просто без бонуса. То же у духов (`Spirit Affinity` — «slightly stronger Spirit skill effect», A5): сродство не ограничивает выбор, а включает бонус (A65).
 
 **Что даёт дух:**
 1. собственные ATK/DEF/HP из BLUEPRINTS (`Ram Spirit`: T4, 19/12/4; `Titan Spirit`: T14, 164/109/33);
@@ -364,4 +364,6 @@ HERO LEVELS.Max Item Tier ───► BLUEPRINTS.Tier | редактор гер
 
 С сессии 25 героя можно создать и править вручную (форма «Новый герой» / «Изменить»): экспорт нужен
 только для того, чтобы получить эталон базы (A8). Поля черновика (`draft`, `originId`) и версия записи 2
-описаны в ASSUMPTIONS A65; правила «что герою можно надеть» — `src/engine/heroEditor.ts`.
+описаны в ASSUMPTIONS A65; правила «что герою можно надеть» — `src/engine/heroEditor.ts`. С сессии 26
+`Max Item Tier` уровня ограничивает и подбор (A66), а камень/дух вставляются в любой предмет — сродство
+включает только бонус (A5, A6, A65).

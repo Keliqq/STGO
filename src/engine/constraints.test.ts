@@ -16,6 +16,7 @@ import {
   upgradeScenarios,
 } from './constraints.ts'
 import { capForHero } from './optimizer.ts'
+import { maxItemTierFor } from './formulas.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult } from './optimizer.ts'
 
 const data = fixtureGameData()
@@ -29,14 +30,15 @@ const bare = (h: HeroInstance): HeroInstance => ({
 })
 
 describe('defaultConstraints', () => {
-  it('тир, качество и камни — на каждого героя (макс. надетый у него + 1)', () => {
+  it('тир, качество и камни — на каждого героя (макс. надетый у него + 1, но не выше потолка уровня)', () => {
     const team = heroes.slice(0, 2)
     const c = defaultConstraints(data, team)
     team.forEach((h, hi) => {
       const equipped = h.slots.filter((s) => s.item).map((s) => tierOf(s.item!))
       const own = c.perHero!.find((x) => x.hero === hi)!
-      const expected = equipped.length > 0 ? Math.min(Math.max(...equipped) + 1, maxDataTier(data)) : maxDataTier(data)
-      expect(own.maxItemTier, `герой ${hi}`).toBe(expected)
+      const headroom = equipped.length > 0 ? Math.max(...equipped) + 1 : maxDataTier(data)
+      // A41 + A65: сверху — Max Item Tier уровня (HERO LEVELS), его нельзя перепрыгнуть форой.
+      expect(own.maxItemTier, `герой ${hi}`).toBe(Math.min(headroom, maxDataTier(data), maxItemTierFor(data, h.level)!))
       expect(own.maxStoneTier).toBeGreaterThanOrEqual(DEFAULT_MAX_STONE_TIER)
     })
     expect(c.maxQuality).toBe(DEFAULT_MAX_QUALITY)
@@ -55,9 +57,18 @@ describe('defaultConstraints', () => {
     const c = defaultConstraints(data, [strong, weak])
     const capStrong = c.perHero!.find((x) => x.hero === 0)!.maxItemTier
     const capWeak = c.perHero!.find((x) => x.hero === 1)!.maxItemTier
-    expect(capStrong).toBe(Math.min(strongTier + 1, maxDataTier(data)))
-    expect(capWeak).toBe(Math.min(Math.max(...weakTiers) + 1, maxDataTier(data)))
+    expect(capStrong).toBe(Math.min(strongTier + 1, maxDataTier(data), maxItemTierFor(data, strong.level)!))
+    expect(capWeak).toBe(Math.min(Math.max(...weakTiers) + 1, maxDataTier(data), maxItemTierFor(data, weak.level)!))
     expect(capWeak).toBeLessThanOrEqual(capStrong)
+  })
+
+  it('«макс. надетый + 1» не выходит за Max Item Tier уровня', () => {
+    const h = { ...bare(heroes[0]), level: 10 } // Max Item Tier(10) = 4
+    const cls = data.heroClasses.find((c) => c.name === h.className)!
+    const slot = cls.slots.findIndex((types) => data.items.some((i) => i.isEquipment && types.includes(i.type) && i.tier === 4))
+    const item = data.items.find((i) => i.isEquipment && cls.slots[slot].includes(i.type) && i.tier === 4)!
+    const worn = { ...h, slots: h.slots.map((s, i) => (i === slot ? { ...s, item: item.name } : s)) }
+    expect(defaultConstraints(data, [worn]).perHero![0].maxItemTier).toBe(maxItemTierFor(data, 10))
   })
 
   it('камни: если надет камень выше T9 — лимит = его тир', () => {
@@ -69,10 +80,14 @@ describe('defaultConstraints', () => {
     expect(defaultConstraints(data, [bare(heroes[0])]).perHero![0].maxStoneTier).toBe(DEFAULT_MAX_STONE_TIER)
   })
 
-  it('без надетых предметов — тир не ограничен', () => {
-    const c = defaultConstraints(data, [bare(heroes[0])])
-    expect(c.perHero![0].maxItemTier).toBe(maxDataTier(data))
-    expect(c.maxItemTier).toBe(maxDataTier(data))
+  it('без надетых предметов потолок задаёт уровень героя', () => {
+    const h = { ...bare(heroes[0]), level: 10 }
+    const c = defaultConstraints(data, [h])
+    expect(c.perHero![0].maxItemTier).toBe(maxItemTierFor(data, 10))
+    expect(c.maxItemTier).toBe(maxItemTierFor(data, 10))
+    // До максимального уровня таблицы — весь тир таблицы.
+    const high = defaultConstraints(data, [{ ...h, level: 50 }])
+    expect(high.perHero![0].maxItemTier).toBe(maxDataTier(data))
   })
 
   it('Титан — только если «Душа» у всех героев (с учётом переопределения)', () => {
@@ -177,6 +192,18 @@ describe('сценарии +1 тир / +1 качество', () => {
     }
     const tier = upgradeScenarios(data, withPerHero, res).find((s) => s.kind === 'tier')!
     expect(capForHero(tier.input.constraints, 0).maxItemTier).toBe(9)
+  })
+
+  it('+1 тир не предлагается, если уровень героя не даёт ступени выше (A66)', async () => {
+    const res = await runOptimizer(data, input)
+    const cap = maxItemTierFor(data, heroes[0].level)! // Антуан, Knight 26 → T9
+    expect(cap).toBeLessThan(maxDataTier(data))
+    const atCap: OptimizerInput = {
+      ...input,
+      constraints: { ...input.constraints, maxItemTier: cap, perHero: [{ hero: 0, maxItemTier: cap, maxStoneTier: 9 }] },
+    }
+    expect(upgradeScenarios(data, atCap, res).some((s) => s.kind === 'tier')).toBe(false)
+    expect(upgradeScenarios(data, atCap, res).some((s) => s.kind === 'quality')).toBe(true)
   })
 
   it('+1 качество не ухудшает цель, замены — относительно найденного набора', async () => {

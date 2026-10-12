@@ -11,6 +11,7 @@ import type { SeedAdvice } from '#/engine/statWeights.ts'
 import { calcStats, effectiveClass } from '#/engine/stats.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { Hint, HintLabel, Tip } from '#/ui/Hint.tsx'
+import { DraftBadge } from '#/ui/heroes/heroStatTable.tsx'
 import { Notice, Section } from '#/ui/layout.tsx'
 import { pct, signedPp } from './format.ts'
 import { StatWeightsView } from './StatWeightsView.tsx'
@@ -98,7 +99,7 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
           return (
             <div key={hero?.id ?? hi} className="rounded-lg border p-3">
               <h3 className="mb-2 font-semibold">
-                {hero?.name ?? `Герой ${hi + 1}`}{' '}
+                {hero?.name ?? `Герой ${hi + 1}`} {hero?.draft ? <DraftBadge /> : null}{' '}
                 {heroDef > 0 ? (
                   <Tip text="Защита героя с подобранным набором. От неё зависят пороги защиты квеста.">
                     <span className="cursor-help text-xs font-normal text-muted-foreground">DEF {heroDef}</span>

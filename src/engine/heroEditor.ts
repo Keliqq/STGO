@@ -10,17 +10,15 @@
  *   · тип предмета разрешён слоту класса — HEROES, «Equipment Slot 1–6»; у промоушена свои слоты,
  *     а «Душа Титана» подменяет класс промоушеном (A47, `effectiveClass`);
  *   · тир предмета ≤ `Max Item Tier` уровня героя — HERO LEVELS (A8: статов по уровням там нет,
- *     но потолок тира есть);
+ *     но потолок тира есть; то же ограничение действует и в подборе — A66);
  *   · не больше одного артефактного предмета на героя (правило движка, `optimizer.ts → allowed`);
  *   · навыки — доступные классу и промоушену, блокировки A40 (`skills.ts → skillChoices/skillBlockReason`);
- *   · камень стихии — стихии героя (Gold — всем, A21) и стихии сродства предмета (A6);
- *   · дух — только если `Spirit Affinity` предмета — это его навык (A5: «+»-версия как раз при совпадении).
- *     В BLUEPRINTS явного списка духов у предмета нет, поэтому «допустимый дух» — тот, чей навык
- *     записан в `Spirit Affinity`; иначе связь духа с предметом установить нечем.
+ *   · камень стихии и дух вставляются в ЛЮБОЙ предмет (A65): сродство предмета (`Elemental Affinity`,
+ *     `Spirit Affinity`) — не разрешение, а бонус (A5/A6). Камень чужой стихии стихии герою не даёт (A21).
  */
 import type { Enchant, GameData, HeroClass, HeroInstance, HeroSlot, Item, Quality, Skill } from '../data/types.ts'
 import { NON_EQUIPMENT_TYPES } from '../data/types.ts'
-import { GOLD_ELEMENT_COUNTS_FOR_ANY_HERO, QUALITY_MULTIPLIERS, TITAN_SPIRIT_NAME } from './constants.ts'
+import { GOLD_ELEMENT_COUNTS_FOR_ANY_HERO, QUALITY_MULTIPLIERS } from './constants.ts'
 import { maxItemTierFor } from './formulas.ts'
 import { heroClassNames, isWeaponSkill, skillBlockReason, skillChoices } from './skills.ts'
 import { effectiveClass } from './stats.ts'
@@ -181,17 +179,32 @@ export function tierOverflowSlots(data: GameData, hero: HeroInstance): number[] 
 
 // ───────────────────────── камни и духи ─────────────────────────
 
-/** Камень стихии допустим на предмете: у предмета нет сродства (любая стихия) или стихия есть в списке (A6). */
-export function stoneAllowedOnItem(enchant: Enchant, item: Item | null): boolean {
-  if (!item) return false
-  if (item.elementAffinity === 'All') return true
-  const affinity = item.elementAffinity
-  if (affinity.length === 0) return true
-  return enchant.element != null && affinity.includes(enchant.element)
+/** Камень стихии: у него есть стихия и её величина (ENCHANTMENTS, колонки 2–8 — A3). */
+function isElementStone(enchant: Enchant): boolean {
+  return enchant.kind === 'element' && (enchant.elementValue ?? 0) > 0
 }
 
-/** Стихия камня подходит герою: его стихия, `Any` у класса (Spellblade) или Gold — всем (A21). */
-export function stoneAllowedForHero(enchant: Enchant, cls: HeroClass | null): boolean {
+/**
+ * Камень стихии вставляется в ЛЮБОЙ предмет: сродство предмета — не разрешение, а бонус (A65).
+ * Источник: официальные заметки 9.0.0 — «Elements that don't match the blueprint's affinity can still
+ * be enchanted like before. They simply won't receive the special benefits» (см. A6/A65).
+ */
+export function stoneAllowedOnItem(enchant: Enchant, item: Item | null): boolean {
+  return item != null && isElementStone(enchant)
+}
+
+/** Сродство предмета совпадает с камнем → включается бонус сродства (×ELEMENT_AFFINITY_MULTIPLIER, A6). */
+export function stoneAffinityOnItem(enchant: Enchant, item: Item | null): boolean {
+  if (!item || enchant.element == null) return false
+  return item.elementAffinity === 'All' || item.elementAffinity.includes(enchant.element)
+}
+
+/**
+ * Камень считается в стихию героя: его стихия, `Any` у класса (Spellblade) или Gold — всем (A21).
+ * Камень другой стихии вставить можно, но стихии этому герою он не даёт — гайд Develion: «не получится
+ * пробить воздушный барьер Мушкетером (являющегося огненным героем), зачаровав его вещи камнями воздуха».
+ */
+export function stoneCountsForHeroElement(enchant: Enchant, cls: HeroClass | null): boolean {
   if (!cls) return false
   if (cls.element === 'Any') return true
   return enchant.element === cls.element || (GOLD_ELEMENT_COUNTS_FOR_ANY_HERO && enchant.element === 'Gold')
@@ -203,40 +216,56 @@ export function spiritSkillOf(data: GameData, enchant: Enchant): Skill | null {
 }
 
 /**
- * Дух допустим на предмете: `Spirit Affinity` предмета — навык этого духа (A5; «+»-версия появляется
- * как раз при совпадении). У предмета без сродства духов нет — связать дух с ним нечем.
+ * Дух вставляется в ЛЮБОЙ предмет (A65): сродство предмета тоже только бонус. Источник — официальные
+ * заметки 9.0.0: «Blueprint Spirit Affinities … works the same as the Elemental Affinity explained above,
+ * but replaces the element score bonus with a slightly stronger Spirit skill effect».
  */
-export function spiritAllowedOnItem(data: GameData, enchant: Enchant, item: Item | null): boolean {
+export function spiritAllowedOnItem(enchant: Enchant, item: Item | null): boolean {
+  return item != null && enchant.kind === 'spirit'
+}
+
+/** Сродство предмета — навык этого духа: включается «+»-версия навыка (A5). */
+export function spiritAffinityOnItem(data: GameData, enchant: Enchant, item: Item | null): boolean {
   if (!item || !item.spiritAffinity) return false
   const skill = spiritSkillOf(data, enchant)
   if (!skill) return false
   return item.spiritAffinity === skill.name || item.spiritAffinity === skill.name.replace(/\+$/, '')
 }
 
-/** Дух «Титан» — только герою с Душой Титана (A24). */
-export function spiritAllowedForHero(enchant: Enchant, hero: HeroInstance): boolean {
-  return enchant.name !== TITAN_SPIRIT_NAME || hero.titanSoul
+/** Вариант зачарования в списке: сам камень/дух и что даёт сродство предмета (A65). */
+export interface EnchantChoice {
+  enchant: Enchant
+  /** Сродство предмета совпадает → включается бонус: камень ×1,5 (A6), у духа навык «+» (A5). */
+  affinity: boolean
+  /** Оговорка к варианту для списка: «не даёт стихию этому герою» (A21). */
+  note: string | null
 }
 
 export interface SlotEnchantChoices {
-  /** Камни стихии, допустимые на предмете и для героя. Непустой список — можно ставить камень. */
-  stones: Enchant[]
-  /** Духи, допустимые на предмете и для героя. */
-  spirits: Enchant[]
-  /** Есть ли вообще камни у этого героя (иначе UI пишет «камни этому герою недоступны»). */
-  heroStones: boolean
+  /** Камни стихии: любой камень на любой предмет, с пометкой сродства (A65). */
+  stones: EnchantChoice[]
+  /** Духи: любой дух на любой предмет, с пометкой сродства (A65). */
+  spirits: EnchantChoice[]
 }
 
-/** Камни и духи, допустимые для предмета в слоте (требование владельца: ENCHANTMENTS по предмету). */
+/**
+ * Камни и духи для слота: показываем ВСЁ, что можно вставить, и помечаем бонус сродства («✦ сродство»).
+ * Ограничение по предмету убрано в сессии 26 (A65): сродство — бонус, а не разрешение.
+ */
 export function slotEnchantChoices(data: GameData, hero: HeroInstance, slot: number): SlotEnchantChoices {
   const item = hero.slots[slot]?.item ? (data.items.find((i) => i.name === hero.slots[slot].item) ?? null) : null
   const cls = editorClass(data, hero)
-  const stones = data.enchants.filter(
-    (e) => e.kind === 'element' && (e.elementValue ?? 0) > 0 && stoneAllowedForHero(e, cls) && stoneAllowedOnItem(e, item),
-  )
-  const spirits = data.enchants.filter((e) => e.kind === 'spirit' && spiritAllowedForHero(e, hero) && spiritAllowedOnItem(data, e, item))
-  const heroStones = data.enchants.some((e) => e.kind === 'element' && (e.elementValue ?? 0) > 0 && stoneAllowedForHero(e, cls))
-  return { stones, spirits, heroStones }
+  const stones = data.enchants
+    .filter((e) => stoneAllowedOnItem(e, item))
+    .map((e) => ({
+      enchant: e,
+      affinity: stoneAffinityOnItem(e, item),
+      note: stoneCountsForHeroElement(e, cls) ? null : 'не даёт стихию этому герою',
+    }))
+  const spirits = data.enchants
+    .filter((e) => spiritAllowedOnItem(e, item))
+    .map((e) => ({ enchant: e, affinity: spiritAffinityOnItem(data, e, item), note: null }))
+  return { stones, spirits }
 }
 
 /** Доступные герою навыки как навыки-варианты (без блокировок слотов): список для формы. */
@@ -283,8 +312,9 @@ export interface HeroValidation {
 }
 
 /**
- * Проверка всего набора героя: типы и тир предметов, камни/духи на предмете, один артефакт,
- * доступность навыков. Используется в тестах («у героя уровня L нет запрещённого») и в форме.
+ * Проверка всего набора героя: типы и тир предметов, один артефакт, доступность навыков.
+ * Камень и дух проверяются только на «есть в данных»: вставить их можно в любой предмет (A65),
+ * а «камень чужой стихии» — не ошибка, а оговорка в списке слота (A21).
  */
 export function validateHero(data: GameData, hero: HeroInstance): HeroValidation {
   const slots: (string | null)[] = [null, null, null, null, null, null]
@@ -308,17 +338,8 @@ export function validateHero(data: GameData, hero: HeroInstance): HeroValidation
       const other = hero.slots.some((x, j) => j !== i && x.item != null && artifacts.has(x.item))
       if (other) problems.push('второй артефакт на героя')
     }
-    const { stones, spirits } = slotEnchantChoices(data, hero, i)
-    if (s.element) {
-      const stone = data.enchants.find((e) => e.name === s.element)
-      if (!stone) problems.push(`камень «${s.element}» не найден в данных`)
-      else if (!stones.some((e) => e.name === s.element)) problems.push(`камень «${s.element}» не подходит предмету или герою`)
-    }
-    if (s.spirit) {
-      const spirit = data.enchants.find((e) => e.name === s.spirit)
-      if (!spirit) problems.push(`дух «${s.spirit}» не найден в данных`)
-      else if (!spirits.some((e) => e.name === s.spirit)) problems.push(`дух «${s.spirit}» не подходит предмету (нет сродства духа)`)
-    }
+    if (s.element && !data.enchants.some((e) => e.name === s.element)) problems.push(`камень «${s.element}» не найден в данных`)
+    if (s.spirit && !data.enchants.some((e) => e.name === s.spirit)) problems.push(`дух «${s.spirit}» не найден в данных`)
     slots[i] = problems.length > 0 ? problems.join('; ') : null
   })
   hero.skills.forEach((id, i) => {

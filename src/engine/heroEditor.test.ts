@@ -26,8 +26,11 @@ import {
   newHero,
   skillBlockedForSlot,
   slotEnchantChoices,
+  spiritAffinityOnItem,
   spiritAllowedOnItem,
+  stoneAffinityOnItem,
   stoneAllowedOnItem,
+  stoneCountsForHeroElement,
   tierOverflowSlots,
   validateHero,
   weaponTypes,
@@ -241,69 +244,94 @@ describe('навыки: доступность классу, промоушен 
   })
 })
 
-describe('камни и духи допустимы только для предмета', () => {
-  /**
-   * Предмет слота 2 (броня) с сродством нужной стихии и допустимым камнем:
-   * «нет подходящих камней» — законный ответ, поэтому данные подбираем, а не угадываем.
-   */
-  function armorWithStone(element: 'Earth' | 'Water'): (typeof data.items)[number] | null {
+describe('камни и духи вставляются в любой предмет, сродство — бонус (A65)', () => {
+  /** Предмет слота 2 (броня) с сродством заданной стихии. */
+  function armorWithAffinity(element: 'Earth' | 'Water'): (typeof data.items)[number] | null {
     for (const item of data.items) {
       if (item.type !== 'Heavy Armor' || !Array.isArray(item.elementAffinity) || !item.elementAffinity.includes(element)) continue
-      if (data.enchants.some((e) => e.kind === 'element' && e.element === element && stoneAllowedOnItem(e, item))) return item
+      if (data.enchants.some((e) => e.kind === 'element' && e.element === element)) return item
     }
     return null
   }
 
-  it('камень без сродства с предметом в список не попадает', () => {
-    const item = armorWithStone('Earth')
-    if (!item) return
+  it('в списке камней — все камни стихий, включая чужие предмету и герою', () => {
+    const item = armorWithAffinity('Water')!
     const hero = blankHero('Soldier', 50) // Soldier — Earth
     const withItem: HeroInstance = { ...hero, slots: hero.slots.map((s, i) => (i === 1 ? { ...s, item: item.name } : s)) }
     const { stones } = slotEnchantChoices(data, withItem, 1)
-    expect(stones.length).toBeGreaterThan(0)
-    for (const st of stones) expect(stoneAllowedOnItem(st, item)).toBe(true)
-    const wrong = data.enchants.find((e) => e.kind === 'element' && e.element && !stoneAllowedOnItem(e, item))
-    if (wrong) expect(stones.some((s) => s.name === wrong.name)).toBe(false)
+    const all = data.enchants.filter((e) => e.kind === 'element' && (e.elementValue ?? 0) > 0)
+    expect(stones).toHaveLength(all.length)
+    for (const st of all) expect(stones.some((o) => o.enchant.name === st.name), st.name).toBe(true)
+    // Сродство помечает только камни стихии предмета — и оно включает бонус (A6), а не разрешение.
+    for (const o of stones) expect(o.affinity).toBe(stoneAffinityOnItem(o.enchant, item))
+    expect(stones.find((o) => o.enchant.element === 'Water')?.affinity).toBe(true)
+    expect(stones.find((o) => o.enchant.element === 'Earth')?.affinity).toBe(false)
   })
 
-  it('для брони без сродства стихии подходят только камни стихии героя (и Gold, A21)', () => {
-    const hero = blankHero('Soldier', 50) // Soldier — Earth
+  it('камень чужой стихии разрешён, но помечен «не даёт стихию этому герою» (A21)', () => {
+    const hero = blankHero('Soldier', 50) // Earth
     const item = data.items.find((i) => i.type === 'Heavy Armor' && Array.isArray(i.elementAffinity) && i.elementAffinity.length === 0)!
     const withItem: HeroInstance = { ...hero, slots: hero.slots.map((s, i) => (i === 1 ? { ...s, item: item.name } : s)) }
     const { stones } = slotEnchantChoices(data, withItem, 1)
-    expect(stones.length).toBeGreaterThan(0)
-    expect(stones.every((s) => s.element === 'Earth' || s.element === 'Gold')).toBe(true)
+    const earth = stones.find((o) => o.enchant.element === 'Earth')!
+    const water = stones.find((o) => o.enchant.element === 'Water')!
+    expect(earth.note).toBeNull()
+    expect(water.note).toContain('не даёт стихию')
+    // У брони без сродства бонуса нет ни у одного камня, но камень всё равно доступен.
+    expect(stones.every((o) => o.affinity === false)).toBe(true)
+    expect(stoneAllowedOnItem(water.enchant, item)).toBe(true)
   })
 
-  it('предмет чужого сродства не даёт камней чужой стихии', () => {
-    const item = data.items.find((i) => i.type === 'Heavy Armor' && Array.isArray(i.elementAffinity) && i.elementAffinity.includes('Water') && !i.elementAffinity.includes('Earth'))
-    if (!item) return
-    const hero = blankHero('Soldier', 50) // Earth: камень Water не подходит и герою, и (для проверки) предмету
-    const withItem: HeroInstance = { ...hero, slots: hero.slots.map((s, i) => (i === 1 ? { ...s, item: item.name } : s)) }
-    const { stones } = slotEnchantChoices(data, withItem, 1)
-    expect(stones.some((s) => s.element === 'Water')).toBe(false)
+  it('камни Gold и стихии героя засчитываются в его стихию, чужие — нет (A21)', () => {
+    const cls = data.heroClasses.find((c) => c.name === 'Soldier')!
+    const stone = (el: string) => data.enchants.find((e) => e.kind === 'element' && e.element === el)!
+    expect(stoneCountsForHeroElement(stone('Earth'), cls)).toBe(true)
+    expect(stoneCountsForHeroElement(stone('Gold'), cls)).toBe(true)
+    expect(stoneCountsForHeroElement(stone('Water'), cls)).toBe(false)
   })
 
-  it('дух предлагается только при сродстве духа у предмета', () => {
+  it('духи: доступны все и на любом предмете, «✦ сродство» — по Spirit Affinity предмета (A5)', () => {
     const hero = blankHero('Soldier', 50)
     const item = data.items.find((i) => i.type === 'Heavy Armor' && i.spiritAffinity)!
     const withItem: HeroInstance = { ...hero, slots: hero.slots.map((s, i) => (i === 1 ? { ...s, item: item.name } : s)) }
-    const { spirits } = slotEnchantChoices(data, withItem, 1)
-    expect(spirits.length).toBeGreaterThan(0)
-    for (const sp of spirits) expect(spiritAllowedOnItem(data, sp, item)).toBe(true)
+    const spirits = slotEnchantChoices(data, withItem, 1).spirits
+    const all = data.enchants.filter((e) => e.kind === 'spirit')
+    expect(spirits).toHaveLength(all.length)
+    for (const sp of spirits) expect(sp.affinity).toBe(spiritAffinityOnItem(data, sp.enchant, item))
+    expect(spirits.some((o) => o.affinity)).toBe(true)
+
+    // Предмет без сродства духа: дух всё равно вставляется, просто без «+»-версии навыка.
     const noAffinity = data.items.find((i) => i.type === 'Heavy Armor' && !i.spiritAffinity)!
     const without: HeroInstance = { ...hero, slots: hero.slots.map((s, i) => (i === 1 ? { ...s, item: noAffinity.name } : s)) }
-    expect(slotEnchantChoices(data, without, 1).spirits).toEqual([])
+    const plain = slotEnchantChoices(data, without, 1).spirits
+    expect(plain).toHaveLength(all.length)
+    expect(plain.every((o) => o.affinity === false)).toBe(true)
+    expect(spiritAllowedOnItem(plain[0].enchant, noAffinity)).toBe(true)
   })
 
-  it('Титан предлагается только герою с Душой Титана', () => {
+  it('Титан доступен и герою без Души Титана: ограничения нет ни в данных, ни в источниках (A65)', () => {
     const hero = blankHero('Soldier', 50)
-    const item = data.items.find((i) => i.type === 'Heavy Armor' && i.spiritAffinity === 'Titan Solemnity')!
+    const item = data.items.find((i) => i.type === 'Heavy Armor')!
     const withItem: HeroInstance = { ...hero, slots: hero.slots.map((s, i) => (i === 1 ? { ...s, item: item.name } : s)) }
-    const noSoul = slotEnchantChoices(data, withItem, 1).spirits.map((s) => s.name)
-    const withSoul = slotEnchantChoices(data, { ...withItem, titanSoul: true }, 1).spirits.map((s) => s.name)
-    expect(noSoul).not.toContain('Titan Spirit')
+    const noSoul = slotEnchantChoices(data, withItem, 1).spirits.map((s) => s.enchant.name)
+    const withSoul = slotEnchantChoices(data, { ...withItem, titanSoul: true }, 1).spirits.map((s) => s.enchant.name)
+    expect(noSoul).toContain('Titan Spirit')
     expect(withSoul).toContain('Titan Spirit')
+  })
+
+  it('валидация набора не считает ошибкой камень чужой стихии и духа без сродства (A65)', () => {
+    const hero = blankHero('Soldier', 50) // Earth
+    const item = data.items.find((i) => i.type === 'Heavy Armor' && Array.isArray(i.elementAffinity) && i.elementAffinity.length === 0)!
+    const water = data.enchants.find((e) => e.kind === 'element' && e.element === 'Water')!
+    const spirit = data.enchants.find((e) => e.kind === 'spirit')!
+    const dressed: HeroInstance = {
+      ...hero,
+      slots: hero.slots.map((s, i) => (i === 1 ? { ...s, item: item.name, element: water.name, spirit: spirit.name } : s)),
+    }
+    expect(validateHero(data, dressed).ok).toBe(true)
+    // …а камень, которого нет в данных, — по-прежнему ошибка.
+    const broken: HeroInstance = { ...dressed, slots: dressed.slots.map((s, i) => (i === 1 ? { ...s, element: 'НетТакогоКамня' } : s)) }
+    expect(validateHero(data, broken).slots[1]).toContain('не найден')
   })
 })
 

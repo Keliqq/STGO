@@ -38,6 +38,7 @@ import { ResultView } from '#/ui/optimize/ResultView.tsx'
 import { SimpleResultView } from '#/ui/optimize/SimpleResultView.tsx'
 import { SkillAdviceView } from '#/ui/optimize/SkillAdviceView.tsx'
 import { UpgradeView, type UpgradeRow } from '#/ui/optimize/UpgradeView.tsx'
+import { DraftBadge } from '#/ui/heroes/heroStatTable.tsx'
 
 export const Route = createFileRoute('/optimize')({ component: OptimizePage })
 
@@ -343,7 +344,7 @@ function OptimizePage() {
             return (
               <div key={h.id} className={cn('rounded-md border px-3 py-2 transition-colors', on && 'border-primary/60 bg-primary/5')}>
                 <CheckItem checked={on} onChange={(v) => setSelHeroes((cur) => toggle(cur, h.id, v))}>
-                  {h.name}{' '}
+                  {h.name} {h.draft ? <DraftBadge /> : null}{' '}
                   <span className="text-muted-foreground">
                     ({h.className} {h.level})
                   </span>
@@ -370,7 +371,7 @@ function OptimizePage() {
           <Field label="Уровень героев (пусто = как у героя)" hint="Посчитать так, будто все герои этого уровня — например, чтобы узнать, как отряд справится после прокачки. Пусто — берётся уровень из импорта.">
             <Input type="number" min={1} max={99} className="w-20" value={levelOverride} onChange={(e) => setLevelOverride(e.target.value)} />
           </Field>
-          <Field label="Душа Титана" hint="Бонус Души Титана и доступ к духу Титан. «Как у героя» — по данным импорта; «есть/нет» принудительно для всех героев.">
+          <Field label="Душа Титана" hint="Бонус Души Титана: промоушен-класс, его статы, слоты и навыки (A47). «Как у героя» — по данным импорта; «есть/нет» принудительно для всех. По умолчанию от него же зависит, предлагать ли дух Титан (A41, допущение: правила «Титан только с Душой» в данных нет).">
             <NativeSelect value={titanSoul} onChange={(e) => setTitanSoul(e.target.value as 'as-is' | 'on' | 'off')}>
               <NativeSelectOption value="as-is">как у героя</NativeSelectOption>
               <NativeSelectOption value="on">есть</NativeSelectOption>
@@ -491,7 +492,7 @@ function OptimizePage() {
         }
       >
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <Field label="Max тир" hint="Потолок тира предметов для всех героев. Пусто — по каждому герою «макс. надетый у него + 1».">
+          <Field label="Max тир" hint="Потолок тира предметов для всех героев. Пусто — по каждому герою «макс. надетый у него + 1», но не выше Max Item Tier его уровня: выше этого тира герой предмет не наденет.">
             <OverrideNumber value={overrides.maxItemTier} auto={defaults.maxItemTier} min={1} onChange={(v) => updateOverrides({ maxItemTier: v })} />
           </Field>
           <Field label="Max качество" hint="Наивысшее качество предметов, которое оптимизатор может подставить (Common … Legendary и выше).">
@@ -509,9 +510,10 @@ function OptimizePage() {
           </Field>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          По умолчанию: тир ≤ {defaults.maxItemTier} — НА КАЖДОГО ГЕРОЯ «макс. надетый у него + 1»{tierNote.length > 0 ? ` (${tierNote.join(', ')})` : ''},
-          качество ≤ {defaults.maxQuality}, камни ≤ T{defaults.maxStoneTier} (или макс. надетого), духи — все обычные
-          {defaults.spirits?.length === spirits.length ? '' : ', без Титана (не у всех героев есть Душа)'}. Своё значение в поле «Max тир» — общий потолок для всех.
+          По умолчанию: тир ≤ {defaults.maxItemTier} — НА КАЖДОГО ГЕРОЯ «макс. надетый у него + 1», но не выше Max Item Tier его уровня
+          {tierNote.length > 0 ? ` (${tierNote.join(', ')})` : ''}, качество ≤ {defaults.maxQuality}, камни ≤ T{defaults.maxStoneTier} (или макс. надетого),
+          духи — все обычные
+          {defaults.spirits?.length === spirits.length ? '' : ', без Титана (по умолчанию не предлагается — допущение A41; кнопка «все» включает)'}. Своё значение в поле «Max тир» — общий потолок для всех.
         </p>
         <details className="mt-3 rounded-md border p-3">
           <summary className="cursor-pointer text-sm">

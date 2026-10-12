@@ -144,7 +144,7 @@ export function HeroEditor({ data, hero, creating = false, onSave, onCancel }: H
   return (
     <Section
       title={creating ? 'Новый герой' : `Изменить героя: ${hero.name || 'без имени'}`}
-      description="Списки предметов, камней, духов и навыков показывают только то, что герой может использовать. Статы пересчитываются сразу."
+      description="Списки предметов и навыков показывают только то, что герой может использовать; камень и дух можно вставить в любой предмет — сродство даёт бонус. Статы пересчитываются сразу."
       action={
         <>
           <Button onClick={save} disabled={!cls}>
@@ -281,7 +281,7 @@ export function HeroEditor({ data, hero, creating = false, onSave, onCancel }: H
 
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">
-              <HintLabel hint="Шесть слотов класса. Камень и дух в слоте — только те, что допустимы для надетого предмета (сродство стихии и духа из BLUEPRINTS).">
+              <HintLabel hint="Шесть слотов класса. Камень и дух вставляются в любой предмет (A65): сродство предмета (Elemental/Spirit Affinity) не разрешение, а бонус — такие варианты помечены «✦ сродство».">
                 Экипировка
               </HintLabel>
             </h3>
@@ -330,7 +330,7 @@ export function HeroEditor({ data, hero, creating = false, onSave, onCancel }: H
           <div className="rounded-lg border bg-card p-3 text-xs">
             <h3 className="mb-2 text-sm font-semibold">Проверка набора</h3>
             {validation.ok ? (
-              <p className="text-success">Всё на месте: типы слотов, тир по уровню, камни и духи, один артефакт.</p>
+              <p className="text-success">Всё на месте: типы слотов, тир по уровню, один артефакт. Камень и дух можно вставить в любой предмет (сродство — бонус).</p>
             ) : (
               <ul className="list-disc space-y-0.5 pl-4 text-warning">
                 {validation.general.map((g) => (

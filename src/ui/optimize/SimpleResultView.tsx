@@ -8,6 +8,7 @@ import { VERDICT_LIKELY_MIN, VERDICT_RISKY_MIN, VERDICT_SURE_MIN, WHATIF_WORTH_M
 import type { OptimizerResult } from '#/engine/optimizer.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { Tip } from '#/ui/Hint.tsx'
+import { DraftBadge } from '#/ui/heroes/heroStatTable.tsx'
 import { Notice, Section } from '#/ui/layout.tsx'
 import { pct } from './format.ts'
 import type { UpgradeRow } from './UpgradeView.tsx'
@@ -76,6 +77,7 @@ export function SimpleResultView({ data, team, res, upgrades, applied, onApply }
             <div key={hero?.id ?? hi} className="rounded-lg border p-3">
               <h3 className="mb-2 flex flex-wrap items-center gap-2 font-semibold">
                 {hero?.name ?? `Герой ${hi + 1}`}
+                {hero?.draft ? <DraftBadge /> : null}
                 {onApply && hero ? (
                   <Tip
                     text={

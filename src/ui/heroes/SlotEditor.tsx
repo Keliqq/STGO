@@ -7,7 +7,8 @@
  *   · не больше одного артефактного предмета на героя;
  *   · предметы, привязанные к классу/навыку, — только своему классу.
  * Запрещённое не исчезает молча: оно в конце списка, с причиной (и подсвечено, если уже надето).
- * Камень и дух — только допустимые для выбранного предмета (ENCHANTMENTS: сродство стихии и духа).
+ * Камень и дух — любые (A65): сродство предмета не разрешение, а бонус, поэтому варианты помечаются
+ * «✦ сродство», а камень другой стихии — оговоркой «не даёт стихию этому герою» (A21).
  */
 import { useMemo, useState } from 'react'
 import { AlertTriangle, Search, X } from 'lucide-react'
@@ -19,13 +20,16 @@ import { NativeSelect, NativeSelectOption } from '#/components/ui/native-select.
 import { elementIconId, itemIconId, spiritIconId, typeIconId } from '#/data/images.ts'
 import { QUALITIES, type GameData, type HeroInstance, type HeroSlot, type Item } from '#/data/types.ts'
 import {
+  editorClass,
   heroHasArtifact,
   heroMaxItemTier,
   itemOptions,
   qualityMultiplier,
   slotEnchantChoices,
-  spiritAllowedOnItem,
-  stoneAllowedOnItem,
+  spiritAffinityOnItem,
+  spiritSkillOf,
+  stoneAffinityOnItem,
+  stoneCountsForHeroElement,
   tierOverflowSlots,
 } from '#/engine/heroEditor.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
@@ -62,32 +66,26 @@ export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEdito
   const item = current.item ? (data.items.find((i) => i.name === current.item) ?? null) : null
   const maxTier = heroMaxItemTier(data, hero.level)
   const options = useMemo(() => (open ? itemOptions(data, hero, slot, query) : []), [data, hero, slot, query, open])
-  const { stones, spirits, heroStones } = useMemo(() => slotEnchantChoices(data, hero, slot), [data, hero, slot])
+  const { stones, spirits } = useMemo(() => slotEnchantChoices(data, hero, slot), [data, hero, slot])
   const shown = options.slice(0, limit)
   const hidden = options.length - shown.length
   const overflow = tierOverflowSlots(data, hero).includes(slot)
   const artifacts = useMemo(() => data.items.filter((i) => i.artifactSkill).map((i) => i.name), [data])
   const artifactElsewhere = heroHasArtifact(data, hero, slot)
+  const cls = editorClass(data, hero)
+  const stone = current.element ? (data.enchants.find((e) => e.name === current.element) ?? null) : null
+  const spirit = current.spirit ? (data.enchants.find((e) => e.name === current.spirit) ?? null) : null
+  const slotTypes = cls?.slots[slot] ?? []
 
-  /** Выбор предмета: несовместимые камень/дух снимаем (в BLUEPRINTS они недопустимы на новом предмете). */
+  /**
+   * Выбор предмета: камень и дух остаются — вставить их можно в любой предмет (A65). Снятие предмета
+   * очищает слот целиком: зачаровывать нечего.
+   */
   const pick = (next: Item | null): void => {
-    const slotNext: HeroSlot = { ...current, item: next?.name ?? null }
-    if (next) {
-      const stone = current.element ? (data.enchants.find((e) => e.name === current.element) ?? null) : null
-      if (stone && !stoneAllowedOnItem(stone, next)) slotNext.element = null
-      const spirit = current.spirit ? (data.enchants.find((e) => e.name === current.spirit) ?? null) : null
-      if (spirit && !spiritAllowedOnItem(data, spirit, next)) slotNext.spirit = null
-    } else {
-      slotNext.element = null
-      slotNext.spirit = null
-    }
-    onChange(slotNext)
+    onChange(next ? { ...current, item: next.name } : { ...current, item: null, element: null, spirit: null })
     setOpen(false)
     setQuery('')
   }
-
-  const cls = data.heroClasses.find((c) => c.name === hero.className)
-  const slotTypes = cls?.slots[slot] ?? []
 
   return (
     <div className={cn('rounded-md border p-2', overflow ? 'border-warning bg-warning/5' : 'bg-muted/20')}>
@@ -195,41 +193,48 @@ export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEdito
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <label className="flex items-center gap-1 text-xs">
           <span className="text-muted-foreground">
-            <HintLabel hint="Камень стихии: даёт величину стихии против барьера и свои ATK/DEF/HP. Список — только камни, допустимые на этом предмете и для стихии героя.">Камень</HintLabel>
+            <HintLabel hint="Вставить можно любой камень стихии (A65): он даёт ATK/DEF/HP и величину стихии против барьера. Сродство предмета («✦ сродство») усиливает камень ×1,5 (A6), а камень чужой стихии стихии герою не даёт (A21).">
+              Камень
+            </HintLabel>
           </span>
           <NativeSelect
             value={current.element ?? ''}
-            disabled={!item || stones.length === 0}
+            disabled={!item}
             onChange={(e) => onChange({ ...current, element: e.target.value || null })}
           >
-            <NativeSelectOption value="">{!item ? '— сначала предмет —' : stones.length === 0 ? (heroStones ? 'нет подходящих камней' : 'камни недоступны') : '— без камня —'}</NativeSelectOption>
-            {stones.map((s) => (
+            <NativeSelectOption value="">{!item ? '— сначала предмет —' : '— без камня —'}</NativeSelectOption>
+            {stones.map(({ enchant: s, affinity, note }) => (
               <NativeSelectOption key={s.name} value={s.name}>
                 {s.name} (+{s.elementValue}
-                {s.element ? ` ${s.element}` : ''})
+                {s.element ? ` ${s.element}` : ''}){affinity ? ' ✦ сродство' : ''}
+                {note ? ` — ${note}` : ''}
               </NativeSelectOption>
             ))}
           </NativeSelect>
-          {current.element ? <GameIcon kind="element" id={data.enchants.find((e) => e.name === current.element)?.iconId ?? elementIconId('Any')} label={current.element} size={16} /> : null}
+          {current.element ? <GameIcon kind="element" id={stone?.iconId ?? elementIconId('Any')} label={current.element} size={16} /> : null}
         </label>
         <label className="flex items-center gap-1 text-xs">
           <span className="text-muted-foreground">
-            <HintLabel hint="Дух даёт свой навык и статы. Список — только духи, к которым у предмета есть сродство (Spirit Affinity, A5): иначе дух на предмет не встаёт.">Дух</HintLabel>
+            <HintLabel hint="Вставить можно любой дух (A65): он даёт свои статы и навык. Если у предмета есть сродство духа («✦ сродство», Spirit Affinity), навык даётся в «+»-версии (A5).">
+              Дух
+            </HintLabel>
           </span>
           <NativeSelect
             value={current.spirit ?? ''}
-            disabled={!item || spirits.length === 0}
+            disabled={!item}
             onChange={(e) => onChange({ ...current, spirit: e.target.value || null })}
           >
-            <NativeSelectOption value="">
-              {!item ? '— сначала предмет —' : spirits.length === 0 ? 'у предмета нет сродства духа' : '— без духа —'}
-            </NativeSelectOption>
-            {spirits.map((s) => (
-              <NativeSelectOption key={s.name} value={s.name}>
-                {s.name}
-                {s.skill ? ` (${s.skill})` : ''}
-              </NativeSelectOption>
-            ))}
+            <NativeSelectOption value="">{!item ? '— сначала предмет —' : '— без духа —'}</NativeSelectOption>
+            {spirits.map(({ enchant: s, affinity }) => {
+              const skillName = spiritSkillOf(data, s)?.name
+              return (
+                <NativeSelectOption key={s.name} value={s.name}>
+                  {s.name}
+                  {skillName ? ` — ${skillName}` : ''}
+                  {affinity ? ' ✦ сродство' : ''}
+                </NativeSelectOption>
+              )
+            })}
           </NativeSelect>
           {current.spirit ? <GameIcon kind="spirit" id={spiritIconId(current.spirit)} label={current.spirit} size={16} /> : null}
         </label>
@@ -250,6 +255,21 @@ export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEdito
           )}
           {item.spiritAffinity ? <span>сродство духа: {item.spiritAffinity}</span> : <span>сродства духа нет</span>}
           {item.builtInElement ? <span>встроенный камень: {item.builtInElement}</span> : null}
+        </p>
+      ) : null}
+      {item && (stone || spirit) ? (
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
+          {stone && current.element ? (
+            <span className={stoneAffinityOnItem(stone, item) ? 'text-success' : 'text-muted-foreground'}>
+              {stoneAffinityOnItem(stone, item) ? 'камень: ✦ сродство — бонус ×1,5 (A6)' : 'камень: без сродства к предмету — бонус не включается (A6)'}
+              {stoneCountsForHeroElement(stone, cls) ? '' : ' · не даёт стихию этому герою (A21)'}
+            </span>
+          ) : null}
+          {spirit ? (
+            <span className={spiritAffinityOnItem(data, spirit, item) ? 'text-success' : 'text-muted-foreground'}>
+              {spiritAffinityOnItem(data, spirit, item) ? 'дух: ✦ сродство — навык в «+»-версии (A5)' : 'дух: без сродства к предмету — обычная версия навыка (A5)'}
+            </span>
+          ) : null}
         </p>
       ) : null}
       {overflow ? (

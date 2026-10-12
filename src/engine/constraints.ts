@@ -18,6 +18,7 @@ import {
   TITAN_SPIRIT_NAME,
 } from './constants.ts'
 import { QUALITY_ORDER } from './quality.ts'
+import { maxItemTierFor } from './formulas.ts'
 import { applyHeroConfig, capForHero, type OptimizerConstraints, type OptimizerInput, type OptimizerResult, type PerHeroCap, type SlotExplanation } from './optimizer.ts'
 
 /** Переопределения пользователя; null — взять значение по умолчанию. */
@@ -41,6 +42,8 @@ export function maxDataTier(data: GameData): number {
  *
  * Тиры считаются НА КАЖДОГО ГЕРОЯ (требование владельца, сессия 13): «макс. тир = макс. надетый
  * у этого героя + DEFAULT_ITEM_TIER_HEADROOM», иначе слабому герою предлагались вещи под сильного.
+ * Сверху — потолок уровня (`Max Item Tier`, HERO LEVELS): выше него герой предмет не наденет,
+ * поэтому «фора» оптимизатора за него не выходит (A41 + A66, то же правило, что в редакторе).
  * maxItemTier/maxStoneTier отряда остаются верхней границей (для переопределений пользователя).
  */
 export function defaultConstraints(data: GameData, team: HeroInstance[], titanSoul: 'as-is' | 'on' | 'off' = 'as-is'): OptimizerConstraints {
@@ -49,11 +52,12 @@ export function defaultConstraints(data: GameData, team: HeroInstance[], titanSo
   const dataTier = maxDataTier(data)
   const perHero: PerHeroCap[] = team.map((h, hi) => {
     const equippedItems = h.slots.map((s) => (s.item ? itemTier.get(s.item) : undefined)).filter((t): t is number => t != null)
-    const heroItemTier = equippedItems.length > 0 ? Math.min(dataTier, Math.max(...equippedItems) + DEFAULT_ITEM_TIER_HEADROOM) : null
+    const heroItemTier = equippedItems.length > 0 ? Math.max(...equippedItems) + DEFAULT_ITEM_TIER_HEADROOM : dataTier
     const heroStoneTier = Math.max(DEFAULT_MAX_STONE_TIER, ...h.slots.map((s) => (s.element ? (stoneTier.get(s.element) ?? 0) : 0)))
     return {
       hero: hi,
-      maxItemTier: heroItemTier ?? dataTier,
+      // Потолок уровня — правило игры: без надетых предметов он и есть ограничение (раньше был «без ограничения»).
+      maxItemTier: Math.min(dataTier, heroItemTier, maxItemTierFor(data, h.level) ?? dataTier),
       maxStoneTier: heroStoneTier,
     }
   })
@@ -116,11 +120,16 @@ export function upgradeScenarios(data: GameData, input: OptimizerInput, result: 
   const c = input.constraints
   const out: UpgradeScenario[] = []
   const dataTier = maxDataTier(data)
-  if (c.maxItemTier < dataTier) {
+  // Потолок героя = min(свой, отряда) (capForHero): поднимаем оба, иначе «+1 тир» упирался бы
+  // в прежний потолок героя и сценарий ничего не менял. Сверху — `Max Item Tier` уровня (A66):
+  // выше него герой не наденет, поэтому сценарий не предлагается, если уровень не даёт ступени выше.
+  const perHero = c.perHero?.map((h, i) => ({
+    ...h,
+    maxItemTier: Math.min(dataTier, maxItemTierFor(data, heroes[i]?.level ?? 1) ?? dataTier, h.maxItemTier + 1),
+  }))
+  const raisesTier = perHero ? perHero.some((h, i) => h.maxItemTier > (c.perHero?.[i]?.maxItemTier ?? 0)) : c.maxItemTier < dataTier
+  if (c.maxItemTier < dataTier && raisesTier) {
     const t = c.maxItemTier + 1
-    // Потолок героя = min(свой, отряда) (capForHero): поднимаем оба, иначе «+1 тир» упирался бы
-    // в прежний потолок героя и сценарий ничего не менял.
-    const perHero = c.perHero?.map((h) => ({ ...h, maxItemTier: Math.min(dataTier, h.maxItemTier + 1) }))
     out.push({ kind: 'tier', label: `до T${t}`, input: { ...base, constraints: { ...c, maxItemTier: t, perHero } } })
   }
   const q = nextQuality(c.maxQuality)

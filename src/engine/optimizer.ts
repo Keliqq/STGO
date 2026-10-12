@@ -14,7 +14,10 @@
  *   5. Объяснение: для каждого изменённого слота — на сколько вырос win rate относительно набора «без этой замены».
  *
  * Ограничения: в слоте только допустимые классом типы; не больше 1 артефакта на героя;
- * камень — только стихии героя (Any/Spellblade — любой; против барьера «Any» считает combat.ts);
+ * тир предмета ≤ min(ограничение подбора A41, `Max Item Tier` уровня героя — HERO LEVELS, A66);
+ * камень — только стихии героя (Any/Spellblade — любой; против барьера «Any» считает combat.ts).
+ * Камень чужой стихии игра вставить разрешает (A65), но стихии герою он не даёт (A21), а статы камней
+ * одного тира у всех стихий одинаковы — поэтому в перебор они не входят.
  * Стихия не пробивает барьер → симуляция уже штрафует урон ×BARRIER_UNBROKEN_DMG_FACTOR (A9),
  * в результат добавляется предупреждение.
  */
@@ -39,6 +42,7 @@ import {
   OPTIMIZER_YIELD_INTERVAL_MS,
 } from './constants.ts'
 import { barrierBroken, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type Fighter, type SimMetrics } from './combat.ts'
+import { maxItemTierFor } from './formulas.ts'
 import { quickScore } from './score.ts'
 import { partyElementBonusPct, STAT_WEIGHT_STATS, statWeights, type StatWeightStat, type StatWeightsResult } from './statWeights.ts'
 import { effectiveClass } from './stats.ts'
@@ -89,6 +93,17 @@ export function capForHero(cons: OptimizerConstraints, hi: number): PerHeroCap {
     maxItemTier: own?.maxItemTier != null ? Math.min(own.maxItemTier, cons.maxItemTier) : cons.maxItemTier,
     maxStoneTier: own?.maxStoneTier != null ? (cons.maxStoneTier != null ? Math.min(own.maxStoneTier, cons.maxStoneTier) : own.maxStoneTier) : cons.maxStoneTier,
   }
+}
+
+/**
+ * Потолок тира предмета для героя: min(ограничение подбора A41, `Max Item Tier` уровня — HERO LEVELS).
+ * Второе — правило игры («выше этого тира герой не наденет»), поэтому оно ограничивает подбор так же,
+ * как список предметов в редакторе (`heroEditor.ts`), и его нельзя поднять переопределением (A66).
+ */
+export function tierCapFor(data: GameData, cons: OptimizerConstraints, hi: number, level: number): number {
+  const own = capForHero(cons, hi).maxItemTier
+  const levelCap = maxItemTierFor(data, level)
+  return levelCap != null ? Math.min(own, levelCap) : own
 }
 
 export interface QuestWeight {
@@ -264,8 +279,8 @@ export function evasionSurplusNote(eva: number, cap: number, extremeOnly: boolea
 
 // ─────────────────────────── перебор вариантов ───────────────────────────
 
-function itemChoices(data: GameData, cons: OptimizerConstraints, types: string[], hi: number): { item: Item; quality: Quality }[] {
-  const cap = capForHero(cons, hi).maxItemTier
+function itemChoices(data: GameData, cons: OptimizerConstraints, types: string[], hi: number, level: number): { item: Item; quality: Quality }[] {
+  const cap = tierCapFor(data, cons, hi, level)
   return data.items
     .filter((it) => it.isEquipment && !NON_EQUIPMENT_TYPES.includes(it.type) && types.includes(it.type) && it.tier <= cap)
     .map((item) => ({ item, quality: cons.maxQuality }))
@@ -420,7 +435,7 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     return {
       hero,
       cls,
-      items: cls.slots.map((types) => itemChoices(data, input.constraints, types, hi)),
+      items: cls.slots.map((types) => itemChoices(data, input.constraints, types, hi, hero.level)),
       stones: stoneChoices(data, input.constraints, cls.element, hi),
       spirits: spiritChoices(data, input.constraints),
       tank: false,
