@@ -87,3 +87,11 @@ export async function runOptimize(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Подобрать' }).click()
   await expect(section(page, 'Результат')).toBeVisible({ timeout: 180_000 })
 }
+
+/** Выбор квеста в режиме «Квест»: кнопка локации с иконкой, затем сложность и тип. */
+export async function pickQuest(page: Page, area: string, difficulty: string, variant: 'normal' | 'boss'): Promise<void> {
+  const target = section(page, 'Цель')
+  await target.getByRole('group', { name: 'Локация' }).getByRole('button', { name: area }).click()
+  await target.getByLabel('Сложность').selectOption(difficulty)
+  await target.getByLabel('Тип').selectOption(variant)
+}

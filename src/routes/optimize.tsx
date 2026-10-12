@@ -8,6 +8,7 @@ import { Input } from '#/components/ui/input.tsx'
 import { NativeSelect, NativeSelectOption } from '#/components/ui/native-select.tsx'
 import { Progress } from '#/components/ui/progress.tsx'
 import { RadioGroup, RadioGroupItem } from '#/components/ui/radio-group.tsx'
+import { areaIconId, difficultyIconId } from '#/data/images.ts'
 import { loadHeroes } from '#/data/heroStore.ts'
 import { loadConstraintOverrides, saveConstraintOverrides } from '#/data/optimizeSettings.ts'
 import { addRealityCheck, loadRealityChecks, type RealityCheck } from '#/data/realityChecks.ts'
@@ -28,6 +29,7 @@ import type { SkillAdviceResult } from '#/engine/skills.ts'
 import { seedAdviceFromWeights, type SeedAdvice } from '#/engine/statWeights.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
+import { GameIcon } from '#/ui/GameIcon.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 import { RealityChecksView } from '#/ui/optimize/RealityChecksView.tsx'
 import { ResultView } from '#/ui/optimize/ResultView.tsx'
@@ -53,6 +55,16 @@ function CheckItem({ checked, onChange, children }: { checked: boolean; onChange
       <Checkbox checked={checked} onCheckedChange={(v) => onChange(v === true)} />
       <span>{children}</span>
     </label>
+  )
+}
+
+/** Название области с иконкой из игры. */
+function AreaLabel({ area, size = 24 }: { area: string; size?: number }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <GameIcon kind="area" id={areaIconId(area)} label={area} size={size} />
+      {area}
+    </span>
   )
 }
 
@@ -103,6 +115,8 @@ function OptimizePage() {
   const [champRank, setChampRank] = useState(1)
   const [mode, setMode] = useState<'quest' | 'universal'>('quest')
   const [questId, setQuestId] = useState('')
+  const [questDiff, setQuestDiff] = useState<string>('Hard')
+  const [questVariant, setQuestVariant] = useState<'normal' | 'boss'>('boss')
   const [uniDiff, setUniDiff] = useState<string>('Hard')
   const [uniVariant, setUniVariant] = useState<'normal' | 'boss'>('boss')
   const [uniAreas, setUniAreas] = useState<string[]>([])
@@ -122,6 +136,22 @@ function OptimizePage() {
   const [error, setError] = useState<string | null>(null)
 
   const quests = useMemo(() => (data ? questsWithCaps(data).quests : []), [data])
+  const questAreas = useMemo(() => [...new Set(quests.map((q) => q.area))], [quests])
+  const selectedQuest = useMemo(() => quests.find((q) => q.id === questId) ?? null, [quests, questId])
+  const pickQuestParams = (diff: string, variant: 'normal' | 'boss') => {
+    setQuestDiff(diff)
+    setQuestVariant(variant)
+    const area = selectedQuest?.area
+    setQuestId(quests.find((q) => q.area === area && q.difficulty === diff && q.variant === variant)?.id ?? '')
+  }
+  const pickQuestArea = (area: string) => {
+    const inArea = quests.filter((q) => q.area === area)
+    const q = inArea.find((x) => x.difficulty === questDiff && x.variant === questVariant) ?? inArea[0]
+    if (!q) return
+    setQuestId(q.id)
+    setQuestDiff(q.difficulty)
+    setQuestVariant(q.variant)
+  }
   const spirits = useMemo(() => (data ? data.enchants.filter((e) => e.kind === 'spirit').map((e) => e.name) : []), [data])
   const uniAreaList = useMemo(
     () => [...new Set(quests.filter((q) => q.difficulty === uniDiff && q.variant === uniVariant).map((q) => q.area))],
@@ -325,15 +355,51 @@ function OptimizePage() {
           <RadioItem value="universal">Универсальный (все локации фильтра)</RadioItem>
         </RadioGroup>
         {mode === 'quest' ? (
-          <NativeSelect className="w-full max-w-xl" value={questId} onChange={(e) => setQuestId(e.target.value)}>
-            <NativeSelectOption value="">— выберите квест —</NativeSelectOption>
-            {quests.map((q) => (
-              <NativeSelectOption key={q.id} value={q.id}>
-                {questLabel(q)}
-                {q.barrier ? ` · барьер ${q.barrier.elements.join('/')} ${q.barrier.hp}` : ''}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-sm text-muted-foreground">Локация:</p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Локация">
+                {questAreas.map((a) => (
+                  <Button
+                    key={a}
+                    type="button"
+                    size="sm"
+                    variant={a === selectedQuest?.area ? 'default' : 'outline'}
+                    aria-pressed={a === selectedQuest?.area}
+                    onClick={() => pickQuestArea(a)}
+                  >
+                    <AreaLabel area={a} />
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <Field label="Сложность">
+                <NativeSelect value={selectedQuest?.difficulty ?? questDiff} onChange={(e) => pickQuestParams(e.target.value, questVariant)}>
+                  {[...new Set([...DIFFS, ...quests.map((q) => q.difficulty)])].map((d) => (
+                    <NativeSelectOption key={d}>{d}</NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field label="Тип">
+                <NativeSelect value={selectedQuest?.variant ?? questVariant} onChange={(e) => pickQuestParams(questDiff, e.target.value as 'normal' | 'boss')}>
+                  <NativeSelectOption value="normal">обычный</NativeSelectOption>
+                  <NativeSelectOption value="boss">босс</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+            </div>
+            {selectedQuest ? (
+              <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {difficultyIconId(selectedQuest.difficulty) && (
+                  <GameIcon kind="difficulty" id={difficultyIconId(selectedQuest.difficulty)} label={selectedQuest.difficulty} size={20} />
+                )}
+                {questLabel(selectedQuest)}
+                {selectedQuest.barrier ? ` · барьер ${selectedQuest.barrier.elements.join('/')} ${selectedQuest.barrier.hp}` : ''}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Для такого сочетания сложности и типа в этой локации квеста нет.</p>
+            )}
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -359,7 +425,7 @@ function OptimizePage() {
               <div className="flex max-h-40 flex-wrap gap-x-4 gap-y-2 overflow-y-auto rounded-md border p-3">
                 {uniAreaList.map((a) => (
                   <CheckItem key={a} checked={uniAreas.includes(a)} onChange={(v) => setUniAreas((cur) => toggle(cur, a, v))}>
-                    {a}
+                    <AreaLabel area={a} />
                   </CheckItem>
                 ))}
               </div>

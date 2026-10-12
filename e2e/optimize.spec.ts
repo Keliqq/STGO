@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { importHeroesViaFile, pickHero, runOptimize, section, selectByLabel, shot, watchErrors } from './helpers.ts'
+import { importHeroesViaFile, pickHero, runOptimize, section, selectByLabel, shot, watchErrors, pickQuest } from './helpers.ts'
 
 test('подбор для одного героя под квест + советы по навыкам + отметка', async ({ page }) => {
   const errors = watchErrors(page)
@@ -7,10 +7,7 @@ test('подбор для одного героя под квест + совет
   await page.goto('/#/optimize')
   await expect(page.getByRole('heading', { name: 'Подбор экипировки' })).toBeVisible()
   await pickHero(page, 'Антуан')
-  await selectByLabel(
-    section(page, 'Цель').locator('select').first(),
-    /Lost City of Gold · босс · 13/,
-  )
+  await pickQuest(page, 'Lost City of Gold', '13', 'boss')
   await shot(page, 'optimize-form.png')
   await runOptimize(page)
   await expect(section(page, 'Результат').getByText(/Цель: \d+(\.\d)?%/)).toBeVisible()
@@ -107,7 +104,7 @@ test('отмена посреди расчёта; тяжёлый расчёт н
   for (const h of ['Антуан', 'Беовульф', 'Эбигейл']) await pickHero(page, h)
   await selectByLabel(page.getByLabel('Чемпион'), /Argon/)
   await page.getByLabel('Ранг').fill('5')
-  await selectByLabel(section(page, 'Цель').locator('select').first(), /Meteor Zone · босс · Extreme/)
+  await pickQuest(page, 'Meteor Zone', 'Extreme', 'boss')
   await page.getByRole('button', { name: 'Подобрать' }).click()
   await expect(page.getByText(/симуляций \d+\//)).toBeVisible({ timeout: 60_000 })
 

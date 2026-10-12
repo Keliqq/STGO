@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { importHeroesViaFile, pickHero, runOptimize, section, selectByLabel, shot, watchErrors } from './helpers.ts'
+import { importHeroesViaFile, pickHero, runOptimize, section, selectByLabel, shot, watchErrors, pickQuest } from './helpers.ts'
 
 /**
  * Веса статов и «почему» по слотам: пользователь должен видеть, ПОЧЕМУ программа выбрала эти вещи.
@@ -10,7 +10,7 @@ test('«почему» по слотам и веса статов в резул�
   await importHeroesViaFile(page)
   await page.goto('/#/optimize')
   await pickHero(page, 'Антуан')
-  await selectByLabel(section(page, 'Цель').locator('select').first(), /Lost City of Gold · босс · 13/)
+  await pickQuest(page, 'Lost City of Gold', '13', 'boss')
   await runOptimize(page)
   const res = section(page, 'Результат')
 
