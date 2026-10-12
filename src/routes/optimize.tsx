@@ -30,6 +30,7 @@ import { seedAdviceFromWeights, type SeedAdvice } from '#/engine/statWeights.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
+import { Tip } from '#/ui/Hint.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 import { RealityChecksView } from '#/ui/optimize/RealityChecksView.tsx'
 import { ResultView } from '#/ui/optimize/ResultView.tsx'
@@ -323,7 +324,7 @@ function OptimizePage() {
           {heroes.length === 0 ? <p className="text-sm text-muted-foreground">Героев нет — импортируйте их на странице «Герои».</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <Field label="Чемпион">
+          <Field label="Чемпион" hint="Чемпион даёт отряду бонус своей стихии и ранговые способности. Ранг ниже — слабее бонус.">
             <NativeSelect value={champ} onChange={(e) => setChamp(e.target.value)}>
               <NativeSelectOption value="">— без чемпиона —</NativeSelectOption>
               {data.champions.map((c) => (
@@ -333,13 +334,13 @@ function OptimizePage() {
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Ранг">
+          <Field label="Ранг" hint="Ранг чемпиона от 1 до 20. Без выбранного чемпиона поле неактивно.">
             <Input type="number" min={1} max={20} className="w-20" value={champRank} onChange={(e) => setChampRank(Number(e.target.value))} disabled={!champ} />
           </Field>
-          <Field label="Уровень героев (пусто = как у героя)">
+          <Field label="Уровень героев (пусто = как у героя)" hint="Посчитать так, будто все герои этого уровня — например, чтобы узнать, как отряд справится после прокачки. Пусто — берётся уровень из импорта.">
             <Input type="number" min={1} max={99} className="w-20" value={levelOverride} onChange={(e) => setLevelOverride(e.target.value)} />
           </Field>
-          <Field label="Душа Титана">
+          <Field label="Душа Титана" hint="Бонус Души Титана и доступ к духу Титан. «Как у героя» — по данным импорта; «есть/нет» принудительно для всех героев.">
             <NativeSelect value={titanSoul} onChange={(e) => setTitanSoul(e.target.value as 'as-is' | 'on' | 'off')}>
               <NativeSelectOption value="as-is">как у героя</NativeSelectOption>
               <NativeSelectOption value="on">есть</NativeSelectOption>
@@ -351,8 +352,16 @@ function OptimizePage() {
 
       <Section title="Цель">
         <RadioGroup value={mode} onValueChange={(v) => setMode(v as 'quest' | 'universal')} className="mb-4 flex flex-wrap gap-x-6 gap-y-2">
-          <RadioItem value="quest">Квест</RadioItem>
-          <RadioItem value="universal">Универсальный (все локации фильтра)</RadioItem>
+          <Tip text="Лучший набор под одну конкретную локацию, сложность и тип квеста." side="bottom">
+            <span>
+              <RadioItem value="quest">Квест</RadioItem>
+            </span>
+          </Tip>
+          <Tip text="Один набор, лучший в среднем по выбранным локациям. Подходит, когда нет возможности переодевать героев под каждый квест." side="bottom">
+            <span>
+              <RadioItem value="universal">Универсальный (все локации фильтра)</RadioItem>
+            </span>
+          </Tip>
         </RadioGroup>
         {mode === 'quest' ? (
           <div className="space-y-4">
@@ -374,14 +383,14 @@ function OptimizePage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <Field label="Сложность">
+              <Field label="Сложность" hint="Сложность квеста определяет HP и урон босса и пороги защиты.">
                 <NativeSelect value={selectedQuest?.difficulty ?? questDiff} onChange={(e) => pickQuestParams(e.target.value, questVariant)}>
                   {[...new Set([...DIFFS, ...quests.map((q) => q.difficulty)])].map((d) => (
                     <NativeSelectOption key={d}>{d}</NativeSelectOption>
                   ))}
                 </NativeSelect>
               </Field>
-              <Field label="Тип">
+              <Field label="Тип" hint="Обычный квест или битва с боссом локации (у босса свои HP, урон и барьер).">
                 <NativeSelect value={selectedQuest?.variant ?? questVariant} onChange={(e) => pickQuestParams(questDiff, e.target.value as 'normal' | 'boss')}>
                   <NativeSelectOption value="normal">обычный</NativeSelectOption>
                   <NativeSelectOption value="boss">босс</NativeSelectOption>
@@ -403,22 +412,26 @@ function OptimizePage() {
         ) : (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <Field label="Сложность">
+              <Field label="Сложность" hint="Сложность, для которой берутся все локации фильтра.">
                 <NativeSelect value={uniDiff} onChange={(e) => setUniDiff(e.target.value)}>
                   {[...new Set([...DIFFS, ...quests.map((q) => q.difficulty)])].map((d) => (
                     <NativeSelectOption key={d}>{d}</NativeSelectOption>
                   ))}
                 </NativeSelect>
               </Field>
-              <Field label="Тип">
+              <Field label="Тип" hint="Обычные квесты или только боссы выбранных локаций.">
                 <NativeSelect value={uniVariant} onChange={(e) => setUniVariant(e.target.value as 'normal' | 'boss')}>
                   <NativeSelectOption value="normal">обычные</NativeSelectOption>
                   <NativeSelectOption value="boss">боссы</NativeSelectOption>
                 </NativeSelect>
               </Field>
-              <CheckItem checked={robust} onChange={setRobust}>
-                robust — максимизировать худшую локацию
-              </CheckItem>
+              <Tip text="Вместо среднего win rate по локациям максимизируется худший результат: набор не провалится ни на одной локации, но в среднем может быть слабее." side="bottom">
+                <span>
+                  <CheckItem checked={robust} onChange={setRobust}>
+                    robust — максимизировать худшую локацию
+                  </CheckItem>
+                </span>
+              </Tip>
             </div>
             <div>
               <p className="mb-2 text-sm text-muted-foreground">Локации (пусто = все):</p>
@@ -439,17 +452,19 @@ function OptimizePage() {
         description="Всё покупается на рынке — ограничения задают, что вам по карману. Пустое поле = значение по умолчанию; выбранное запоминается."
         action={
           hasOverrides ? (
-            <Button variant="outline" size="sm" onClick={() => updateOverrides(NO_OVERRIDES)}>
-              <RotateCcw /> По умолчанию
-            </Button>
+            <Tip text="Сбросить тир, качество, камни и духи к значениям по умолчанию.">
+              <Button variant="outline" size="sm" onClick={() => updateOverrides(NO_OVERRIDES)}>
+                <RotateCcw /> По умолчанию
+              </Button>
+            </Tip>
           ) : null
         }
       >
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <Field label="Max тир">
+          <Field label="Max тир" hint="Потолок тира предметов для всех героев. Пусто — по каждому герою «макс. надетый у него + 1».">
             <OverrideNumber value={overrides.maxItemTier} auto={defaults.maxItemTier} min={1} onChange={(v) => updateOverrides({ maxItemTier: v })} />
           </Field>
-          <Field label="Max качество">
+          <Field label="Max качество" hint="Наивысшее качество предметов, которое оптимизатор может подставить (Common … Legendary и выше).">
             <NativeSelect value={overrides.maxQuality ?? ''} onChange={(e) => updateOverrides({ maxQuality: (e.target.value || null) as Quality | null })}>
               <NativeSelectOption value="">по умолчанию ({defaults.maxQuality})</NativeSelectOption>
               {QUALITIES.map((q) => (
@@ -459,7 +474,7 @@ function OptimizePage() {
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Max тир камней">
+          <Field label="Max тир камней" hint="Потолок тира стихийных камней. 0 — камни не используются. Пусто — максимум из надетого.">
             <OverrideNumber value={overrides.maxStoneTier} auto={defaults.maxStoneTier ?? 0} min={0} onChange={(v) => updateOverrides({ maxStoneTier: v })} />
           </Field>
         </div>
@@ -473,12 +488,16 @@ function OptimizePage() {
             Духи: {cons.spirits?.length ?? spirits.length} из {spirits.length} {overrides.spirits ? '(выбраны вручную)' : '(по умолчанию)'}
           </summary>
           <div className="mt-3 mb-2 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits })}>
-              все
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits: [] })}>
-              ни одного
-            </Button>
+            <Tip text="Разрешить оптимизатору использовать всех духов, включая Титана.">
+              <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits })}>
+                все
+              </Button>
+            </Tip>
+            <Tip text="Подбор без духов вообще.">
+              <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits: [] })}>
+                ни одного
+              </Button>
+            </Tip>
             {overrides.spirits ? (
               <Button variant="outline" size="sm" onClick={() => updateOverrides({ spirits: null })}>
                 по умолчанию
@@ -500,10 +519,12 @@ function OptimizePage() {
       </Section>
 
       <div className="mb-6 flex flex-wrap items-center gap-4">
-        <Button size="lg" disabled={busy} onClick={() => void run()}>
-          {running ? <Loader2 className="animate-spin" /> : <Sparkles />}
-          {running ? 'Идёт подбор…' : 'Подобрать'}
-        </Button>
+        <Tip text="Запустить симуляцию боёв в фоне: оптимизатор переберёт предметы, стихии и духов для выбранного отряда.">
+          <Button size="lg" disabled={busy} onClick={() => void run()}>
+            {running ? <Loader2 className="animate-spin" /> : <Sparkles />}
+            {running ? 'Идёт подбор…' : 'Подобрать'}
+          </Button>
+        </Tip>
         {busy ? (
           <Button variant="outline" onClick={cancel}>
             <X /> Отменить

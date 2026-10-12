@@ -13,6 +13,7 @@ import {
 } from '#/engine/constants.ts'
 import { CUBE_LABELS, heroRollPlans, type RollStep, type SkillAdviceResult } from '#/engine/skills.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
+import { Tip } from '#/ui/Hint.tsx'
 import { Notice, Section } from '#/ui/layout.tsx'
 
 /** Цвет шага плана: перекидка — предупреждение, найм/прокачка — инфо, «оставить» — успех. */
@@ -72,7 +73,11 @@ export function SkillAdviceView({ data, team, advice }: { data: GameData | null;
                         <span className={cn('font-medium', STEP_CLASS[st.kind])}>
                           {i + 1}. {st.title}
                         </span>
-                        {st.cube ? <Badge className="ml-2 border-warning/40 bg-warning/15 text-warning">{CUBE_LABELS[st.cube]}</Badge> : null}
+                        {st.cube ? (
+                          <Tip text="Кубик, которым перекидывается слот: чем выше кубик, тем больше слотов он может затронуть, но тем он дороже.">
+                            <Badge className="ml-2 border-warning/40 bg-warning/15 text-warning">{CUBE_LABELS[st.cube]}</Badge>
+                          </Tip>
+                        ) : null}
                         <span className="ml-2 text-xs text-muted-foreground">
                           {st.basicCubes > 0 ? `${st.basicCubes} баз.` : 'бесплатно'}
                         </span>
@@ -114,9 +119,11 @@ export function SkillAdviceView({ data, team, advice }: { data: GameData | null;
                       <span>
                         {a.skillName} <span className="text-muted-foreground">(слот {a.skillIndex + 1})</span>
                       </span>
-                      <span className={cn('font-medium', a.contribution > 0 ? 'text-success' : 'text-muted-foreground')}>
-                        {(a.contribution * 100).toFixed(1)} п.п.
-                      </span>
+                      <Tip text="Вклад навыка: win rate с ним минус win rate без него на подобранном наборе, в процентных пунктах.">
+                        <span className={cn('cursor-help font-medium', a.contribution > 0 ? 'text-success' : 'text-muted-foreground')}>
+                          {(a.contribution * 100).toFixed(1)} п.п.
+                        </span>
+                      </Tip>
                       {rerolled ? (
                         <Badge className="border-warning/40 bg-warning/15 text-warning">{badgeText}</Badge>
                       ) : (
@@ -127,10 +134,12 @@ export function SkillAdviceView({ data, team, advice }: { data: GameData | null;
                   )
                 })}
               </ul>
-              <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={rolandUsedIds.includes(h.id)} onCheckedChange={(v) => toggleRoland(h.id, v === true)} />
-                <span>Роланд на этом герое уже использован</span>
-              </label>
+              <Tip text="Роланд может поставить любой навык в любой слот, но только один раз на героя. Если уже потрачен — план пересчитается без него.">
+                <label className="mt-3 flex w-fit cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox checked={rolandUsedIds.includes(h.id)} onCheckedChange={(v) => toggleRoland(h.id, v === true)} />
+                  <span>Роланд на этом герое уже использован</span>
+                </label>
+              </Tip>
               {plan && plan.reasons.length > 0 ? (
                 <Notice tone="info" className="mt-2">
                   {plan.reasons.join(' ')}

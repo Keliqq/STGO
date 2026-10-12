@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { Button } from '#/components/ui/button.tsx'
+import { Tip } from '#/ui/Hint.tsx'
 
 type ThemeMode = 'light' | 'dark' | 'auto'
 
@@ -71,9 +72,11 @@ export default function ThemeToggle() {
   const Icon = mode === 'auto' ? Monitor : mode === 'dark' ? Moon : Sun
 
   return (
-    <Button variant="outline" size="sm" onClick={toggleMode} aria-label={label} title={label} className="shrink-0">
-      <Icon />
-      <span className="hidden sm:inline">{mode === 'auto' ? 'Авто' : mode === 'dark' ? 'Тёмная' : 'Светлая'}</span>
-    </Button>
+    <Tip text={label} side="bottom">
+      <Button variant="outline" size="sm" onClick={toggleMode} aria-label={label} className="shrink-0">
+        <Icon />
+        <span className="hidden sm:inline">{mode === 'auto' ? 'Авто' : mode === 'dark' ? 'Тёмная' : 'Светлая'}</span>
+      </Button>
+    </Tip>
   )
 }

@@ -3,6 +3,7 @@ import { Badge } from '#/components/ui/badge.tsx'
 import type { HeroInstance } from '#/data/types.ts'
 import { WHATIF_WORTH_MIN_DELTA } from '#/engine/constants.ts'
 import type { UpgradeKind, UpgradeOutcome } from '#/engine/constraints.ts'
+import { Tip } from '#/ui/Hint.tsx'
 import { Section } from '#/ui/layout.tsx'
 import { pct, signedPp } from './format.ts'
 
@@ -45,9 +46,13 @@ export function UpgradeView({ team, rows, objectiveLabel }: { team: HeroInstance
                     </span>
                   </span>
                   {r.outcome.delta >= WHATIF_WORTH_MIN_DELTA ? (
-                    <Badge variant="secondary">стоит</Badge>
+                    <Tip text="Прирост заметно выше погрешности симуляции — улучшение окупится.">
+                      <Badge variant="secondary">стоит</Badge>
+                    </Tip>
                   ) : (
-                    <Badge variant="outline">в пределах шума — можно не тратиться</Badge>
+                    <Tip text="Разница меньше погрешности симуляции (Монте-Карло), реальный выигрыш сомнителен.">
+                      <Badge variant="outline">в пределах шума — можно не тратиться</Badge>
+                    </Tip>
                   )}
                   {r.outcome.cancelled ? <span className="text-muted-foreground">(частично)</span> : null}
                 </>

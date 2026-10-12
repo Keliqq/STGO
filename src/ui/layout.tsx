@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import { cn } from 'cn'
 import { Alert, AlertDescription } from '#/components/ui/alert.tsx'
+import { HintLabel } from '#/ui/Hint.tsx'
 import { CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card.tsx'
 
 /** Страница: заголовок h1, подзаголовок и содержимое. */
@@ -65,10 +66,10 @@ export function Notice({ tone = 'neutral', className, children }: { tone?: keyof
 }
 
 /** Подпись + поле в одну строку; label оборачивает поле, поэтому getByLabel находит его по подписи. */
-export function Field({ label, className, children }: { label: ReactNode; className?: string; children: ReactNode }) {
+export function Field({ label, hint, className, children }: { label: ReactNode; hint?: ReactNode; className?: string; children: ReactNode }) {
   return (
     <label className={cn('flex items-center gap-2 text-sm', className)}>
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground">{hint ? <HintLabel hint={hint}>{label}</HintLabel> : label}</span>
       {children}
     </label>
   )

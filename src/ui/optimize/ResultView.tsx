@@ -10,6 +10,7 @@ import { applyHeroConfig } from '#/engine/optimizer.ts'
 import type { SeedAdvice } from '#/engine/statWeights.ts'
 import { calcStats, effectiveClass } from '#/engine/stats.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
+import { Hint, HintLabel, Tip } from '#/ui/Hint.tsx'
 import { Notice, Section } from '#/ui/layout.tsx'
 import { pct, signedPp } from './format.ts'
 import { StatWeightsView } from './StatWeightsView.tsx'
@@ -62,9 +63,15 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
         <TableHeader>
           <TableRow>
             <TableHead>Локация</TableHead>
-            <TableHead>Win rate</TableHead>
-            <TableHead>Раундов</TableHead>
-            <TableHead>Барьер</TableHead>
+            <TableHead>
+              <HintLabel hint="Доля симулированных боёв, выигранных отрядом на этой локации.">Win rate</HintLabel>
+            </TableHead>
+            <TableHead>
+              <HintLabel hint="Среднее число раундов боя. Меньше — быстрее победа, ниже риск потерь.">Раундов</HintLabel>
+            </TableHead>
+            <TableHead>
+              <HintLabel hint="Стихийный барьер босса: пока он не пробит суммарной стихией отряда, урон по боссу снижен.">Барьер</HintLabel>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -91,7 +98,12 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
           return (
             <div key={hero?.id ?? hi} className="rounded-lg border p-3">
               <h3 className="mb-2 font-semibold">
-                {hero?.name ?? `Герой ${hi + 1}`} {heroDef > 0 ? <span className="text-xs font-normal text-muted-foreground">DEF {heroDef}</span> : null}
+                {hero?.name ?? `Герой ${hi + 1}`}{' '}
+                {heroDef > 0 ? (
+                  <Tip text="Защита героя с подобранным набором. От неё зависят пороги защиты квеста.">
+                    <span className="cursor-help text-xs font-normal text-muted-foreground">DEF {heroDef}</span>
+                  </Tip>
+                ) : null}
               </h3>
               <ModelNote hero={hero} data={data} />
               {(() => {
@@ -131,9 +143,11 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
                           <span className="flex-1 text-muted-foreground">пусто</span>
                         )}
                         {expl ? (
-                          <span className={cn('shrink-0 text-xs font-medium', expl.winRateDelta >= 0 ? 'text-success' : 'text-destructive')} title={`было: ${expl.from}`}>
-                            {signedPp(expl.winRateDelta)}
-                          </span>
+                          <Tip text={`Изменение win rate относительно прежнего слота. Было: ${expl.from}`}>
+                            <span className={cn('shrink-0 cursor-help text-xs font-medium', expl.winRateDelta >= 0 ? 'text-success' : 'text-destructive')}>
+                              {signedPp(expl.winRateDelta)}
+                            </span>
+                          </Tip>
                         ) : null}
                       </div>
                       {expl?.statHint ? (
@@ -154,7 +168,10 @@ export function ResultView({ data, team, result: { res, fromCache }, objectiveLa
 
       {res.statWeights ? (
         <div className="mt-6">
-          <h3 className="mb-2 text-base font-semibold">Почему именно эти статы: веса статов</h3>
+          <h3 className="mb-2 flex items-center gap-1.5 text-base font-semibold">
+            Почему именно эти статы: веса статов
+            <Hint>Симуляция показывает, сколько win rate даёт небольшая прибавка к каждому стату на найденном наборе. Чем больше вес — тем нужнее этот стат.</Hint>
+          </h3>
           <StatWeightsView weights={res.statWeights} team={team.map((h) => ({ name: h.name, def: calcStats(h, data).def }))} seeds={seeds} />
         </div>
       ) : null}

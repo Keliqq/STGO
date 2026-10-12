@@ -17,6 +17,7 @@ import { calcStats, effectiveClass, MAIN_STATS } from '#/engine/stats.ts'
 import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { useGameData } from '#/ui/dataSync.ts'
+import { HintLabel, Tip } from '#/ui/Hint.tsx'
 import { Notice, Page, Section } from '#/ui/layout.tsx'
 import { HeroWeightsPanel } from '#/ui/optimize/HeroWeightsPanel.tsx'
 
@@ -74,9 +75,11 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
             ) : null}
           </div>
           <CardAction>
-            <Button variant="ghost" size="sm" onClick={onDelete}>
-              <Trash2 /> Удалить
-            </Button>
+            <Tip text="Удалить героя из этого браузера. Можно импортировать заново.">
+              <Button variant="ghost" size="sm" onClick={onDelete}>
+                <Trash2 /> Удалить
+              </Button>
+            </Tip>
           </CardAction>
         </CardHeader>
 
@@ -103,11 +106,13 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
             {stats.breakdown.skills
               .filter((s) => s.type === 'Hero' || s.type === 'Innate' || s.type === 'Artifact')
               .map((s, i) => (
-                <Badge key={i} variant="secondary" className="gap-1.5 py-1" title={s.text}>
-                  <GameIcon kind="skill" id={skillIconId(s.name)} label={s.name} size={16} />
-                  {s.name}
-                  {s.tier ? ` (${s.tier})` : ''}
-                </Badge>
+                <Tip key={i} text={s.text}>
+                  <Badge variant="secondary" className="gap-1.5 py-1">
+                    <GameIcon kind="skill" id={skillIconId(s.name)} label={s.name} size={16} />
+                    {s.name}
+                    {s.tier ? ` (${s.tier})` : ''}
+                  </Badge>
+                </Tip>
               ))}
           </div>
 
@@ -115,9 +120,17 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
             <TableHeader>
               <TableRow>
                 <TableHead />
-                <TableHead>Расчёт</TableHead>
-                {ref ? <TableHead>Экспорт</TableHead> : null}
-                {ref ? <TableHead title="Расчёт с базой из модели роста по уровню, без эталона экспорта">Модель без эталона</TableHead> : null}
+                <TableHead>
+                  <HintLabel hint="Статы, посчитанные приложением по надетым предметам, навыкам и стихиям.">Расчёт</HintLabel>
+                </TableHead>
+                {ref ? (
+                  <TableHead>
+                    <HintLabel hint="Статы из файла экспорта TitansDB — эталон для проверки расчёта.">Экспорт</HintLabel>
+                  </TableHead>
+                ) : null}
+                {ref ? <TableHead>
+                  <HintLabel hint="Расчёт с базой из модели роста по уровню, без эталона экспорта. В скобках — отклонение от экспорта: показывает точность модели.">Модель без эталона</HintLabel>
+                </TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -134,7 +147,9 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
                 </TableRow>
               ))}
               <TableRow>
-                <TableCell className="text-muted-foreground">Крит</TableCell>
+                <TableCell className="text-muted-foreground">
+                  <HintLabel hint="Шанс критического удара и его множитель урона.">Крит</HintLabel>
+                </TableCell>
                 <TableCell>
                   {(stats.crit * 100).toFixed(0)}% ×{stats.critDmg.toFixed(1)}
                 </TableCell>
@@ -145,12 +160,16 @@ function HeroCard({ hero, data, onDelete }: { hero: HeroInstance; data: GameData
                 ) : null}
               </TableRow>
               <TableRow>
-                <TableCell className="text-muted-foreground">Уклонение</TableCell>
+                <TableCell className="text-muted-foreground">
+                  <HintLabel hint="Шанс полностью избежать вражеской атаки.">Уклонение</HintLabel>
+                </TableCell>
                 <TableCell>{(stats.eva * 100).toFixed(0)}%</TableCell>
                 {ref ? <TableCell>{(ref.eva * 100).toFixed(0)}%</TableCell> : null}
               </TableRow>
               <TableRow>
-                <TableCell className="text-muted-foreground">Угроза</TableCell>
+                <TableCell className="text-muted-foreground">
+                  <HintLabel hint="Чем выше угроза, тем чаще босс выбирает героя целью атаки (танку нужна высокая).">Угроза</HintLabel>
+                </TableCell>
                 <TableCell>{stats.threat}</TableCell>
                 {ref ? <TableCell>{ref.threat}</TableCell> : null}
               </TableRow>
@@ -263,19 +282,27 @@ function HeroesPage() {
       <section>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <h2 className="flex-1 text-xl font-semibold">Мои герои ({heroes?.length ?? '…'})</h2>
-          <Button variant="outline" size="sm" disabled={!heroes?.length} onClick={() => heroes && downloadText('st-heroes.json', exportHeroesJson(heroes))}>
-            <Download /> Экспорт JSON
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!heroes?.length}
-            onClick={() => {
-              if (window.confirm('Удалить всех героев из этого браузера?')) update([])
-            }}
-          >
-            <Trash2 /> Очистить
-          </Button>
+          <Tip text="Скачать файл со всеми героями (JSON), чтобы перенести их в другой браузер.">
+            <span>
+              <Button variant="outline" size="sm" disabled={!heroes?.length} onClick={() => heroes && downloadText('st-heroes.json', exportHeroesJson(heroes))}>
+                <Download /> Экспорт JSON
+              </Button>
+            </span>
+          </Tip>
+          <Tip text="Удалить всех героев из этого браузера (потребуется подтверждение).">
+            <span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!heroes?.length}
+                onClick={() => {
+                  if (window.confirm('Удалить всех героев из этого браузера?')) update([])
+                }}
+              >
+                <Trash2 /> Очистить
+              </Button>
+            </span>
+          </Tip>
         </div>
         {error ? <Notice tone="error">{error}</Notice> : null}
         {heroes && heroes.length === 0 ? <p className="text-sm text-muted-foreground">Пока нет героев — импортируйте экспорт TitansDB.</p> : null}

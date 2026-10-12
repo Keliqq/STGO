@@ -1,6 +1,7 @@
 import { Check, Trash2, X } from 'lucide-react'
 import { Button } from '#/components/ui/button.tsx'
 import { agreement, checkMatches, removeRealityCheck, type RealityCheck } from '#/data/realityChecks.ts'
+import { Tip } from '#/ui/Hint.tsx'
 import { Section } from '#/ui/layout.tsx'
 import { pct } from './format.ts'
 
@@ -24,12 +25,16 @@ export function RealityChecksView({ checks, onChecksChange, target, onMark }: Re
           <span>
             Отряд <b>{target.teamLabel}</b> на «{target.questLabel}» в игре:
           </span>
-          <Button className="bg-success text-white hover:bg-success/90" onClick={() => onMark(true)}>
-            проходит
-          </Button>
-          <Button variant="destructive" onClick={() => onMark(false)}>
-            не проходит
-          </Button>
+          <Tip text="Вы проверили этот набор в игре, и бой выигран. Отметка идёт в статистику точности модели.">
+            <Button className="bg-success text-white hover:bg-success/90" onClick={() => onMark(true)}>
+              проходит
+            </Button>
+          </Tip>
+          <Tip text="Вы проверили этот набор в игре, и бой проигран. Отметка идёт в статистику точности модели.">
+            <Button variant="destructive" onClick={() => onMark(false)}>
+              не проходит
+            </Button>
+          </Tip>
           <span className="text-muted-foreground">предсказание симуляции: {pct(target.simWinRate)}</span>
         </div>
       )}
@@ -45,9 +50,11 @@ export function RealityChecksView({ checks, onChecksChange, target, onMark }: Re
               <span className="flex-1">
                 {c.questLabel} · {c.teamLabel} · {c.passed ? 'проходит' : 'не проходит'} · симуляция {pct(c.simWinRate)}
               </span>
-              <Button variant="ghost" size="xs" onClick={() => void removeRealityCheck(c.id).then(onChecksChange)}>
-                <Trash2 /> удалить
-              </Button>
+              <Tip text="Удалить эту отметку из статистики точности.">
+                <Button variant="ghost" size="xs" onClick={() => void removeRealityCheck(c.id).then(onChecksChange)}>
+                  <Trash2 /> удалить
+                </Button>
+              </Tip>
             </li>
           )
         })}

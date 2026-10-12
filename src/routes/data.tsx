@@ -13,6 +13,7 @@ import { questsWithCaps } from '#/data/sync.ts'
 import { downloadText } from '#/lib/download.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { type Settings, loadSettings, refreshNow, saveSettings, useDataStatus, useGameData } from '#/ui/dataSync.ts'
+import { Tip } from '#/ui/Hint.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
 import { ModelAccuracyView } from '#/ui/ModelAccuracyView.tsx'
 
@@ -31,7 +32,7 @@ function TtlSetting() {
   }, [])
   if (!settings) return null
   return (
-    <Field label="Проверять обновления, если данные старше">
+    <Field label="Проверять обновления, если данные старше" hint="При запуске приложение берёт данные из кэша; если кэш старше этого срока, в фоне перечитывает таблицу.">
       <Input
         type="number"
         min={1}
@@ -87,9 +88,11 @@ function BackupSection() {
       }
     >
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => void exportAppStateJson().then((json) => downloadText('st-app-state.json', json))}>
-          <Download /> Экспорт JSON
-        </Button>
+        <Tip text="Скачать всех героев и отметки реальности одним файлом — для переноса или резервной копии.">
+          <Button onClick={() => void exportAppStateJson().then((json) => downloadText('st-app-state.json', json))}>
+            <Download /> Экспорт JSON
+          </Button>
+        </Tip>
         <span className="text-sm text-muted-foreground">Импорт:</span>
         <Input
           type="file"
@@ -139,9 +142,13 @@ function DataPage() {
           </Notice>
         ))}
         <div className="flex flex-wrap items-center gap-4">
-          <Button disabled={status.checking} onClick={refreshNow}>
-            <RefreshCw className={status.checking ? 'animate-spin' : undefined} /> Обновить данные сейчас
-          </Button>
+          <Tip text="Перечитать Google-таблицу сразу, не дожидаясь срока устаревания кэша.">
+            <span>
+              <Button disabled={status.checking} onClick={refreshNow}>
+                <RefreshCw className={status.checking ? 'animate-spin' : undefined} /> Обновить данные сейчас
+              </Button>
+            </span>
+          </Tip>
           <TtlSetting />
         </div>
       </Section>

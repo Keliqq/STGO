@@ -12,6 +12,7 @@ import { SEED_STAT_PER_SEED } from '#/engine/constants.ts'
 import { questLabel } from '#/engine/optimizer.ts'
 import { seedAdviceFromWeights, type SeedAdvice, type StatWeightsResult } from '#/engine/statWeights.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
+import { Tip } from '#/ui/Hint.tsx'
 import { Notice } from '#/ui/layout.tsx'
 import { StatWeightsView } from '#/ui/optimize/StatWeightsView.tsx'
 
@@ -59,9 +60,13 @@ export function HeroWeightsPanel({ hero, data }: { hero: HeroInstance; data: Gam
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        <Button size="sm" variant="outline" disabled={running || !questId} onClick={() => void compute()}>
-          {running ? <Loader2 className="animate-spin" /> : <Sparkles />} Считать веса
-        </Button>
+        <Tip text="Симуляция покажет, какой стат сейчас нужнее герою на выбранном квесте. Нужно выбрать квест.">
+          <span>
+            <Button size="sm" variant="outline" disabled={running || !questId} onClick={() => void compute()}>
+              {running ? <Loader2 className="animate-spin" /> : <Sparkles />} Считать веса
+            </Button>
+          </span>
+        </Tip>
       </div>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {state ? (

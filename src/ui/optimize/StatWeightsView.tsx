@@ -5,6 +5,7 @@
 import { cn } from 'cn'
 import { Badge } from '#/components/ui/badge.tsx'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table.tsx'
+import { Hint, HintLabel } from '#/ui/Hint.tsx'
 import { Notice } from '#/ui/layout.tsx'
 import {
   STAT_WEIGHT_STATS,
@@ -31,9 +32,15 @@ function HeroWeights({ hero }: { hero: HeroStatWeights }) {
         <TableHeader>
           <TableRow>
             <TableHead>Прибавка</TableHead>
-            <TableHead title="Прирост win rate в процентных пунктах">Win rate</TableHead>
-            <TableHead title="Прирост урона за раунд">Урон</TableHead>
-            <TableHead title="Прирост минимального % HP выжившего">Мин. HP</TableHead>
+            <TableHead>
+              <HintLabel hint="Прирост win rate в процентных пунктах (п.п.)">Win rate</HintLabel>
+            </TableHead>
+            <TableHead>
+              <HintLabel hint="Прирост урона за раунд">Урон</HintLabel>
+            </TableHead>
+            <TableHead>
+              <HintLabel hint="Прирост минимального % HP выжившего героя: насколько безопаснее проходит бой">Мин. HP</HintLabel>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -98,7 +105,10 @@ function ThreatBars({ weights }: { weights: StatWeightsResult }) {
   const top = weights.topThreatIndex
   return (
     <div>
-      <p className="mb-2 text-xs text-muted-foreground">Кто принимает удары (доля атак босса по угрозе и AoE):</p>
+      <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+        Кто принимает удары (доля атак босса по угрозе и AoE):
+        <Hint label="Что такое угроза">Босс чаще бьёт героя с большей угрозой — обычно это танк. Герои с низкой защитой не должны быть главной целью.</Hint>
+      </p>
       <ul className="space-y-1">
         {weights.threat.map((t) => (
           <li key={t.index} className="flex items-center gap-2 text-sm">
@@ -187,7 +197,10 @@ export function StatWeightsView({
       <BarrierBlock weights={weights} />
       {seeds && seeds.length > 0 ? (
         <div>
-          <p className="mb-1 text-sm font-medium">Семена силы</p>
+          <p className="mb-1 flex items-center gap-1.5 text-sm font-medium">
+            Семена силы
+            <Hint label="Что такое семена силы">Семена силы — постоянная прибавка к статам героя. Здесь показано, на что выгоднее потратить семена для этого квеста.</Hint>
+          </p>
           <p className="text-xs text-muted-foreground">
             Ценность семени — параметр (ASSUMPTION A55): таблицы прибавки за семя в данных нет. Значения — прибавка за одно семя к базе героя.
           </p>
