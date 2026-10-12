@@ -146,7 +146,9 @@ describe('план команд: прогресс, отмена и воспро�
     expect(seen[0].done).toBe(1)
     expect(seen[seen.length - 1].done).toBe(plan.sims)
     for (let i = 1; i < seen.length; i++) expect(seen[i].done).toBeGreaterThan(seen[i - 1].done)
-    expect(seen.every((p) => p.total === 20 + 2 * plan.teams.length)).toBe(true)
+    // Начальная оценка входит в бюджет, итоговая — сверху: прогресс не превышает итог и не «застревает» ниже.
+    expect(seen.every((p) => p.total === 20 + plan.teams.length)).toBe(true)
+    expect(seen.every((p) => p.done <= p.total)).toBe(true)
   })
 
   it('отмена во время улучшения: расчёт останавливается и помечается cancelled', () => {

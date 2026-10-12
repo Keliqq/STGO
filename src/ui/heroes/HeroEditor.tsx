@@ -10,11 +10,11 @@
  * эталон экспорта (A8) — об этом прямо сказано в форме: HP приблизительно ±9%.
  */
 import { useMemo, useState } from 'react'
-import { Save, X } from 'lucide-react'
+import { Save, Sparkles, X } from 'lucide-react'
+import { cn } from 'cn'
 import { Badge } from '#/components/ui/badge.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
-import { NativeSelect, NativeSelectOption } from '#/components/ui/native-select.tsx'
 import { classIconId, skillIconId } from '#/data/images.ts'
 import type { GameData, HeroInstance, HeroSlot, Skill } from '#/data/types.ts'
 import {
@@ -32,10 +32,15 @@ import { SEED_STAT_PER_SEED } from '#/engine/constants.ts'
 import { calcStats } from '#/engine/stats.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { HintLabel, Tip } from '#/ui/Hint.tsx'
+import { IconPicker, type PickerOption } from '#/ui/IconPicker.tsx'
 import { Field, Notice, Section } from '#/ui/layout.tsx'
+import { NumberStepper } from '#/ui/NumberStepper.tsx'
 import { SlotEditor } from './SlotEditor.tsx'
 import { ElementIcon, HeroStatTable } from './heroStatTable.tsx'
 import { ELEMENT_RU } from './heroView.ts'
+
+/** Цвет подписи семени по стату. */
+const SEED_TONE = { atk: 'text-red-600 dark:text-red-400', def: 'text-sky-600 dark:text-sky-400', hp: 'text-emerald-600 dark:text-emerald-400' } as const
 
 export interface HeroEditorProps {
   data: GameData
@@ -47,35 +52,53 @@ export interface HeroEditorProps {
   onCancel: () => void
 }
 
-/** Навык в форме: слот, выбор линейки и ступень (ступень по стихии считает движок, A22). */
+/** Цвет рамки карточки навыка по редкости (Common / Rare / Epic). */
+const RARITY_TONE: Record<string, string> = {
+  Common: 'border-l-neutral-400',
+  Rare: 'border-l-sky-500',
+  Epic: 'border-l-violet-500',
+}
+
+/** Навык в форме: карточка с иконкой и выбор из пула класса (ступень по стихии считает движок, A22). */
 function SkillPicker({ data, hero, slot, onPick, onClear }: { data: GameData; hero: HeroInstance; slot: number; onPick: (id: string) => void; onClear: () => void }) {
   const currentId = hero.skills[slot]
   const current: Skill | undefined = currentId ? data.skills.find((s) => s.id === currentId) : undefined
   const options = useMemo(() => heroSkillOptions(data, hero), [data, hero])
   const chosen = currentId ? options.find((o) => o.skill.id === currentId) : undefined
+  const pickerOptions = useMemo<PickerOption[]>(
+    () =>
+      options.map(({ skill, reason }) => ({
+        value: skill.id,
+        label: skill.name,
+        icon: <GameIcon kind="skill" id={skillIconId(skill.name)} label={skill.name} size={28} decorative />,
+        detail: `${skill.rarity ?? '—'}${skill.tier ? ` · T${skill.tier}` : ''}${skill.text ? ` · ${skill.text}` : ''}`,
+        group: skill.rarity ?? 'Прочие',
+        disabledReason: reason,
+      })),
+    [options],
+  )
+  // Следующий пустой слот доступен, только если заполнен предыдущий: навыки идут по порядку.
+  const locked = !currentId && slot > hero.skills.length
   return (
-    <div className="rounded-md border bg-muted/20 p-2">
-      <div className="mb-1 flex items-center gap-2 text-xs">
-        <span className="font-semibold">Навык {slot + 1}</span>
-        {current ? <Badge variant="secondary">{current.rarity ?? '—'} T{current.tier ?? '?'}</Badge> : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <GameIcon kind="skill" id={current ? skillIconId(current.name) : null} label={current?.name ?? 'пусто'} size={24} />
-        <NativeSelect
-          className="min-w-64 flex-1"
-          value={currentId ?? ''}
-          onChange={(e) => (e.target.value ? onPick(e.target.value) : onClear())}
-          aria-label={`Навык ${slot + 1}`}
-        >
-          <NativeSelectOption value="">— пусто —</NativeSelectOption>
-          {options.map(({ skill, reason }) => (
-            <NativeSelectOption key={skill.id} value={skill.id} disabled={reason != null && skill.id !== currentId}>
-              {skill.name}
-              {skill.tier ? ` (T${skill.tier})` : ''}
-              {reason ? ` — нельзя: ${reason}` : ''}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+    <div className={cn('rounded-lg border border-l-4 bg-card p-2.5', current ? (RARITY_TONE[current.rarity ?? ''] ?? 'border-l-primary') : 'border-l-transparent border-dashed')}>
+      <div className="flex items-start gap-3">
+        <GameIcon kind="skill" id={current ? skillIconId(current.name) : null} label={current?.name ?? String(slot + 1)} size={44} className="rounded-md" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">Навык {slot + 1}</span>
+            {current ? <Badge variant="secondary">{current.rarity ?? '—'} T{current.tier ?? '?'}</Badge> : null}
+          </div>
+          <IconPicker
+            value={currentId ?? null}
+            options={pickerOptions}
+            onChange={(id) => (id ? onPick(id) : onClear())}
+            ariaLabel={`Навык ${slot + 1}`}
+            placeholder={locked ? 'сначала заполните предыдущий' : 'Выбрать навык…'}
+            clearLabel="Убрать навык"
+            disabled={locked}
+            contentClassName="w-[26rem]"
+          />
+        </div>
         {current ? (
           <Button variant="ghost" size="sm" onClick={onClear} aria-label={`Убрать навык ${slot + 1}`}>
             <X />
@@ -83,7 +106,7 @@ function SkillPicker({ data, hero, slot, onPick, onClear }: { data: GameData; he
         ) : null}
       </div>
       {chosen?.reason ? <p className="mt-1 text-xs text-warning">{chosen.reason}</p> : null}
-      {current ? <p className="mt-1 text-xs text-muted-foreground">{current.text}</p> : null}
+      {current?.text ? <p className="mt-1.5 text-xs leading-snug text-muted-foreground">{current.text}</p> : null}
     </div>
   )
 }
@@ -116,6 +139,20 @@ export function HeroEditor({ data, hero, creating = false, onSave, onCancel }: H
       return null
     }
   }, [draft, data])
+
+  const classOptions = useMemo<PickerOption[]>(
+    () =>
+      classChoices(data).map((c) => ({
+        value: c.name,
+        label: c.name,
+        detail: c.baseClass ? `промоушен ${c.baseClass} → ${c.name}` : 'базовый класс',
+        icon: <GameIcon kind="class" id={classIconId(c.name)} label={c.name} size={28} decorative />,
+        badge: <ElementIcon element={c.element} size={16} decorative />,
+        group: c.group,
+        keywords: c.baseClass ?? '',
+      })),
+    [data],
+  )
 
   const patch = (p: Partial<HeroInstance>): void => setDraft((cur) => ({ ...cur, ...p }))
   const setSlot = (i: number, slot: HeroSlot): void =>
@@ -161,123 +198,139 @@ export function HeroEditor({ data, hero, creating = false, onSave, onCancel }: H
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
-          <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-            <Field label="Имя" className="flex-col items-start gap-1">
-              <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} placeholder="Имя героя" aria-label="Имя героя" />
-            </Field>
-            <Field label="Класс" className="flex-col items-start gap-1" hint="Базовый класс или промоушен. Слоты экипировки и доступные навыки берутся из класса.">
-              <NativeSelect
-                value={draft.className}
-                onChange={(e) => patch({ className: e.target.value })}
-                aria-label="Класс героя"
-                className="min-w-56"
-              >
-                {classChoices(data).map((c) => (
-                  <NativeSelectOption key={c.name} value={c.name}>
-                    {c.baseClass ? `${c.baseClass} → ${c.name}` : c.name} ({c.group})
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="Уровень" className="flex-col items-start gap-1" hint={`Потолок тира предметов по уровню — HERO LEVELS: на ${draft.level} ур. это T${maxTier ?? '—'}.`}>
-              <Input
-                type="number"
-                min={1}
-                max={99}
-                className="w-24"
-                value={draft.level}
-                aria-label="Уровень героя"
-                onChange={(e) => patch({ level: Math.max(1, Math.min(99, Math.round(Number(e.target.value)) || 1)) })}
-              />
-            </Field>
-            <label className="flex items-center gap-2 pb-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4"
-                checked={draft.titanSoul}
-                onChange={(e) => patch({ titanSoul: e.target.checked })}
-                aria-label="Душа Титана"
-              />
-              <span className="text-muted-foreground">
-                <HintLabel hint="Душа Титана включает бонусы промоушена: статы, слоты и 4-ю ступень навыка (A47).">Душа Титана</HintLabel>
-              </span>
-            </label>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            {cls ? (
-              <span className="inline-flex flex-wrap items-center gap-2">
-                {ELEMENT_RU[cls.element]}
-                <ElementIcon element={cls.element} size={16} />
-                <span>·</span>
-                <span>
-                  <b>носит до T{maxTier ?? '—'}</b> на {draft.level} ур.
-                </span>
-                {maxTier != null && overflow.length > 0 ? (
-                  <span className="text-warning">
-                    · предметы в слотах {overflow.map((i) => i + 1).join(', ')} выше потолка — «не наденет на этом уровне»
+          {/* Шапка: портрет класса, имя, класс, уровень, Душа Титана */}
+          <div className="rounded-lg border bg-gradient-to-br from-primary/10 via-card to-card p-3">
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="relative shrink-0">
+                <GameIcon kind="class" id={classIconId(draft.className)} label={draft.className} size={72} className="rounded-lg bg-muted/40 p-1" />
+                {cls ? (
+                  <span className="absolute -right-1.5 -bottom-1.5 rounded-full bg-card p-0.5 shadow">
+                    <ElementIcon element={cls.element} size={22} />
                   </span>
                 ) : null}
-                {draft.titanSoul && cls.promotion ? <span>· с Душой Титана действует промоушен {cls.promotion}</span> : null}
-              </span>
-            ) : null}
-          </p>
-          {accuracy ? <Notice tone="warning">{accuracy}</Notice> : null}
-
-          <fieldset className="rounded-md border p-3">
-            <legend className="px-1 text-sm font-semibold">
-              <HintLabel hint={`Семена силы дают плоскую прибавку к базе: +${SEED_STAT_PER_SEED.atk} ATK, +${SEED_STAT_PER_SEED.hp} HP, +${SEED_STAT_PER_SEED.def} DEF за семя (A55).`}>
-                Семена силы
-              </HintLabel>
-            </legend>
-            <div className="flex flex-wrap gap-x-4 gap-y-2">
-              {(['atk', 'def', 'hp'] as const).map((k) => (
-                <Field key={k} label={k.toUpperCase()} className="gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={80}
-                    className="w-20"
-                    value={draft.seeds[k]}
-                    aria-label={`Семена ${k.toUpperCase()}`}
-                    onChange={(e) => patch({ seeds: { ...draft.seeds, [k]: Math.max(0, Math.round(Number(e.target.value)) || 0) } })}
+              </div>
+              <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
+                <Field label="Имя" className="flex-col items-stretch gap-1">
+                  <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} placeholder="Имя героя" aria-label="Имя героя" />
+                </Field>
+                <Field label="Класс" className="flex-col items-stretch gap-1" hint="Базовый класс или промоушен. Слоты экипировки и доступные навыки берутся из класса.">
+                  <IconPicker
+                    value={draft.className}
+                    options={classOptions}
+                    onChange={(v) => {
+                      if (v) patch({ className: v })
+                    }}
+                    ariaLabel="Класс героя"
+                    contentClassName="w-[22rem]"
                   />
                 </Field>
-              ))}
-              <span className="self-end pb-1 text-xs text-muted-foreground">
-                выходит +{draft.seeds.atk * SEED_STAT_PER_SEED.atk} ATK / +{draft.seeds.def * SEED_STAT_PER_SEED.def} DEF / +{draft.seeds.hp * SEED_STAT_PER_SEED.hp} HP
-              </span>
+                <Field label="Уровень" className="flex-col items-stretch gap-1" hint={`Потолок тира предметов по уровню — HERO LEVELS: на ${draft.level} ур. это T${maxTier ?? '—'}.`}>
+                  <div className="flex items-center gap-2">
+                    <NumberStepper value={draft.level} min={1} max={99} onChange={(level) => patch({ level })} ariaLabel="Уровень героя" />
+                    <input
+                      type="range"
+                      min={1}
+                      max={99}
+                      value={draft.level}
+                      onChange={(e) => patch({ level: Number(e.target.value) })}
+                      className="min-w-0 flex-1 accent-primary"
+                      aria-hidden
+                      tabIndex={-1}
+                    />
+                  </div>
+                </Field>
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm text-muted-foreground">
+                    <HintLabel hint="Душа Титана включает бонусы промоушена: статы, слоты и 4-ю ступень навыка (A47).">Душа Титана</HintLabel>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={draft.titanSoul}
+                    aria-label="Душа Титана"
+                    onClick={() => patch({ titanSoul: !draft.titanSoul })}
+                    className={cn(
+                      'inline-flex h-9 w-fit items-center gap-2 rounded-md border px-3 text-sm transition-colors',
+                      draft.titanSoul ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-muted-foreground hover:bg-muted',
+                    )}
+                  >
+                    <Sparkles className="size-4" /> {draft.titanSoul ? 'Есть' : 'Нет'}
+                  </button>
+                </div>
+              </div>
             </div>
-          </fieldset>
+
+            {cls ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="secondary" className="gap-1">
+                  <ElementIcon element={cls.element} size={14} /> {ELEMENT_RU[cls.element]}
+                </Badge>
+                <Badge variant="secondary">{cls.group}</Badge>
+                <Badge variant="secondary">
+                  <b>носит до T{maxTier ?? '—'}</b>&nbsp;на {draft.level} ур.
+                </Badge>
+                {draft.titanSoul && cls.promotion ? <Badge variant="secondary">с Душой Титана действует промоушен {cls.promotion}</Badge> : null}
+                {maxTier != null && overflow.length > 0 ? (
+                  <span className="text-warning">предметы в слотах {overflow.map((i) => i + 1).join(', ')} выше потолка — «не наденет на этом уровне»</span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          {accuracy ? <Notice tone="warning">{accuracy}</Notice> : null}
 
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">
               <HintLabel hint="До четырёх навыков из пула класса. Ступень навыка движок считает по стихии героя (A12, A22), а блокировки A40 (одна линейка, один обычный и один эпический навык на оружие) показаны причиной в списке.">
                 Навыки
               </HintLabel>
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                доступно классу: {heroSkillChoices(data, draft).length}
+                {draft.titanSoul ? ' (включая ступени промоушена)' : ' (ступени промоушена требует Душа Титана)'}
+              </span>
             </h3>
-            {[0, 1, 2, 3].map((i) => (
-              <SkillPicker
-                key={i}
-                data={data}
-                hero={draft}
-                slot={i}
-                onPick={(id) => {
-                  const blocked = skillBlockedForSlot(data, { ...draft, skills: draft.skills.map((s, j) => (j === i ? '' : s)).filter(Boolean) }, id, i + 1)
-                  if (blocked) setError(`Навык ${i + 1}: ${blocked}`)
-                  else {
-                    setError(null)
-                    setSkill(i, id)
-                  }
-                }}
-                onClear={() => setSkill(i, null)}
-              />
-            ))}
-            <p className="text-xs text-muted-foreground">
-              Доступно классу: {heroSkillChoices(data, draft).length} навыков
-              {draft.titanSoul ? ' (включая ступени промоушена)' : ' (ступени промоушена требует Душа Титана)'}.
-            </p>
+            <div className="grid gap-2 md:grid-cols-2">
+              {[0, 1, 2, 3].map((i) => (
+                <SkillPicker
+                  key={i}
+                  data={data}
+                  hero={draft}
+                  slot={i}
+                  onPick={(id) => {
+                    const blocked = skillBlockedForSlot(data, { ...draft, skills: draft.skills.map((s, j) => (j === i ? '' : s)).filter(Boolean) }, id, i + 1)
+                    if (blocked) setError(`Навык ${i + 1}: ${blocked}`)
+                    else {
+                      setError(null)
+                      setSkill(i, id)
+                    }
+                  }}
+                  onClear={() => setSkill(i, null)}
+                />
+              ))}
+            </div>
           </div>
+
+          <fieldset className="rounded-lg border p-3">
+            <legend className="px-1 text-sm font-semibold">
+              <HintLabel hint={`Семена силы дают плоскую прибавку к базе: +${SEED_STAT_PER_SEED.atk} ATK, +${SEED_STAT_PER_SEED.hp} HP, +${SEED_STAT_PER_SEED.def} DEF за семя (A55).`}>
+                Семена силы
+              </HintLabel>
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(['atk', 'def', 'hp'] as const).map((k) => (
+                <div key={k} className="flex items-center gap-2">
+                  <span className={cn('w-9 text-xs font-bold', SEED_TONE[k])}>{k.toUpperCase()}</span>
+                  <NumberStepper
+                    value={draft.seeds[k]}
+                    min={0}
+                    max={80}
+                    onChange={(n) => patch({ seeds: { ...draft.seeds, [k]: n } })}
+                    ariaLabel={`Семена ${k.toUpperCase()}`}
+                  />
+                  <span className="text-xs text-muted-foreground">+{draft.seeds[k] * SEED_STAT_PER_SEED[k]}</span>
+                </div>
+              ))}
+            </div>
+          </fieldset>
 
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">

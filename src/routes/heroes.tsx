@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '#/components/ui/input.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import { exportHeroesJson, loadHeroes, mergeHeroes, parseHeroesJson, saveHeroes, upsertByName } from '#/data/heroStore.ts'
-import { classIconId } from '#/data/images.ts'
+import { classIconId, skillIconId } from '#/data/images.ts'
 import { importTitansDb, type ImportIssue } from '#/data/titansdb.ts'
 import type { GameData, HeroInstance } from '#/data/types.ts'
 import { modelWarning } from '#/engine/classModel.ts'
@@ -140,7 +140,8 @@ function HeroCard({
               .filter((s) => s.type === 'Hero' || s.type === 'Innate' || s.type === 'Artifact')
               .map((s, i) => (
                 <Tip key={i} text={s.text}>
-                  <Badge variant="secondary" className="gap-1.5 py-1">
+                  <Badge variant="secondary" className="gap-1.5 py-1 pl-1">
+                    <GameIcon kind="skill" id={skillIconId(s.name)} label={s.name} size={20} decorative />
                     {s.name}
                     {s.tier ? ` (${s.tier})` : ''}
                   </Badge>

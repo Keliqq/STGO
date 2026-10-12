@@ -30,6 +30,9 @@ import { loadHeroes } from '#/data/heroStore.ts'
 import { questsWithCaps } from '#/data/sync.ts'
 import { championBuild, loadTeams, memberFromHero, newTeam, upsertTeam, type Team } from '#/data/teams.ts'
 import type { GameData, HeroInstance, Quest } from '#/data/types.ts'
+import { areaIconId, classIconId, difficultyIconId } from '#/data/images.ts'
+import { ChampionIcon, GameIcon } from '#/ui/GameIcon.tsx'
+import { ElementIcon } from '#/ui/heroes/heroStatTable.tsx'
 import { ELEMENT_RU, barrierReports, contributionTo, maxElementStone, rosterContributions, type BarrierElementReport, type BarrierReport } from '#/engine/barriers.ts'
 import { PLAN_WIN_THRESHOLD, RULES_DEVELION_URL, RULES_ROSTER_URL, RULES_TEAM_URL } from '#/engine/constants.ts'
 import { questLabel } from '#/engine/optimizer.ts'
@@ -206,10 +209,30 @@ function RosterPage() {
                 const ok = best ? best.bestPair >= best.need : false
                 return (
                   <TableRow key={r.quest.id} className={cn(selectedBarrier === r.quest.id && 'bg-primary/5')}>
-                    <TableCell>{r.quest.area}</TableCell>
-                    <TableCell>{r.quest.difficulty}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1.5">
+                        <GameIcon kind="area" id={areaIconId(r.quest.area)} label={r.quest.area} size={20} decorative />
+                        {r.quest.area}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1.5">
+                        <GameIcon kind="difficulty" id={difficultyIconId(r.quest.difficulty)} label={r.quest.difficulty} size={18} decorative />
+                        {r.quest.difficulty}
+                      </span>
+                    </TableCell>
                     <TableCell>{r.quest.variant === 'boss' ? 'босс' : 'обычный'}</TableCell>
-                    <TableCell>{r.elements.map((e) => elementRu(e.element)).join(' / ')}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        {r.elements.map((e, k) => (
+                          <span key={e.element} className="inline-flex items-center gap-1">
+                            {k > 0 ? ' / ' : ''}
+                            <ElementIcon element={e.element} size={16} decorative />
+                            {elementRu(e.element)}
+                          </span>
+                        ))}
+                      </span>
+                    </TableCell>
                     <TableCell>{best?.need ?? '—'}</TableCell>
                     <TableCell className={cn(!ok && 'text-destructive')}>
                       {best ? `${elementRu(best.element)}: ${best.bestPair}` : '—'}
@@ -286,7 +309,7 @@ function RosterPage() {
             </span>
           </div>
         ) : null}
-        {plan ? <PlanView plan={plan} quest={planQuest} onSave={() => void savePlan()} /> : null}
+        {plan ? <PlanView plan={plan} quest={planQuest} data={data} onSave={() => void savePlan()} /> : null}
       </Section>
 
       <Section
@@ -316,8 +339,9 @@ function ChampionRanks({ data, ranks, onChange }: { data: GameData; ranks: Recor
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
         {data.champions.map((c) => (
           <label key={c.name} className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">
-              {c.name} ({elementRu(c.element)})
+            <ChampionIcon data={data} name={c.name} size={26} decorative />
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              {c.name} <ElementIcon element={c.element} size={14} decorative /> ({elementRu(c.element)})
             </span>
             <Input
               className="w-16"
@@ -354,7 +378,7 @@ function BarrierDetail({ report, data, onPlan }: { report: BarrierReport; data: 
       {report.elements.map((el) => (
         <div key={el.element} className="mb-3">
           <p>
-            <strong>{elementRu(el.element)}</strong>: нужно {el.need}, лучшая пара даёт {el.bestPair}
+            <ElementIcon element={el.element} size={16} decorative /> <strong>{elementRu(el.element)}</strong>: нужно {el.need}, лучшая пара даёт {el.bestPair}
             {el.missing > 0 ? <span className="text-destructive"> — не хватает {el.missing}</span> : <span className="text-success"> — хватает</span>}
             {' · '}
             пар хватает: {el.disjointPairs}
@@ -396,7 +420,7 @@ function BarrierDetail({ report, data, onPlan }: { report: BarrierReport; data: 
 }
 
 /** План: сводка, отряды (состав, чемпион, win rate, барьер, подсказки) и кнопка сохранения в «Команды». */
-function PlanView({ plan, quest, onSave }: { plan: TeamPlanResult; quest: Quest | null; onSave: () => void }) {
+function PlanView({ plan, quest, data, onSave }: { plan: TeamPlanResult; quest: Quest | null; data: GameData; onSave: () => void }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -422,7 +446,7 @@ function PlanView({ plan, quest, onSave }: { plan: TeamPlanResult; quest: Quest 
       ) : null}
       <div className="grid gap-3 lg:grid-cols-2">
         {plan.teams.map((t, i) => (
-          <PlanTeamCard key={`${i}-${t.members.map((m) => m.id).join(',')}`} team={t} index={i} />
+          <PlanTeamCard key={`${i}-${t.members.map((m) => m.id).join(',')}`} team={t} index={i} data={data} />
         ))}
       </div>
       {plan.leftover.length > 0 ? (
@@ -435,7 +459,7 @@ function PlanView({ plan, quest, onSave }: { plan: TeamPlanResult; quest: Quest 
   )
 }
 
-function PlanTeamCard({ team, index }: { team: PlannedTeam; index: number }) {
+function PlanTeamCard({ team, index, data }: { team: PlannedTeam; index: number; data: GameData }) {
   const warns = team.hints.filter((h) => h.level === 'warn')
   const advice = team.hints.filter((h) => h.level === 'info' && (h.verifyChampions?.length ?? 0) > 0)
   return (
@@ -443,15 +467,27 @@ function PlanTeamCard({ team, index }: { team: PlannedTeam; index: number }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">Отряд {index + 1}</span>
         <Badge variant="secondary">{team.members.length + (team.champion ? 1 : 0)} бойца</Badge>
-        {team.champion ? <Badge variant="outline">{team.champion.name} (ранг {team.champion.rank})</Badge> : <Badge variant="outline">без чемпиона</Badge>}
+        {team.champion ? (
+          <Badge variant="outline" className="gap-1">
+            <ChampionIcon data={data} name={team.champion.name} size={16} decorative />
+            {team.champion.name} (ранг {team.champion.rank})
+          </Badge>
+        ) : (
+          <Badge variant="outline">без чемпиона</Badge>
+        )}
         <Badge variant={team.winRate !== null && team.winRate >= 0.5 ? 'secondary' : 'destructive'}>
           win rate: {team.winRate === null ? '—' : pct(team.winRate)}
         </Badge>
         {team.avgRounds !== null ? <span className="text-xs text-muted-foreground">раундов {team.avgRounds.toFixed(1)}</span> : null}
       </div>
-      <p className="mt-2">
-        {team.members.map((m) => `${m.name} (${m.className} ${m.level})`).join(' · ')}
-      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {team.members.map((m) => (
+          <span key={m.id} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 py-0.5 pr-2 pl-0.5 text-xs">
+            <GameIcon kind="class" id={classIconId(m.className)} label={m.className} size={22} decorative />
+            {m.name} ({m.className} {m.level})
+          </span>
+        ))}
+      </div>
       {team.barrier ? (
         <p className={cn('text-xs', team.barrier.broken ? 'text-muted-foreground' : 'text-destructive')}>
           Барьер {team.barrier.elements.map(elementRu).join('/')}: {team.barrier.have} из {team.barrier.need}
@@ -505,7 +541,12 @@ function RosterView({ report, questSlots, onQuestSlots }: { report: RosterReport
           <TableBody>
             {report.elements.map((row) => (
               <TableRow key={row.element}>
-                <TableCell>{row.element === 'Any' ? 'Any (Spellblade)' : elementRu(row.element)}</TableCell>
+                <TableCell>
+                  <span className="inline-flex items-center gap-1.5">
+                    <ElementIcon element={row.element} size={16} decorative />
+                    {row.element === 'Any' ? 'Any (Spellblade)' : elementRu(row.element)}
+                  </span>
+                </TableCell>
                 <TableCell className={cn(row.missingHeroes > 0 && 'text-warning')}>{row.heroes}</TableCell>
                 <TableCell>{row.element === 'Any' ? '—' : row.withElement}</TableCell>
                 <TableCell>{row.archetypes.join(', ') || '—'}</TableCell>

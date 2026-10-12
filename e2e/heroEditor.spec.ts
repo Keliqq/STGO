@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { expectClean, importHeroesViaFile, pickHero, pickQuest, runOptimize, shot, watchErrors, waitForData } from './helpers.ts'
 
 /**
@@ -8,6 +8,13 @@ import { expectClean, importHeroesViaFile, pickHero, pickQuest, runOptimize, sho
  * Последовательно: тесты делят одно хранилище браузера (IndexedDB), параллельный запуск мешал бы им.
  */
 test.describe.configure({ mode: 'serial' })
+
+/** Класс выбирается списком с иконками (IconPicker): кнопка → вариант в выпадающем списке. */
+async function pickClass(page: Page, form: Locator, name: string): Promise<void> {
+  await form.getByRole('button', { name: 'Класс героя' }).click()
+  await page.getByRole('listbox', { name: 'Класс героя' }).getByRole('option', { name: new RegExp(`^${name} `) }).click()
+  await expect(form.getByRole('button', { name: 'Класс героя' })).toContainText(name)
+}
 test('создать героя вручную → увидеть статы', async ({ page }) => {
   const errors = watchErrors(page)
   await page.goto('/#/heroes')
@@ -18,7 +25,7 @@ test('создать героя вручную → увидеть статы', a
   await expect(form).toBeVisible()
 
   await form.getByLabel('Имя героя').fill('Тестовый герой')
-  await form.getByLabel('Класс героя').selectOption('Soldier')
+  await pickClass(page, form, 'Soldier')
   await form.getByLabel('Уровень героя').fill('10')
 
   // Потолок тира по уровню — из HERO LEVELS, показан рядом с уровнем.
@@ -67,7 +74,7 @@ test('понижение уровня: предмет выше потолка п
   await page.getByRole('button', { name: 'Новый герой' }).click()
   const form = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Новый герой' }) })
   await form.getByLabel('Имя героя').fill('Понижаемый')
-  await form.getByLabel('Класс героя').selectOption('Soldier')
+  await pickClass(page, form, 'Soldier')
   await form.getByLabel('Уровень героя').fill('40')
   await form.getByRole('button', { name: 'Создать' }).click()
 
@@ -92,7 +99,7 @@ test('копия для экспериментов: черновик сравн�
   await page.getByRole('button', { name: 'Новый герой' }).click()
   const form = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Новый герой' }) })
   await form.getByLabel('Имя героя').fill('Оригинал')
-  await form.getByLabel('Класс героя').selectOption('Soldier')
+  await pickClass(page, form, 'Soldier')
   await form.getByLabel('Уровень героя').fill('20')
   await form.getByRole('button', { name: 'Создать' }).click()
 

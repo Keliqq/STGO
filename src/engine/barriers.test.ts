@@ -16,7 +16,7 @@ import type { Quest } from '../data/types.ts'
 import { fixtureGameData } from '../test/fixtures.ts'
 import { plainHero } from '../test/synthetic.ts'
 import { barrierBroken, fighterFromChampion, fighterFromHero } from './combat.ts'
-import { barrierReport, barrierReports, contributionTo, maxDisjointPairs, maxElementStone, rosterContributions, type RosterContribution } from './barriers.ts'
+import { barrierReport, barrierReports, contributionTo, maxDisjointPairs, maxDisjointPairsWithBonus, maxElementStone, rosterContributions, type RosterContribution } from './barriers.ts'
 
 const data = fixtureGameData()
 const ROOT = join(import.meta.dirname, '..', '..')
@@ -131,6 +131,14 @@ describe('таблица «локация × сложность»', () => {
     const dark = barrierReport(data, darkBoss, rosterContributions(data, heroes, {})).elements.find((e) => e.element === 'Dark')
     const contributors = dark?.contributors.length ?? 0
     expect(dark?.disjointPairs).toBeLessThanOrEqual(Math.floor(contributors / 2))
+  })
+
+  it('бонус Rudo получает только одна пара: чемпион встаёт в один отряд', () => {
+    // Без бонуса ни одна пара не добирает 80; с ×1,5 добрали бы все две — но чемпион один, значит пара одна.
+    expect(maxDisjointPairs([35, 35, 35, 35], 80)).toBe(0)
+    expect(maxDisjointPairsWithBonus([35, 35, 35, 35], 80, 1.5)).toBe(1)
+    expect(maxDisjointPairsWithBonus([50, 40, 35, 35], 80, 1.5)).toBe(2)
+    expect(maxDisjointPairsWithBonus([35, 35, 35, 35], 80, 1)).toBe(0)
   })
 
   it('Rudo в ростере: бонус +50% увеличивает и лучшую пару, и число отрядов', () => {

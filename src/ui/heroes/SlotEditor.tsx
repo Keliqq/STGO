@@ -16,9 +16,8 @@ import { cn } from 'cn'
 import { Badge } from '#/components/ui/badge.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
-import { NativeSelect, NativeSelectOption } from '#/components/ui/native-select.tsx'
-import { elementIconId, itemIconId, spiritIconId, typeIconId } from '#/data/images.ts'
-import { QUALITIES, type GameData, type HeroInstance, type HeroSlot, type Item } from '#/data/types.ts'
+import { elementIconId, itemIconId, skillIconId, spiritIconId, typeIconId } from '#/data/images.ts'
+import { QUALITIES, type Enchant, type GameData, type HeroInstance, type HeroSlot, type Item } from '#/data/types.ts'
 import {
   editorClass,
   heroHasArtifact,
@@ -34,6 +33,7 @@ import {
 } from '#/engine/heroEditor.ts'
 import { GameIcon } from '#/ui/GameIcon.tsx'
 import { HintLabel, Tip } from '#/ui/Hint.tsx'
+import { IconPicker, type PickerOption } from '#/ui/IconPicker.tsx'
 import { ElementIcon } from './heroStatTable.tsx'
 
 export interface SlotEditorProps {
@@ -56,6 +56,33 @@ function itemStatsLine(item: Item, quality: HeroSlot['quality']): string {
   return parts.join(' · ')
 }
 
+/** Цвета качества — как в игре: серый, зелёный, голубой, фиолетовый, золотой. */
+const QUALITY_TONE: Record<HeroSlot['quality'], string> = {
+  Normal: 'border-neutral-400/60 text-neutral-600 dark:text-neutral-300 data-[on=true]:bg-neutral-400/25',
+  Superior: 'border-emerald-500/60 text-emerald-700 dark:text-emerald-300 data-[on=true]:bg-emerald-500/20',
+  Flawless: 'border-sky-500/60 text-sky-700 dark:text-sky-300 data-[on=true]:bg-sky-500/20',
+  Epic: 'border-violet-500/60 text-violet-700 dark:text-violet-300 data-[on=true]:bg-violet-500/20',
+  Legendary: 'border-amber-500/70 text-amber-700 dark:text-amber-300 data-[on=true]:bg-amber-500/25',
+}
+const QUALITY_RU: Record<HeroSlot['quality'], string> = { Normal: 'Обычн.', Superior: 'Отличн.', Flawless: 'Безупр.', Epic: 'Эпич.', Legendary: 'Легенд.' }
+/** Рамка иконки предмета по качеству. */
+const QUALITY_RING: Record<HeroSlot['quality'], string> = {
+  Normal: 'ring-neutral-400/50',
+  Superior: 'ring-emerald-500/70',
+  Flawless: 'ring-sky-500/70',
+  Epic: 'ring-violet-500/70',
+  Legendary: 'ring-amber-500/80',
+}
+
+/** Иконка камня/духа: картинка самого чертежа, если она известна, иначе — значок стихии/духа. */
+function EnchantIcon({ enchant, size }: { enchant: Enchant; size: number }) {
+  if (enchant.imageId) return <GameIcon kind="item" id={enchant.imageId} label={enchant.name} size={size} />
+  if (enchant.kind === 'spirit') return <GameIcon kind="spirit" id={enchant.iconId ?? spiritIconId(enchant.name)} label={enchant.name} size={size} />
+  return <GameIcon kind="element" id={enchant.iconId ?? elementIconId(enchant.element ?? 'Any')} label={enchant.name} size={size} />
+}
+
+const AFFINITY_BADGE = <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">✦ сродство</span>
+
 /** Один слот: предмет (поиск + список), качество, камень, дух. */
 export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEditorProps) {
   const [open, setOpen] = useState(false)
@@ -76,6 +103,38 @@ export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEdito
   const stone = current.element ? (data.enchants.find((e) => e.name === current.element) ?? null) : null
   const spirit = current.spirit ? (data.enchants.find((e) => e.name === current.spirit) ?? null) : null
   const slotTypes = cls?.slots[slot] ?? []
+  const stoneOptions = useMemo<PickerOption[]>(
+    () =>
+      stones.map(({ enchant: s, affinity, note }) => ({
+        value: s.name,
+        label: s.name,
+        icon: <EnchantIcon enchant={s} size={28} />,
+        detail: `+${s.elementValue ?? 0}${s.element ? ` ${s.element}` : ''}${s.tier ? ` · T${s.tier}` : ''}${note ? ` · ${note}` : ''}`,
+        badge: affinity ? AFFINITY_BADGE : undefined,
+        group: s.element ?? 'Любая стихия',
+      })),
+    [stones],
+  )
+  const spiritOptions = useMemo<PickerOption[]>(
+    () =>
+      spirits.map(({ enchant: s, affinity }) => {
+        const skill = spiritSkillOf(data, s)
+        return {
+          value: s.name,
+          label: s.name,
+          icon: <EnchantIcon enchant={s} size={28} />,
+          detail: skill ? (
+            <span className="inline-flex items-center gap-1">
+              <GameIcon kind="skill" id={skillIconId(skill.name)} label={skill.name} size={14} /> {skill.name}
+            </span>
+          ) : undefined,
+          badge: affinity ? AFFINITY_BADGE : undefined,
+          group: affinity ? 'Со сродством предмета' : 'Остальные духи',
+          keywords: skill?.name,
+        }
+      }),
+    [spirits, data],
+  )
 
   /**
    * Выбор предмета: камень и дух остаются — вставить их можно в любой предмет (A65). Снятие предмета
@@ -101,7 +160,14 @@ export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEdito
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <GameIcon kind="item" id={item ? itemIconId(item.name) : null} label={item?.name ?? 'пусто'} size={32} />
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={cn('shrink-0 rounded-md bg-muted/40 p-1 ring-2 transition hover:brightness-110', item ? QUALITY_RING[current.quality] : 'ring-transparent border border-dashed')}
+          aria-label={item ? `Сменить предмет в слоте ${slot + 1}` : `Выбрать предмет в слоте ${slot + 1}`}
+        >
+          <GameIcon kind="item" id={item ? itemIconId(item.name) : null} label={item?.name ?? '+'} size={44} />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             <span className="truncate text-sm font-medium">{item?.name ?? '— пусто —'}</span>
@@ -126,18 +192,26 @@ export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEdito
           </div>
         </div>
 
-        <label className="flex items-center gap-1 text-xs">
-          <span className="text-muted-foreground">
-            <HintLabel hint="Качество предмета умножает его ATK/DEF/HP (A7): Superior ×1,25, Flawless ×1,5, Epic ×2, Legendary ×3.">Качество</HintLabel>
-          </span>
-          <NativeSelect value={current.quality} onChange={(e) => onChange({ ...current, quality: e.target.value as HeroSlot['quality'] })}>
-            {QUALITIES.map((q) => (
-              <NativeSelectOption key={q} value={q}>
-                {q} ×{qualityMultiplier(q)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </label>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs" role="radiogroup" aria-label={`Качество предмета в слоте ${slot + 1}`}>
+        <span className="mr-1 text-muted-foreground">
+          <HintLabel hint="Качество предмета умножает его ATK/DEF/HP (A7): Superior ×1,25, Flawless ×1,5, Epic ×2, Legendary ×3.">Качество</HintLabel>
+        </span>
+        {QUALITIES.map((q) => (
+          <button
+            key={q}
+            type="button"
+            role="radio"
+            aria-checked={current.quality === q}
+            data-on={current.quality === q}
+            title={`${q} ×${qualityMultiplier(q)}`}
+            onClick={() => onChange({ ...current, quality: q })}
+            className={cn('rounded-full border px-2 py-0.5 font-medium transition-colors hover:brightness-110', current.quality === q ? '' : 'opacity-60', QUALITY_TONE[q])}
+          >
+            {QUALITY_RU[q]} ×{qualityMultiplier(q)}
+          </button>
+        ))}
       </div>
 
       {open ? (
@@ -191,53 +265,42 @@ export function SlotEditor({ data, hero, slot, onChange, limit = 40 }: SlotEdito
       ) : null}
 
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <label className="flex items-center gap-1 text-xs">
+        <div className="space-y-1 text-xs">
           <span className="text-muted-foreground">
             <HintLabel hint="Вставить можно любой камень стихии (A65): он даёт ATK/DEF/HP и величину стихии против барьера. Сродство предмета («✦ сродство») усиливает камень ×1,5 (A6), а камень чужой стихии стихии герою не даёт (A21).">
               Камень
             </HintLabel>
           </span>
-          <NativeSelect
-            value={current.element ?? ''}
+          <IconPicker
+            value={current.element}
+            options={stoneOptions}
+            onChange={(v) => onChange({ ...current, element: v })}
+            ariaLabel={`Камень в слоте ${slot + 1}`}
+            placeholder={!item ? '— сначала предмет —' : '— без камня —'}
+            clearLabel="Без камня"
             disabled={!item}
-            onChange={(e) => onChange({ ...current, element: e.target.value || null })}
-          >
-            <NativeSelectOption value="">{!item ? '— сначала предмет —' : '— без камня —'}</NativeSelectOption>
-            {stones.map(({ enchant: s, affinity, note }) => (
-              <NativeSelectOption key={s.name} value={s.name}>
-                {s.name} (+{s.elementValue}
-                {s.element ? ` ${s.element}` : ''}){affinity ? ' ✦ сродство' : ''}
-                {note ? ` — ${note}` : ''}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          {current.element ? <GameIcon kind="element" id={stone?.iconId ?? elementIconId('Any')} label={current.element} size={16} /> : null}
-        </label>
-        <label className="flex items-center gap-1 text-xs">
+            emptyIcon={<GameIcon kind="element" id={null} label="—" size={28} />}
+            contentClassName="w-[24rem]"
+          />
+        </div>
+        <div className="space-y-1 text-xs">
           <span className="text-muted-foreground">
             <HintLabel hint="Вставить можно любой дух (A65): он даёт свои статы и навык. Если у предмета есть сродство духа («✦ сродство», Spirit Affinity), навык даётся в «+»-версии (A5).">
               Дух
             </HintLabel>
           </span>
-          <NativeSelect
-            value={current.spirit ?? ''}
+          <IconPicker
+            value={current.spirit}
+            options={spiritOptions}
+            onChange={(v) => onChange({ ...current, spirit: v })}
+            ariaLabel={`Дух в слоте ${slot + 1}`}
+            placeholder={!item ? '— сначала предмет —' : '— без духа —'}
+            clearLabel="Без духа"
             disabled={!item}
-            onChange={(e) => onChange({ ...current, spirit: e.target.value || null })}
-          >
-            <NativeSelectOption value="">{!item ? '— сначала предмет —' : '— без духа —'}</NativeSelectOption>
-            {spirits.map(({ enchant: s, affinity }) => {
-              const skillName = spiritSkillOf(data, s)?.name
-              return (
-                <NativeSelectOption key={s.name} value={s.name}>
-                  {s.name}
-                  {skillName ? ` — ${skillName}` : ''}
-                  {affinity ? ' ✦ сродство' : ''}
-                </NativeSelectOption>
-              )
-            })}
-          </NativeSelect>
-          {current.spirit ? <GameIcon kind="spirit" id={spiritIconId(current.spirit)} label={current.spirit} size={16} /> : null}
-        </label>
+            emptyIcon={<GameIcon kind="spirit" id={null} label="—" size={28} />}
+            contentClassName="w-[24rem]"
+          />
+        </div>
       </div>
       {item ? (
         <p className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">

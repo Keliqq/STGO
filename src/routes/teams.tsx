@@ -48,7 +48,9 @@ import { partyHints, type PartyHint } from '#/engine/teamRules.ts'
 import { ELEMENT_RU, TEAM_SIM_RUNS, runTeamSync, type TeamRunMember, type TeamRunResult } from '#/engine/teamRunner.ts'
 import { createEngine, type Engine } from '#/worker/client.ts'
 import { useGameData } from '#/ui/dataSync.ts'
-import { DraftBadge } from '#/ui/heroes/heroStatTable.tsx'
+import { classIconId, itemIconId, spiritIconId } from '#/data/images.ts'
+import { ChampionIcon, GameIcon } from '#/ui/GameIcon.tsx'
+import { DraftBadge, ElementIcon } from '#/ui/heroes/heroStatTable.tsx'
 import { Tip } from '#/ui/Hint.tsx'
 import { QuestPicker } from '#/ui/QuestPicker.tsx'
 import { Field, Notice, Page, Section } from '#/ui/layout.tsx'
@@ -336,7 +338,21 @@ function TeamsPage() {
                     {q ? <Badge variant="outline">{questLabel(q)}</Badge> : <Badge variant="outline">локация не выбрана</Badge>}
                     {issues.length === 0 ? <Badge variant="secondary">состав в порядке</Badge> : <Badge variant="destructive">состав не проходит</Badge>}
                   </div>
-                  <p className="mt-2 text-sm">{teamLabel(t) || 'пусто'}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {t.members.map((m) => (
+                      <span key={m.hero.id} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 py-0.5 pr-2 pl-0.5 text-xs">
+                        <GameIcon kind="class" id={classIconId(m.hero.className)} label={m.hero.className} size={22} />
+                        {m.hero.name}
+                      </span>
+                    ))}
+                    {t.champion ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/10 py-0.5 pr-2 pl-0.5 text-xs">
+                        <ChampionIcon data={data} name={t.champion.champion} size={22} />
+                        {t.champion.champion} · р{t.champion.rank}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{teamLabel(t) || 'пусто'}</p>
                   {t.champion?.aura || t.champion?.familiar ? (
                     <p className="text-xs text-muted-foreground">
                       {t.champion.aura ? `аура: ${t.champion.aura.item} (${t.champion.aura.quality})` : 'без ауры'}
@@ -411,7 +427,8 @@ function TeamsPage() {
             {heroes.map((h) => {
               const on = editing.members.some((m) => m.heroId === h.id || m.hero.id === h.id)
               return (
-                <div key={h.id} className={cn('rounded-md border px-3 py-2', on && 'border-primary/60 bg-primary/5')}>
+                <div key={h.id} className={cn('flex items-center gap-2 rounded-md border px-2 py-1.5', on && 'border-primary/60 bg-primary/5')}>
+                  <GameIcon kind="class" id={classIconId(h.className)} label={h.className} size={28} />
                   <CheckItem
                     checked={on}
                     onChange={(v) =>
@@ -435,6 +452,12 @@ function TeamsPage() {
 
           <h3 className="mb-2 text-sm font-semibold">Чемпион</h3>
           <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+            {editing.champion ? (
+              <span className="inline-flex items-center gap-1">
+                <ChampionIcon data={data} name={editing.champion.champion} size={40} />
+                <ElementIcon element={data.champions.find((c) => c.name === editing.champion?.champion)?.element ?? null} size={18} />
+              </span>
+            ) : null}
             <Field label="Чемпион" hint="В отряде может быть только один чемпион. Его аура усиливает весь отряд.">
               <NativeSelect
                 value={editing.champion?.champion ?? ''}
@@ -478,6 +501,7 @@ function TeamsPage() {
               disabled={!editing.champion}
               onChange={(v) => editing.champion && patchEditing({ champion: { ...editing.champion, familiar: v } })}
             />
+            {editing.champion?.spirit ? <GameIcon kind="spirit" id={spiritIconId(editing.champion.spirit)} label={editing.champion.spirit} size={28} /> : null}
             <Field label="Дух в фамильяре" hint="Навык духа действует на носителя; «+»-версия включается сродством фамильяра (A5).">
               <NativeSelect
                 className="w-48"
@@ -596,6 +620,7 @@ function ChampionGearSelect({
     <>
       <label className="flex items-center gap-2 text-sm">
         <span className="text-muted-foreground">{label}</span>
+        <GameIcon kind="item" id={value ? itemIconId(value.item) : null} label={value?.item ?? '—'} size={28} />
         <NativeSelect
           className="w-48"
           aria-label={label}

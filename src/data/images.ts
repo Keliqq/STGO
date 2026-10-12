@@ -4,7 +4,7 @@
  */
 import imageMapJson from './imageMap.json' with { type: 'json' }
 import type { ImageMap } from './imageMapTypes.ts'
-import type { Element } from './types.ts'
+import type { Element, GameData } from './types.ts'
 
 export const imageMap = imageMapJson as ImageMap
 
@@ -73,4 +73,18 @@ export const areaIconId = (area: string): string | null => AREA_ICON_IDS[area] ?
 export const difficultyIconId = (difficulty: string): string | null => {
   const id = difficulty.toLowerCase()
   return ['easy', 'medium', 'hard', 'extreme'].includes(id) ? id : null
+}
+
+/**
+ * Портрет чемпиона: отдельных картинок чемпионов в fankit нет, но иконки их лидерских навыков
+ * (`icon_global_skill_hero_<id>leader<N>`) — это и есть портрет. Берём первую ступень лидерского навыка.
+ */
+export function championIconId(data: Pick<GameData, 'champions' | 'skills'>, championName: string): string | null {
+  const champion = data.champions.find((c) => c.name === championName)
+  for (const id of champion?.leaderSkills ?? []) {
+    const skill = data.skills.find((s) => s.id === id)
+    const icon = skill ? skillIconId(skill.name) : null
+    if (icon) return icon
+  }
+  return null
 }

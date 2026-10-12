@@ -130,7 +130,7 @@ export interface BarrierElementReport {
   pairsTotal: number
   /** Сколько НЕПЕРЕСЕКАЮЩИХСЯ пар (каждый боец в одной) добирает порог — «сколько таких отрядов можно собрать». */
   disjointPairs: number
-  /** То же, но с бонусом Rudo к стихии отряда. */
+  /** То же, но с бонусом Rudo к стихии отряда (бонус получает только одна пара — чемпион один). */
   disjointPairsWithBonus: number
   /** Лучшая пара (сырая сумма) и лучший отряд размера локации. */
   bestPair: number
@@ -177,6 +177,30 @@ export function maxDisjointPairs(values: number[], need: number): number {
     }
   }
   return count
+}
+
+/**
+ * То же с бонусом чемпиона (Rudo): чемпион встаёт только в ОДИН отряд, поэтому бонус получает одна пара.
+ * Сначала собираем пары без бонуса, затем проверяем, добирает ли бонус ещё одну пару из оставшихся.
+ */
+export function maxDisjointPairsWithBonus(values: number[], need: number, bonusK: number): number {
+  const base = maxDisjointPairs(values, need)
+  if (bonusK <= 1) return base
+  const v = [...values].filter((x) => x > 0).sort((a, b) => b - a)
+  // Повторяем жадный проход и запоминаем, кто остался без пары.
+  const used = new Set<number>()
+  let i = 0
+  let j = v.length - 1
+  while (i < j) {
+    if (v[i] + v[j] >= need) {
+      used.add(i++)
+      used.add(j--)
+    } else {
+      j--
+    }
+  }
+  const rest = v.filter((_, k) => !used.has(k))
+  return rest.length >= 2 && (rest[0] + rest[1]) * bonusK >= need ? base + 1 : base
 }
 
 /** Отчёт по одному квесту: стихии барьера, пары и дефицит. Без барьера — пустой `elements`. */
@@ -233,10 +257,7 @@ export function barrierReport(data: GameData, quest: Quest, contributions: Roste
       pairs,
       pairsTotal,
       disjointPairs: maxDisjointPairs(values, need),
-      disjointPairsWithBonus: maxDisjointPairs(
-        values.map((v) => v * bonusK),
-        need,
-      ),
+      disjointPairsWithBonus: maxDisjointPairsWithBonus(values, need, bonusK),
       bestPair,
       bestParty: Math.round(bestParty * bonusK),
       missing,

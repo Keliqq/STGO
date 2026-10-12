@@ -10,9 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#
 import { ELEMENT_RU, STAT_ROWS, deltaText, type ComparableStats } from './heroView.ts'
 
 /** Иконка стихии героя (по классу) или камня. */
-export function ElementIcon({ element, size = 16 }: { element: Element | 'Any' | null; size?: number }) {
+export function ElementIcon({ element, size = 16, decorative = false }: { element: Element | 'Any' | null; size?: number; decorative?: boolean }) {
   if (!element) return null
-  return <GameIcon kind="element" id={elementIconId(element)} label={ELEMENT_RU[element] ?? element} size={size} />
+  return <GameIcon kind="element" id={elementIconId(element)} label={ELEMENT_RU[element] ?? element} size={size} decorative={decorative} />
 }
 
 /** Пометка черновика. */

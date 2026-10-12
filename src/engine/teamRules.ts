@@ -99,12 +99,15 @@ function defensiveSkillCount(f: Fighter): number {
 
 /** Факты по составу отряда: герои снимками и/или чемпион своей экипировкой (как в прогоне команды). */
 export function partyFacts(members: TeamRunMember[], quest: Quest | null, data: GameData): PartyFighterFact[] {
-  const fighters = teamFighters(members, data)
-  const list = fighters.filter((f): f is Fighter => f !== null)
+  // Пара «боец ↔ участник» держится вместе: чемпион, не найденный в данных, даёт null и выпадает,
+  // и индексы списка бойцов перестают совпадать с индексами `members`.
+  const pairs = teamFighters(members, data)
+    .map((f, i) => ({ f, member: members[i] }))
+    .filter((p): p is { f: Fighter; member: TeamRunMember } => p.f !== null)
+  const list = pairs.map((p) => p.f)
   const shares = list.length > 0 ? threatShares(list, { aoeChance: AOE_CHANCE }) : []
   const barrierElements = quest?.barrier?.elements ?? []
-  return list.map((f, i) => {
-    const member = members[i]
+  return pairs.map(({ f, member }, i) => {
     const cls = member?.hero ? effectiveClass(member.hero, data) : undefined
     const elementValues: Partial<Record<Element, number>> = {}
     let barrierValue = 0
@@ -318,7 +321,9 @@ export function championPairHints(
     const bonusChampions = data.champions
       .filter((c) => c.leaderSkills.some((id) => BARRIER_BONUS_SKILL_RE.test(data.skills.find((s) => s.id === id)?.text ?? '')))
       .map((c) => c.name)
-    const have = facts.reduce((a, f) => a + f.barrierValue, 0)
+    // Барьер пробивает любая ОДНА из его стихий (A9) — берём лучшую, а не сумму по всем стихиям
+    // (иначе Spellblade с «любой» стихией засчитался бы в каждую).
+    const have = Math.max(0, ...quest.barrier.elements.map((el) => facts.reduce((a, f) => a + (f.elementValues[el] ?? 0), 0)))
     if (bonusChampions.length > 0 && have < quest.barrier.hp) {
       hints.push({
         code: 'pair-barrier-rudo',

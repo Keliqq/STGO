@@ -298,7 +298,8 @@ export function planTeams(opts: TeamPlanOptions): TeamPlanResult {
 
   // ── оценка и улучшение обменами ──
   let sims = 0
-  const total = budget + 2 * draft.length
+  // Начальная оценка входит в бюджет (цикл улучшения останавливается на sims ≥ budget), итоговая — нет.
+  const total = Math.max(budget, draft.length) + draft.length
   const report = (): void => opts.onProgress?.(sims, total)
   const sim = (i: number, tag: 'run' | 'final'): SimMetrics => {
     sims++
@@ -347,8 +348,14 @@ export function planTeams(opts: TeamPlanOptions): TeamPlanResult {
             if (!a || !b) continue
             const aOut = a.group === 'Fighter' ? 1 : 0
             const bOut = b.group === 'Fighter' ? 1 : 0
-            if (fighterCount(draft[weak]) - aOut + bOut < PARTY_FIGHTERS_MIN) continue
-            if (fighterCount(draft[strong]) - bOut + aOut < PARTY_FIGHTERS_MIN) continue
+            // Обмен не должен ломать правило 3: запрещаем только уход ниже минимума. Отряд, где бойца
+            // не было с самого начала (бойцов в ростере меньше, чем отрядов), менять по-прежнему можно.
+            const weakBefore = fighterCount(draft[weak])
+            const strongBefore = fighterCount(draft[strong])
+            const weakAfter = weakBefore - aOut + bOut
+            const strongAfter = strongBefore - bOut + aOut
+            if (weakAfter < PARTY_FIGHTERS_MIN && weakAfter < weakBefore) continue
+            if (strongAfter < PARTY_FIGHTERS_MIN && strongAfter < strongBefore) continue
             const scoreDelta = b.score - a.score
             const barrierDelta = (b.barrierValues[targetElement as Element] ?? 0) - (a.barrierValues[targetElement as Element] ?? 0)
             const helpsBarrier = targetElement !== null && barrierNeed[weak] > 0 && barrierDelta > 0
