@@ -831,7 +831,7 @@ function OptimizePage() {
           По умолчанию: тир ≤ {defaults.maxItemTier} — НА КАЖДОГО ГЕРОЯ «макс. надетый у него + 1», но не выше Max Item Tier его уровня
           {tierNote.length > 0 ? ` (${tierNote.join(', ')})` : ''}, качество ≤ {defaults.maxQuality}, камни ≤ T{defaults.maxStoneTier} (или макс. надетого),
           духи — все обычные
-          {defaults.spirits?.length === spirits.length ? '' : ', без Титана (по умолчанию не предлагается — допущение A41; кнопка «все» включает)'}. Своё значение в поле «Max тир» — общий потолок для всех.
+          {defaults.spirits?.length === spirits.length ? '' : ', без Титана (по умолчанию не предлагается — допущение A41; кнопка «все» включает)'}. Своё значение в поле «Max тир» (или «Max тир камней») — потолок для каждого героя, но не выше Max Item Tier его уровня.
         </p>
         <details className="mt-3 rounded-md border p-3">
           <summary className="cursor-pointer text-sm">

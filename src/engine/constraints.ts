@@ -44,7 +44,7 @@ export function maxDataTier(data: GameData): number {
  * у этого героя + DEFAULT_ITEM_TIER_HEADROOM», иначе слабому герою предлагались вещи под сильного.
  * Сверху — потолок уровня (`Max Item Tier`, HERO LEVELS): выше него герой предмет не наденет,
  * поэтому «фора» оптимизатора за него не выходит (A41 + A66, то же правило, что в редакторе).
- * maxItemTier/maxStoneTier отряда остаются верхней границей (для переопределений пользователя).
+ * Переопределения пользователя (resolveConstraints) заменяют потолки героев, кроме потолка уровня.
  */
 export function defaultConstraints(data: GameData, team: HeroInstance[], titanSoul: 'as-is' | 'on' | 'off' = 'as-is'): OptimizerConstraints {
   const itemTier = new Map(data.items.map((i) => [i.name, i.tier]))
@@ -78,12 +78,19 @@ export function resolveConstraints(defaults: OptimizerConstraints, o: Constraint
   const spirits = o.spirits ?? defaults.spirits
   // Ручной список духов снимает ограничения «по герою» — иначе выбор пользователя не применился бы.
   const keepPerHero = o.spirits == null
+  // Своё значение тира — потолок для КАЖДОГО героя (и вверх, и вниз): иначе «Max тир 14» упирался бы
+  // в «надетый + 1» героя и ничего не менял. Потолок уровня (A66) остаётся — его применяет tierCapFor.
+  const perHero = defaults.perHero?.map((h) => ({
+    ...h,
+    maxItemTier: o.maxItemTier ?? h.maxItemTier,
+    maxStoneTier: o.maxStoneTier ?? h.maxStoneTier,
+  }))
   return {
     maxItemTier: o.maxItemTier ?? defaults.maxItemTier,
     maxQuality: o.maxQuality ?? defaults.maxQuality,
     maxStoneTier: o.maxStoneTier ?? defaults.maxStoneTier,
     spirits,
-    perHero: keepPerHero ? defaults.perHero : undefined,
+    perHero: keepPerHero ? perHero : undefined,
   }
 }
 

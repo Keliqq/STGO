@@ -15,7 +15,7 @@ import {
   upgradeOutcome,
   upgradeScenarios,
 } from './constraints.ts'
-import { capForHero } from './optimizer.ts'
+import { capForHero, tierCapFor } from './optimizer.ts'
 import { maxItemTierFor } from './formulas.ts'
 import { runOptimizer, type OptimizerInput, type OptimizerResult } from './optimizer.ts'
 
@@ -110,8 +110,13 @@ describe('defaultConstraints', () => {
     expect(r).toEqual({ ...d, maxItemTier: 3, maxQuality: 'Epic', spirits: ['Bear Spirit'], perHero: undefined })
     // Ручной список духов снимает ограничения «по герою» (иначе выбор пользователя не применился бы).
     expect(resolveConstraints(d, { ...NO_OVERRIDES, spirits: ['Bear Spirit'] }).perHero).toBeUndefined()
-    // Переопределение тира сохраняет ограничения героев: они лишь урезаются общим потолком.
-    expect(resolveConstraints(d, { ...NO_OVERRIDES, maxItemTier: 4 }).perHero).toEqual(d.perHero)
+    // Своё значение тира заменяет потолок каждого героя — и вниз, и вверх (выше «надетый + 1»).
+    expect(resolveConstraints(d, { ...NO_OVERRIDES, maxItemTier: 4 }).perHero).toEqual(d.perHero!.map((h) => ({ ...h, maxItemTier: 4 })))
+    const up = resolveConstraints(d, { ...NO_OVERRIDES, maxItemTier: 14, maxStoneTier: 14 })
+    expect(capForHero(up, 0)).toEqual({ hero: 0, maxItemTier: 14, maxStoneTier: 14 })
+    // Потолок уровня (A66) при этом остаётся: выше Max Item Tier уровня герой предмет не наденет.
+    const lvl = { ...heroes[0], level: 34 }
+    expect(tierCapFor(data, resolveConstraints(defaultConstraints(data, [lvl]), { ...NO_OVERRIDES, maxItemTier: 14 }), 0, 34)).toBe(maxItemTierFor(data, 34))
   })
 })
 

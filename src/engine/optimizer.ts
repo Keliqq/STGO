@@ -40,6 +40,7 @@ import {
   OPTIMIZER_SIM_RUNS,
   OPTIMIZER_TOP_K,
   OPTIMIZER_YIELD_INTERVAL_MS,
+  UNIVERSAL_FLAT_QUESTS_WARN_SHARE,
 } from './constants.ts'
 import { barrierBroken, championEquipment, evaCapOf, fighterFromChampion, fighterFromHero, parseSpecials, simulateTeam, type ChampionBuild, type Fighter, type PowerBoosterId, type SimMetrics } from './combat.ts'
 import { maxItemTierFor } from './formulas.ts'
@@ -289,6 +290,23 @@ export function evasionSurplusNote(eva: number, cap: number, extremeOnly: boolea
   const useful = cap + (extremeOnly ? EXTREME_EVA_PENALTY : 0)
   if (eva <= useful + 1e-9) return null
   return `уклонение упирается в предел ${Math.round(cap * 100)}%`
+}
+
+/**
+ * Универсальный подбор: локации с win rate ровно 0% или 100% на выбор не влияют — набор фактически
+ * подобран под остальные. Если таких не меньше UNIVERSAL_FLAT_QUESTS_WARN_SHARE, предупреждаем,
+ * иначе «универсальный» набор под одну локацию выглядит странно (например, EVA вместо ATK). null — всё в порядке.
+ */
+export function universalFlatNote(perQuest: QuestOutcome[]): string | null {
+  if (perQuest.length < 2) return null
+  const won = perQuest.filter((q) => q.winRate >= 1).length
+  const lost = perQuest.filter((q) => q.winRate <= 0).length
+  if (won + lost < perQuest.length * UNIVERSAL_FLAT_QUESTS_WARN_SHARE) return null
+  const decisive = perQuest.filter((q) => q.winRate > 0 && q.winRate < 1).map((q) => q.label)
+  const head = decisive.length > 0
+    ? `Выбор набора решили ${decisive.length} из ${perQuest.length} локаций (${decisive.join(', ')})`
+    : `Ни одна из ${perQuest.length} локаций не повлияла на выбор`
+  return `${head}: в ${won} победа 100%, в ${lost} — 0% при найденном наборе. Для универсального набора оставьте в фильтре локации, где отряд побеждает не всегда.`
 }
 
 // ─────────────────────────── перебор вариантов ───────────────────────────
@@ -843,7 +861,11 @@ export async function runOptimizer(data: GameData, input: OptimizerInput, hooks:
     }
     const o = ev ?? objectiveOf(per)
     let worst: QuestOutcome | null = null
-    if (input.mode === 'universal') worst = perQuest.reduce((a, b) => (b.winRate < a.winRate ? b : a), perQuest[0])
+    if (input.mode === 'universal') {
+      worst = perQuest.reduce((a, b) => (b.winRate < a.winRate ? b : a), perQuest[0])
+      const note = universalFlatNote(perQuest)
+      if (note) warnings.push(note)
+    }
     // Насколько вырос win rate относительно надетого (для строки «итого» в UI).
     // На раннем выходе (отмена до симуляций) надетый набор не считался — прироста не показываем.
     const improvement = baselineWinRate == null ? 0 : o.wr - baselineWinRate

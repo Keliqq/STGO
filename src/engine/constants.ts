@@ -390,6 +390,12 @@ export const OPTIMIZER_CRN_SEED = 42
 // Период уступки событийному циклу воркера (обработка cancel()); меньше — лишние ~мс на симуляцию.
 export const OPTIMIZER_YIELD_INTERVAL_MS = 25
 export const OPTIMIZER_BEAM = 10
+/**
+ * Универсальный подбор: предупредить, если в такой доле локаций (или больше) win rate найденного набора
+ * ровно 0% или 100% — эти локации на выбор не влияют, и «универсальный» набор подобран под оставшиеся
+ * одну-две. Порог — эвристика интерфейса (игровых данных нет), сессия 35.
+ */
+export const UNIVERSAL_FLAT_QUESTS_WARN_SHARE = 0.5
 /** Beam хранит до OPTIMIZER_BEAM × N кандидатов, потом обрезается до OPTIMIZER_BEAM. */
 export const OPTIMIZER_BEAM_SLACK = 4
 /**

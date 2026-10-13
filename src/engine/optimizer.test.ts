@@ -14,7 +14,7 @@ import { OPTIMIZER_TOP_K } from './constants.ts'
 import { defaultConstraints } from './constraints.ts'
 import { maxItemTierFor } from './formulas.ts'
 import { QUALITY_ORDER } from './quality.ts'
-import { applyHeroConfig, evasionSurplusNote, runOptimizer, selectSlotCandidates, tierCapFor, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
+import { applyHeroConfig, evasionSurplusNote, runOptimizer, selectSlotCandidates, tierCapFor, universalFlatNote, type OptimizerInput, type SlotConfig, type SlotFeatures } from './optimizer.ts'
 import { quickScore } from './score.ts'
 
 const data = fixtureGameData()
@@ -308,5 +308,18 @@ describe('отсев против симуляции (top-K + разнообра
     console.log(`Отсев top-${K}+разнообразие: промахов ${misses}/${total} (${(rate * 100).toFixed(1)}%) — лучший по симуляции вариант слота не попал в отсев`)
     expect(total).toBeGreaterThan(0)
     expect(rate).toBeLessThan(0.05)
+  })
+})
+
+describe('universalFlatNote', () => {
+  const pq = (label: string, winRate: number) => ({ questId: label, label, weight: 1, winRate, avgRounds: 1, barrierBroken: true })
+  it('предупреждает, когда исход решают немногие локации', () => {
+    const note = universalFlatNote([pq('A', 1), pq('B', 1), pq('C', 0), pq('D', 0.7)])
+    expect(note).toContain('Выбор набора решили 1 из 4 локаций (D)')
+    expect(note).toContain('в 2 победа 100%, в 1 — 0%')
+  })
+  it('молчит, если большинство локаций влияет на выбор, и при одной локации', () => {
+    expect(universalFlatNote([pq('A', 1), pq('B', 0.5), pq('C', 0.3), pq('D', 0.7)])).toBeNull()
+    expect(universalFlatNote([pq('A', 0)])).toBeNull()
   })
 })
